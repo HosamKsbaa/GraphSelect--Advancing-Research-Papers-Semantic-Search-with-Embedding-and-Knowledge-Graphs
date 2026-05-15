@@ -1,0 +1,1298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALRS GraphSelect — Live Tree Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Reset & Tokens ─── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0b0e14;
+      --surface:   rgba(255,255,255,0.04);
+      --glass:     rgba(255,255,255,0.06);
+      --border:    rgba(255,255,255,0.08);
+      --text:      #e2e8f0;
+      --text-dim:  #94a3b8;
+      --accent:    #6366f1;
+      --accent-l:  #818cf8;
+      --success:   #34d399;
+      --warn:      #fbbf24;
+      --danger:    #f87171;
+      --info:      #38bdf8;
+      --radius:    12px;
+      --font:      'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ─── Animated gradient background ─── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: -50%;
+      width: 200%;
+      height: 200%;
+      background: conic-gradient(from 0deg at 50% 50%,
+        #6366f120, #a855f720, #ec489920, #6366f120);
+      animation: spin 20s linear infinite;
+      z-index: -1;
+      filter: blur(120px);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Layout ─── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+    /* ─── Header ─── */
+    header {
+      text-align: center;
+      padding: 2.5rem 0 1.5rem;
+    }
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-l), #a78bfa, #f472b6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      color: var(--text-dim);
+      margin-top: .4rem;
+      font-size: .92rem;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: .6rem;
+      padding: 4px 14px;
+      border-radius: 999px;
+      background: rgba(52,211,153,0.1);
+      border: 1px solid rgba(52,211,153,0.25);
+      font-size: .78rem;
+      color: var(--success);
+      transition: all .3s;
+    }
+    .status-badge.offline {
+      background: rgba(248,113,113,0.1);
+      border-color: rgba(248,113,113,0.25);
+      color: var(--danger);
+    }
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+
+    /* ─── Card / Glass panels ─── */
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem;
+      margin-top: 1.25rem;
+    }
+    .card h2 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card h2 .icon { font-size: 1.1rem; }
+
+    /* ─── Form ─── */
+    label {
+      display: block;
+      font-size: .82rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    input[type="text"],
+    input[type="number"],
+    input[type="password"],
+    textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .9rem;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    input:focus, textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    textarea { resize: vertical; min-height: 80px; }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+    }
+    .form-group { margin-bottom: 1rem; }
+
+    /* ─── Questions list ─── */
+    .questions-list { display: flex; flex-direction: column; gap: 8px; }
+    .q-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      animation: slideIn .25s ease;
+    }
+    @keyframes slideIn { from { opacity:0; transform:translateY(-8px); } }
+    .q-row input { flex: 1; }
+    .q-remove {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--danger);
+      font-size: 1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .2s;
+    }
+    .q-remove:hover { background: rgba(248,113,113,0.12); }
+
+    .btn-add-q {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+      background: transparent;
+      color: var(--accent-l);
+      font-size: .82rem;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: background .2s, border-color .2s;
+    }
+    .btn-add-q:hover { background: rgba(99,102,241,0.08); border-color: var(--accent); }
+
+    /* ─── Buttons ─── */
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      font-family: var(--font);
+      font-size: .95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform .15s, box-shadow .2s, opacity .2s;
+      box-shadow: 0 4px 24px rgba(99,102,241,0.25);
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 32px rgba(99,102,241,0.35); }
+    .btn-primary:active { transform: scale(.98); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .88rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .2s, border-color .2s;
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+
+    .btn-bar { display: flex; gap: 12px; margin-top: 1.25rem; align-items: center; }
+
+    /* ─── Spinner ─── */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: rotate .6s linear infinite;
+      display: none;
+    }
+    @keyframes rotate { to { transform: rotate(360deg); } }
+
+    /* ─── Error / Empty ─── */
+    .error-box {
+      padding: 14px 18px;
+      border-radius: 10px;
+      background: rgba(248,113,113,0.08);
+      border: 1px solid rgba(248,113,113,0.2);
+      color: var(--danger);
+      font-size: .88rem;
+      display: none;
+    }
+
+    .elapsed {
+      font-size: .82rem;
+      color: var(--text-dim);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ─── Progress Panel ─── */
+    .progress-panel {
+      display: none;
+      margin-top: 1.25rem;
+    }
+    .progress-panel.active { display: block; }
+
+    .progress-bar-track {
+      width: 100%;
+      height: 6px;
+      background: var(--surface);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: .75rem;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), #a78bfa);
+      width: 0%;
+      transition: width .4s ease;
+    }
+    .progress-bar-fill.indeterminate {
+      width: 30%;
+      animation: indeterminate 1.5s ease-in-out infinite;
+    }
+    @keyframes indeterminate {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(400%); }
+    }
+
+    .progress-status {
+      font-size: .85rem;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .progress-status .phase-icon {
+      font-size: 1rem;
+    }
+
+    .progress-stats {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-top: .5rem;
+    }
+    .progress-stat {
+      font-size: .78rem;
+      color: var(--text-dim);
+      padding: 4px 10px;
+      background: var(--surface);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .progress-stat strong { color: var(--text); }
+
+    /* ═══════════════════════════════════════════════
+       TREE VIEW — Papers as hierarchical tree
+       ═══════════════════════════════════════════════ */
+    .tree-panel {
+      display: none;
+    }
+    .tree-panel.active { display: block; }
+
+    .tree-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .tree-legend {
+      display: flex;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .75rem;
+      color: var(--text-dim);
+    }
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+    }
+    .legend-dot.processing { background: var(--info); animation: pulse 1.5s ease infinite; }
+    .legend-dot.found { background: var(--success); }
+    .legend-dot.skipped { background: rgba(255,255,255,0.15); }
+    .legend-dot.ranked { background: var(--warn); }
+
+    /* Tree structure */
+    .tree-root {
+      list-style: none;
+      padding: 0;
+    }
+    .tree-root ul {
+      list-style: none;
+      padding-left: 0;
+      margin-left: 24px;
+      border-left: 1px solid rgba(255,255,255,0.06);
+    }
+    .tree-node {
+      position: relative;
+      padding: 2px 0;
+    }
+    .tree-root > .tree-node > ul > .tree-node::before {
+      content: '';
+      position: absolute;
+      left: -24px;
+      top: 18px;
+      width: 20px;
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+    }
+    .tree-root ul > .tree-node::before {
+      content: '';
+      position: absolute;
+      left: -24px;
+      top: 18px;
+      width: 20px;
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+    }
+
+    .tree-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      transition: background .15s;
+      cursor: default;
+    }
+    .tree-item:hover {
+      background: rgba(255,255,255,0.03);
+    }
+    .tree-item.expanded {
+      background: rgba(99,102,241,0.04);
+    }
+
+    /* Status indicator dot */
+    .node-status {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0;
+      transition: background .3s, box-shadow .3s;
+    }
+    .node-status.idle { background: rgba(255,255,255,0.1); }
+    .node-status.processing {
+      background: var(--info);
+      box-shadow: 0 0 8px rgba(56,189,248,0.4);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .node-status.found {
+      background: var(--success);
+      box-shadow: 0 0 6px rgba(52,211,153,0.3);
+    }
+    .node-status.skipped {
+      background: rgba(255,255,255,0.12);
+    }
+    .node-status.ranked {
+      background: var(--warn);
+      box-shadow: 0 0 6px rgba(251,191,36,0.3);
+    }
+    .node-status.error {
+      background: var(--danger);
+      box-shadow: 0 0 6px rgba(248,113,113,0.3);
+    }
+    .node-status.seed {
+      background: var(--warn);
+      box-shadow: 0 0 10px rgba(251,191,36,0.5);
+      width: 12px;
+      height: 12px;
+      margin-top: 4px;
+    }
+
+    .node-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .node-title {
+      font-size: .88rem;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .node-title.seed-title {
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--warn), #f59e0b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .node-meta {
+      font-size: .76rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .node-meta a {
+      color: var(--accent-l);
+      text-decoration: none;
+    }
+    .node-meta a:hover { text-decoration: underline; }
+
+    /* Score badges inline */
+    .score-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: .72rem;
+      font-weight: 600;
+      letter-spacing: .01em;
+    }
+    .score-pill.similarity {
+      background: rgba(99,102,241,0.15);
+      color: var(--accent-l);
+    }
+    .score-pill.pagerank {
+      background: rgba(168,85,247,0.15);
+      color: #c084fc;
+    }
+    .score-pill.combined {
+      background: rgba(251,191,36,0.15);
+      color: var(--warn);
+    }
+
+    /* Status label */
+    .status-label {
+      font-size: .72rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      flex-shrink: 0;
+      transition: all .3s;
+    }
+    .status-label.processing {
+      background: rgba(56,189,248,0.12);
+      color: var(--info);
+    }
+    .status-label.found {
+      background: rgba(52,211,153,0.12);
+      color: var(--success);
+    }
+    .status-label.skipped {
+      background: rgba(255,255,255,0.06);
+      color: rgba(255,255,255,0.35);
+    }
+    .status-label.ranked {
+      background: rgba(251,191,36,0.12);
+      color: var(--warn);
+    }
+    .status-label.error {
+      background: rgba(248,113,113,0.12);
+      color: var(--danger);
+    }
+    .status-label.seed {
+      background: rgba(251,191,36,0.15);
+      color: var(--warn);
+    }
+
+    /* Rank badge */
+    .rank-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 24px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: .72rem;
+      flex-shrink: 0;
+    }
+    .rank-1 { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1a1a2e; }
+    .rank-2 { background: linear-gradient(135deg, #94a3b8, #64748b); color: #fff; }
+    .rank-3 { background: linear-gradient(135deg, #b45309, #92400e); color: #fef3c7; }
+    .rank-n { background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); }
+
+    /* Expand/collapse toggle */
+    .tree-toggle {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      cursor: pointer;
+      font-size: .85rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color .2s, background .2s;
+      flex-shrink: 0;
+      margin-top: 3px;
+    }
+    .tree-toggle:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+
+    /* Node detail expansion */
+    .node-details {
+      display: none;
+      margin-top: 8px;
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.02);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: .82rem;
+      color: var(--text-dim);
+      line-height: 1.5;
+    }
+    .node-details.show { display: block; animation: fadeIn .25s ease; }
+    @keyframes fadeIn { from { opacity:0; } }
+
+    .node-details .detail-row {
+      display: flex;
+      gap: 8px;
+      padding: 3px 0;
+    }
+    .node-details .detail-label {
+      font-weight: 600;
+      color: var(--text);
+      min-width: 90px;
+      flex-shrink: 0;
+    }
+    .node-details .abstract-text {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+      max-height: 140px;
+      overflow-y: auto;
+    }
+
+    /* Depth indicators */
+    .depth-badge {
+      font-size: .68rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(99,102,241,0.1);
+      color: var(--accent-l);
+      font-weight: 500;
+    }
+
+    /* Results summary stats bar */
+    .results-stats {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .stat-chip {
+      padding: 6px 14px;
+      border-radius: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: .82rem;
+      color: var(--text-dim);
+    }
+    .stat-chip strong { color: var(--text); font-weight: 600; }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 640px) {
+      .form-row { grid-template-columns: 1fr; }
+      .tree-legend { gap: .4rem; }
+      .tree-root ul { margin-left: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Header -->
+  <header>
+    <h1>ALRS GraphSelect</h1>
+    <p>Semantic paper search via citation graphs, embeddings &amp; PageRank</p>
+    <div class="status-badge" id="statusBadge">
+      <span class="status-dot"></span>
+      <span id="statusText">Checking…</span>
+    </div>
+  </header>
+
+  <!-- Search form -->
+  <div class="card">
+    <h2><span class="icon">🔬</span> Search Configuration</h2>
+
+    <!-- Credentials Row -->
+    <div class="form-row" style="margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); padding-bottom: 1.25rem;">
+      <div class="form-group" style="grid-column: span 2;">
+        <label for="geminiApiKey">Gemini API Key</label>
+        <input type="password" id="geminiApiKey" placeholder="Paste your GEMINI_API_KEY (saves to cookie)..." onchange="saveCookies()" />
+      </div>
+      <div class="form-group">
+        <label for="openalexEmail">OpenAlex Email</label>
+        <input type="text" id="openalexEmail" placeholder="email@example.com (optional)" onchange="saveCookies()" />
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="seedDoi">Seed Paper DOI</label>
+      <input type="text" id="seedDoi" value="10.1145/3292500.3330648" placeholder="e.g. 10.1145/3292500.3330648" />
+    </div>
+
+    <div class="form-group">
+      <label>Research Questions (1–6)</label>
+      <div class="questions-list" id="questionsList">
+        <div class="q-row">
+          <input type="text" class="q-input" value="What are the socio-technical impacts of algorithmic abstraction and fairness metrics?" placeholder="Enter a research question…" />
+          <button class="q-remove" title="Remove" onclick="removeQuestion(this)">×</button>
+        </div>
+        <div class="q-row">
+          <input type="text" class="q-input" value="How do technical fairness definitions align with human values and organizational practices?" placeholder="Enter a research question…" />
+          <button class="q-remove" title="Remove" onclick="removeQuestion(this)">×</button>
+        </div>
+      </div>
+      <button class="btn-add-q" onclick="addQuestion()" id="btnAddQ">＋ Add question</button>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="threshold">Similarity Threshold</label>
+        <input type="number" id="threshold" value="0.3" min="0" max="1" step="0.05" />
+      </div>
+      <div class="form-group">
+        <label for="maxDepth">Max BFS Depth</label>
+        <input type="number" id="maxDepth" value="3" min="1" max="10" step="1" />
+      </div>
+      <div class="form-group">
+        <label for="maxNeighbors">Neighbors / Level</label>
+        <input type="number" id="maxNeighbors" value="25" min="1" max="100" step="5" />
+      </div>
+    </div>
+
+    <div class="btn-bar">
+      <button class="btn-primary" id="btnSearch" onclick="runSearch()">
+        <span class="spinner" id="spinner"></span>
+        <span id="btnLabel">Run Search</span>
+      </button>
+      <button class="btn-secondary" id="btnStop" onclick="stopSearch()" style="display:none;">
+        ⬛ Stop
+      </button>
+      <span class="elapsed" id="elapsed"></span>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <!-- Progress Panel -->
+    <div class="progress-panel" id="progressPanel">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progressBar"></div>
+      </div>
+      <div class="progress-status" id="progressStatus">
+        <span class="phase-icon">⏳</span>
+        <span id="progressMessage">Initializing...</span>
+      </div>
+      <div class="progress-stats" id="progressStats"></div>
+    </div>
+  </div>
+
+  <!-- Results / Tree Card -->
+  <div class="card" id="resultsCard" style="display:none;">
+    <div class="tree-header">
+      <h2 style="margin-bottom:0;"><span class="icon">🌳</span> Paper Tree</h2>
+      <div class="tree-legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--warn);"></span> Seed</div>
+        <div class="legend-item"><span class="legend-dot processing"></span> Processing</div>
+        <div class="legend-item"><span class="legend-dot found"></span> Found</div>
+        <div class="legend-item"><span class="legend-dot skipped"></span> Skipped</div>
+        <div class="legend-item"><span class="legend-dot ranked"></span> Ranked</div>
+      </div>
+    </div>
+    <div class="results-stats" id="resultsStats"></div>
+    <div class="tree-panel active" id="treePanel">
+      <ul class="tree-root" id="treeRoot"></ul>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ─── Cookie Utilities ───
+  function setCookie(name, value, days = 365) {
+    const d = new Date();
+    d.setTime(d.getTime() + (days*24*60*60*1000));
+    document.cookie = name + "=" + encodeURIComponent(value) + ";expires=" + d.toUTCString() + ";path=/";
+  }
+
+  function getCookie(name) {
+    const ca = decodeURIComponent(document.cookie).split(';');
+    for (let c of ca) {
+      c = c.trim();
+      if (c.startsWith(name + "=")) return c.substring(name.length + 1);
+    }
+    return "";
+  }
+
+  function saveCookies() {
+    setCookie('alrs_gemini_key', document.getElementById('geminiApiKey').value.trim());
+    setCookie('alrs_alex_email', document.getElementById('openalexEmail').value.trim());
+  }
+
+  function loadCookies() {
+    const k = getCookie('alrs_gemini_key');
+    const e = getCookie('alrs_alex_email');
+    if (k) document.getElementById('geminiApiKey').value = k;
+    if (e) document.getElementById('openalexEmail').value = e;
+  }
+  loadCookies();
+
+  // ─── Health check ───
+  async function checkHealth() {
+    const badge = document.getElementById('statusBadge');
+    const text  = document.getElementById('statusText');
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) { text.textContent = 'API Online'; badge.classList.remove('offline'); }
+      else throw 0;
+    } catch {
+      text.textContent = 'API Offline'; badge.classList.add('offline');
+    }
+  }
+  checkHealth();
+  setInterval(checkHealth, 15000);
+
+  // ─── Question management ───
+  function addQuestion() {
+    const list = document.getElementById('questionsList');
+    if (list.children.length >= 6) return;
+    const row = document.createElement('div');
+    row.className = 'q-row';
+    row.innerHTML = `
+      <input type="text" class="q-input" placeholder="Enter a research question…" />
+      <button class="q-remove" title="Remove" onclick="removeQuestion(this)">×</button>`;
+    list.appendChild(row);
+    row.querySelector('input').focus();
+    updateAddBtn();
+  }
+
+  function removeQuestion(btn) {
+    const list = document.getElementById('questionsList');
+    if (list.children.length <= 1) return;
+    btn.closest('.q-row').remove();
+    updateAddBtn();
+  }
+
+  function updateAddBtn() {
+    const list = document.getElementById('questionsList');
+    document.getElementById('btnAddQ').style.display =
+      list.children.length >= 6 ? 'none' : 'inline-flex';
+  }
+
+  // ═══════════════════════════════════════════════
+  //  STATE MACHINE — Tracks all paper nodes
+  // ═══════════════════════════════════════════════
+  let paperNodes = {};    // id -> { id, title, depth, status, similarity, pagerank, combined, rank, abstract, authors, year, doi, parentId, reason }
+  let treeStructure = {}; // depth -> [ids]
+  let eventSource = null;
+  let timer = null;
+  let isSearching = false;
+
+  function resetState() {
+    paperNodes = {};
+    treeStructure = {};
+    document.getElementById('treeRoot').innerHTML = '';
+    document.getElementById('resultsStats').innerHTML = '';
+  }
+
+  // ─── Add or update a paper node in state ───
+  function upsertNode(data) {
+    const id = data.id || data.openalex_id || '';
+    if (!id) return;
+
+    if (paperNodes[id]) {
+      // Update existing
+      Object.assign(paperNodes[id], data);
+    } else {
+      // New node
+      paperNodes[id] = {
+        id: id,
+        title: data.title || 'Untitled',
+        depth: data.depth ?? 0,
+        status: data.status || 'idle',
+        similarity: data.similarity ?? 0,
+        pagerank: data.pagerank ?? 0,
+        combined: data.combined ?? 0,
+        rank: data.rank ?? null,
+        abstract: data.abstract || '',
+        authors: data.authors || '',
+        year: data.year || '',
+        doi: data.doi || '',
+        parentId: data.parent_id || null,
+        reason: data.reason || '',
+      };
+
+      // Track tree structure
+      const depth = paperNodes[id].depth;
+      if (!treeStructure[depth]) treeStructure[depth] = [];
+      treeStructure[depth].push(id);
+    }
+
+    renderTreeNode(id);
+  }
+
+  // ═══════════════════════════════════════════════
+  //  TREE RENDERING
+  // ═══════════════════════════════════════════════
+
+  function renderTreeNode(id) {
+    const node = paperNodes[id];
+    if (!node) return;
+
+    let el = document.getElementById('tree-' + id);
+
+    if (!el) {
+      // Create new tree node element
+      el = document.createElement('li');
+      el.className = 'tree-node';
+      el.id = 'tree-' + id;
+      el.setAttribute('data-depth', node.depth);
+
+      // Find parent container
+      const parentContainer = findParentContainer(node);
+      parentContainer.appendChild(el);
+    }
+
+    // Build inner HTML
+    const isSeed = node.depth === 0;
+    const statusClass = isSeed ? 'seed' : node.status;
+    const statusText = isSeed ? 'SEED' : node.status.toUpperCase();
+    const titleClass = isSeed ? 'node-title seed-title' : 'node-title';
+
+    let scorePills = '';
+    if (node.similarity > 0) {
+      scorePills += `<span class="score-pill similarity">Sim ${pct(node.similarity)}</span>`;
+    }
+    if (node.pagerank > 0) {
+      scorePills += `<span class="score-pill pagerank">PR ${pct(node.pagerank)}</span>`;
+    }
+    if (node.combined > 0) {
+      scorePills += `<span class="score-pill combined">★ ${pct(node.combined)}</span>`;
+    }
+
+    let rankBadge = '';
+    if (node.rank !== null) {
+      const cls = node.rank <= 3 ? `rank-${node.rank}` : 'rank-n';
+      rankBadge = `<span class="rank-badge ${cls}">#${node.rank}</span>`;
+    }
+
+    let metaLine = '';
+    if (node.authors) metaLine += esc(node.authors);
+    if (node.year) metaLine += (metaLine ? ' · ' : '') + node.year;
+    if (node.doi) {
+      const doiUrl = node.doi.startsWith('http') ? node.doi : 'https://doi.org/' + node.doi;
+      const doiShort = node.doi.replace('https://doi.org/', '');
+      metaLine += (metaLine ? ' · ' : '') + `<a href="${doiUrl}" target="_blank" rel="noopener">${esc(doiShort)}</a>`;
+    }
+
+    let reasonText = '';
+    if (node.status === 'skipped' && node.reason) {
+      reasonText = `<span style="color:var(--text-dim);font-size:.74rem;opacity:.6;"> — ${esc(node.reason)}</span>`;
+    }
+
+    const detailId = 'detail-' + id;
+    const hasAbstract = node.abstract && node.abstract.length > 0;
+
+    // Preserve child UL if it exists
+    const childUl = el.querySelector(':scope > ul');
+
+    el.innerHTML = `
+      <div class="tree-item" onclick="toggleDetail('${detailId}', this)">
+        <span class="node-status ${statusClass}"></span>
+        <div class="node-content">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            ${rankBadge}
+            <span class="${titleClass}">${isSeed ? '🌱 ' : ''}${esc(node.title)}</span>
+            <span class="status-label ${statusClass}">${statusText}</span>
+            ${reasonText}
+            <span class="depth-badge">D${node.depth}</span>
+          </div>
+          ${metaLine ? `<div class="node-meta">${metaLine}</div>` : ''}
+          ${scorePills ? `<div class="node-meta" style="margin-top:3px;">${scorePills}</div>` : ''}
+          ${hasAbstract ? `
+          <div class="node-details" id="${detailId}">
+            <div class="abstract-text">${esc(node.abstract)}</div>
+          </div>` : ''}
+        </div>
+      </div>
+    `;
+
+    // Re-attach child UL
+    if (childUl) {
+      el.appendChild(childUl);
+    }
+  }
+
+  function findParentContainer(node) {
+    // For depth 0 (seed), put directly in root
+    if (node.depth === 0) {
+      return document.getElementById('treeRoot');
+    }
+
+    // Find a parent node at depth - 1
+    const parentDepth = node.depth - 1;
+    const parentIds = treeStructure[parentDepth] || [];
+
+    // Try to use parentId if specified
+    if (node.parentId && document.getElementById('tree-' + node.parentId)) {
+      return getOrCreateChildList('tree-' + node.parentId);
+    }
+
+    // Otherwise attach to first node at parent depth
+    if (parentIds.length > 0) {
+      const parentElId = 'tree-' + parentIds[0];
+      if (document.getElementById(parentElId)) {
+        return getOrCreateChildList(parentElId);
+      }
+    }
+
+    // Fallback: root
+    return document.getElementById('treeRoot');
+  }
+
+  function getOrCreateChildList(parentElId) {
+    const parentEl = document.getElementById(parentElId);
+    if (!parentEl) return document.getElementById('treeRoot');
+
+    let ul = parentEl.querySelector(':scope > ul');
+    if (!ul) {
+      ul = document.createElement('ul');
+      parentEl.appendChild(ul);
+    }
+    return ul;
+  }
+
+  function toggleDetail(detailId, treeItem) {
+    const el = document.getElementById(detailId);
+    if (!el) return;
+    const isOpen = el.classList.toggle('show');
+    if (treeItem) treeItem.classList.toggle('expanded', isOpen);
+  }
+
+  // ═══════════════════════════════════════════════
+  //  SSE-POWERED SEARCH
+  // ═══════════════════════════════════════════════
+
+  async function runSearch() {
+    const btn = document.getElementById('btnSearch');
+    const spinner = document.getElementById('spinner');
+    const label = document.getElementById('btnLabel');
+    const errorBox = document.getElementById('errorBox');
+    const elapsed = document.getElementById('elapsed');
+    const progressPanel = document.getElementById('progressPanel');
+    const stopBtn = document.getElementById('btnStop');
+
+    // Gather inputs
+    const keyVal  = document.getElementById('geminiApiKey').value.trim();
+    const mailVal = document.getElementById('openalexEmail').value.trim();
+    const seedDoi = document.getElementById('seedDoi').value.trim();
+    const questions = [...document.querySelectorAll('.q-input')]
+      .map(i => i.value.trim())
+      .filter(Boolean);
+    const threshold    = parseFloat(document.getElementById('threshold').value);
+    const maxDepth     = parseInt(document.getElementById('maxDepth').value, 10);
+    const maxNeighbors = parseInt(document.getElementById('maxNeighbors').value, 10);
+
+    // Validate
+    errorBox.style.display = 'none';
+    if (!seedDoi) return showError('Please enter a seed DOI.');
+    if (questions.length === 0) return showError('Add at least one research question.');
+
+    // Reset state
+    resetState();
+    isSearching = true;
+
+    // UI state
+    btn.disabled = true;
+    spinner.style.display = 'block';
+    label.textContent = 'Searching…';
+    stopBtn.style.display = 'inline-flex';
+    progressPanel.classList.add('active');
+    document.getElementById('resultsCard').style.display = 'block';
+    document.getElementById('progressBar').classList.add('indeterminate');
+    updateProgressMessage('⏳', 'Initializing...');
+
+    // Timer
+    const t0 = Date.now();
+    elapsed.textContent = '0s';
+    timer = setInterval(() => {
+      elapsed.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's';
+    }, 100);
+
+    // Build payload
+    const payload = {
+      seed_doi: seedDoi,
+      research_questions: questions,
+      similarity_threshold: threshold,
+      max_depth: maxDepth,
+      max_neighbors_per_level: maxNeighbors,
+    };
+    if (keyVal) payload.gemini_api_key = keyVal;
+    if (mailVal) payload.openalex_email = mailVal;
+
+    try {
+      // Use fetch + ReadableStream for SSE over POST
+      const response = await fetch('/api/search/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // Keep incomplete last line in buffer
+
+        let currentEvent = 'message';
+        let dataBuffer = '';
+
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEvent = line.substring(7).trim();
+          } else if (line.startsWith('data: ')) {
+            dataBuffer = line.substring(6);
+          } else if (line === '' && dataBuffer) {
+            // End of SSE message
+            handleSSEEvent(currentEvent, dataBuffer);
+            currentEvent = 'message';
+            dataBuffer = '';
+          }
+        }
+      }
+
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        showError(e.message);
+      }
+    } finally {
+      clearInterval(timer);
+      elapsed.textContent = ((Date.now() - t0) / 1000).toFixed(1) + 's';
+      isSearching = false;
+      btn.disabled = false;
+      spinner.style.display = 'none';
+      label.textContent = 'Run Search';
+      stopBtn.style.display = 'none';
+      document.getElementById('progressBar').classList.remove('indeterminate');
+    }
+  }
+
+  function stopSearch() {
+    // Abort fetch would need AbortController — let's just reload
+    if (isSearching) {
+      isSearching = false;
+      window.location.reload();
+    }
+  }
+
+  function handleSSEEvent(eventType, dataStr) {
+    let data;
+    try {
+      data = JSON.parse(dataStr);
+    } catch {
+      console.warn('Failed to parse SSE data:', dataStr);
+      return;
+    }
+
+    switch (eventType) {
+      case 'progress':
+        handleProgress(data);
+        break;
+      case 'paper_processing':
+        data.status = 'processing';
+        upsertNode(data);
+        break;
+      case 'paper_found':
+        // Seed paper has depth 0 — mark it specially
+        if (data.depth === 0) {
+          data.status = 'seed';
+        } else {
+          data.status = 'found';
+        }
+        upsertNode(data);
+        break;
+      case 'paper_skipped':
+        data.status = 'skipped';
+        upsertNode(data);
+        break;
+      case 'results':
+        handleResults(data);
+        break;
+      case 'error':
+        showError(data.detail || data.message || 'Search failed');
+        break;
+      default:
+        console.log('Unknown SSE event:', eventType, data);
+    }
+  }
+
+  function handleProgress(data) {
+    const phaseIcons = {
+      'idle': '💤',
+      'embedding_questions': '🧠',
+      'processing_seed': '🌱',
+      'exploring_level': '🔍',
+      'calculating_pagerank': '📊',
+      'completed': '✅',
+      'error': '❌',
+    };
+
+    const icon = phaseIcons[data.status] || '⏳';
+    const msg = data.message || data.status;
+    updateProgressMessage(icon, msg);
+
+    // Update progress bar
+    const bar = document.getElementById('progressBar');
+    if (data.status === 'exploring_level' && data.current_level_total > 0) {
+      bar.classList.remove('indeterminate');
+      const pct = (data.current_level_progress / data.current_level_total) * 100;
+      bar.style.width = pct + '%';
+    } else if (data.status === 'completed') {
+      bar.classList.remove('indeterminate');
+      bar.style.width = '100%';
+    } else {
+      bar.classList.add('indeterminate');
+      bar.style.width = '';
+    }
+
+    // Progress stats
+    const statsEl = document.getElementById('progressStats');
+    let statsHtml = '';
+    if (data.relevant_papers_found > 0) {
+      statsHtml += `<span class="progress-stat"><strong>${data.relevant_papers_found}</strong> relevant</span>`;
+    }
+    if (data.current_depth > 0) {
+      statsHtml += `<span class="progress-stat">Depth <strong>${data.current_depth}</strong> / ${data.max_depth}</span>`;
+    }
+    if (data.current_level_progress > 0) {
+      statsHtml += `<span class="progress-stat">Paper <strong>${data.current_level_progress}</strong> / ${data.current_level_total}</span>`;
+    }
+    statsEl.innerHTML = statsHtml;
+  }
+
+  function updateProgressMessage(icon, msg) {
+    document.getElementById('progressMessage').textContent = msg;
+    document.querySelector('.progress-status .phase-icon').textContent = icon;
+  }
+
+  function handleResults(data) {
+    // Update stats
+    const stats = document.getElementById('resultsStats');
+    stats.innerHTML = `
+      <div class="stat-chip"><strong>${data.total_results}</strong>&nbsp;papers found</div>
+      <div class="stat-chip"><strong>${data.total_papers_processed}</strong>&nbsp;processed</div>
+      <div class="stat-chip"><strong>${data.total_api_calls}</strong>&nbsp;API calls</div>`;
+
+    // Update all paper nodes with final ranked data
+    if (data.results) {
+      data.results.forEach((p, idx) => {
+        const rank = idx + 1;
+        const id = extractId(p.work?.id || '');
+        if (!id) return;
+
+        const authors = (p.work.authorships || [])
+          .slice(0, 3)
+          .map(a => a.author?.display_name || '')
+          .filter(Boolean)
+          .join(', ') + ((p.work.authorships || []).length > 3 ? ' et al.' : '');
+
+        upsertNode({
+          id: id,
+          title: p.work.display_name || p.work.title || 'Untitled',
+          depth: p.depth ?? 0,
+          status: 'ranked',
+          similarity: p.max_similarity_score,
+          pagerank: p.pagerank_score,
+          combined: p.combined_score,
+          rank: rank,
+          abstract: p.abstract_text || '',
+          authors: authors,
+          year: p.work.publication_year || '',
+          doi: p.work.doi || '',
+        });
+      });
+    }
+
+    // Scroll to results
+    document.getElementById('resultsCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function extractId(idStr) {
+    const m = idStr.match(/W\d+/);
+    return m ? m[0] : idStr;
+  }
+
+  // ─── Utilities ───
+  function showError(msg) {
+    const box = document.getElementById('errorBox');
+    box.textContent = msg;
+    box.style.display = 'block';
+  }
+
+  function pct(v) { return (v * 100).toFixed(1) + '%'; }
+
+  function esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+</script>
+
+</body>
+</html>
