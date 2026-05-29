@@ -23,7 +23,7 @@ app: FastAPI = FastAPI(
         'Implements semantic paper search using citation graph traversal,\n'
         'Gemini embeddings, cosine similarity filtering, and PageRank ranking.'
     ),
-    version='2.3.1',
+    version='2.3.2-beta',
 )
 
 app.include_router(search_router)

@@ -1,4 +1,4 @@
-name: Release Executable
+name: Create GitHub Release
 
 on:
   push:
@@ -6,50 +6,24 @@ on:
       - 'v*'
 
 jobs:
-  build-and-release:
-    name: Build and Release Executable
-    runs-on: windows-latest
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
 
     permissions:
       contents: write
 
     steps:
-      - name: Configure Git Longpaths
-        run: git config --global core.longpaths true
-
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r code/requirements.txt
-          pip install pyinstaller
-
-      - name: Package with PyInstaller
-        run: |
-          cd code
-          pyinstaller --onefile --name "GraphSelect" --add-data "static;static" main.py
-        shell: bash
-
-      - name: Verify Executable
-        run: |
-          ls code/dist/
-        shell: bash
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: code/dist/GraphSelect.exe
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
+          generate_release_notes: true
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

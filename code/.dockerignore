@@ -1,0 +1,76 @@
+# =============================================================================
+#  .dockerignore — GraphSelect
+#  Excludes files that should NOT be sent to the Docker build context.
+# =============================================================================
+
+# ── Version Control ──────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Python Artifacts ─────────────────────────────────────────────────────────
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+*.egg
+dist/
+build/
+*.whl
+
+# ── Virtual Environments ─────────────────────────────────────────────────────
+.venv
+venv
+env
+.env
+.env.*
+
+# ── Test & Coverage ──────────────────────────────────────────────────────────
+tests/
+test/
+test_*.py
+*_test.py
+conftest.py
+.pytest_cache
+.coverage
+htmlcov/
+coverage.xml
+
+# ── IDE & Editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Docker ───────────────────────────────────────────────────────────────────
+docker-compose.yml
+docker-compose.override.yml
+Dockerfile.dev
+
+# ── Documentation & Misc ────────────────────────────────────────────────────
+*.md
+!README.md
+LICENSE
+docs/
+papers/
+
+# ── Node (if any frontend tooling) ──────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ── Logs & Temp ──────────────────────────────────────────────────────────────
+*.log
+tmp/
+temp/
+
+# ── Launcher Scripts (not needed inside image) ───────────────────────────────
+run_graphselect.sh
+run_graphselect.bat
+
+# ── Agents / Spec Kit ────────────────────────────────────────────────────────
+.agents/
+.speckit/

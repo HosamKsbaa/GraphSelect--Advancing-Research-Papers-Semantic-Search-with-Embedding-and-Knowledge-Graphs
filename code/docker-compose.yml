@@ -1,0 +1,36 @@
+# ─────────────────────────────────────────────────────────
+# ALRS GraphSelect API — Docker Compose
+# ─────────────────────────────────────────────────────────
+# Usage:
+#   docker compose up -d          # Start in background
+#   docker compose logs -f        # View logs
+#   docker compose down           # Stop and remove
+#
+# Environment variables can be set via:
+#   1. A .env file in this directory
+#   2. Shell environment:  GEMINI_API_KEY=xxx docker compose up -d
+# ─────────────────────────────────────────────────────────
+
+services:
+  graphselect:
+    image: ghcr.io/hosamksbaa/graphselect:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphselect_app
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENALEX_EMAIL=${OPENALEX_EMAIL:-}
+      - SIMILARITY_THRESHOLD=${SIMILARITY_THRESHOLD:-0.3}
+      - MAX_DEPTH=${MAX_DEPTH:-3}
+      - MAX_NEIGHBORS_PER_LEVEL=${MAX_NEIGHBORS_PER_LEVEL:-25}
+      - OPEN_BROWSER=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
