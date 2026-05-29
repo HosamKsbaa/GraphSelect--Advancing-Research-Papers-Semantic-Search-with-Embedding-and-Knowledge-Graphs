@@ -93,38 +93,26 @@ if exist "%ENV_FILE%" (
     )
 )
 
-REM Prompt for GEMINI_API_KEY if not set
-if not "%GEMINI_API_KEY%"=="" goto :geminikey_set
-echo.
-echo   Enter your Gemini API key (required):
-set /p "GEMINI_API_KEY=  GEMINI_API_KEY: "
-echo.
-:geminikey_set
-
 if "%GEMINI_API_KEY%"=="" (
-    echo [FAIL]  GEMINI_API_KEY cannot be empty.
-    pause
-    exit /b 1
+    echo [WARN]  GEMINI_API_KEY is not set in environment or %ENV_FILE%.
+    echo         You can configure it via the web UI request body.
+) else (
+    echo [  OK]  GEMINI_API_KEY is loaded.
 )
-echo [  OK]  GEMINI_API_KEY is set.
-
-REM Prompt for OPENALEX_EMAIL (optional)
-if not "%OPENALEX_EMAIL%"=="" goto :openalex_set
-echo.
-echo   Enter your email for OpenAlex polite pool (optional, press Enter to skip):
-set /p "OPENALEX_EMAIL=  OPENALEX_EMAIL: "
-echo.
-:openalex_set
 
 if "%OPENALEX_EMAIL%"=="" (
-    echo [WARN]  OPENALEX_EMAIL not set — anonymous access will be used.
+    echo [WARN]  OPENALEX_EMAIL is not set — anonymous access will be used.
 ) else (
     echo [  OK]  OPENALEX_EMAIL is set to: %OPENALEX_EMAIL%
 )
 
 REM ── 4. Save credentials to .env ──────────────────────────────────────────────
-echo GEMINI_API_KEY=!GEMINI_API_KEY!> "%ENV_FILE%"
-echo OPENALEX_EMAIL=!OPENALEX_EMAIL!>> "%ENV_FILE%"
+if not "%GEMINI_API_KEY%"=="" (
+    echo GEMINI_API_KEY=%GEMINI_API_KEY%> "%ENV_FILE%"
+)
+if not "%OPENALEX_EMAIL%"=="" (
+    echo OPENALEX_EMAIL=%OPENALEX_EMAIL%>> "%ENV_FILE%"
+)
 echo [INFO]  Credentials saved to %ENV_FILE%.
 
 REM ── 5. Generate docker-compose.yml ───────────────────────────────────────────

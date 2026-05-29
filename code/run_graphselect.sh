@@ -112,39 +112,31 @@ if [[ -f "$ENV_FILE" ]]; then
     source "$ENV_FILE" 2>/dev/null || true
 fi
 
-# Prompt for GEMINI_API_KEY if not set
 if [[ -z "${GEMINI_API_KEY:-}" ]]; then
-    echo ""
-    echo -e "${BOLD}Enter your Gemini API key (required):${NC}"
-    read -rsp "  GEMINI_API_KEY: " GEMINI_API_KEY
-    echo ""
-    if [[ -z "$GEMINI_API_KEY" ]]; then
-        error "GEMINI_API_KEY cannot be empty."
-        exit 1
-    fi
+    warn "GEMINI_API_KEY is not set in environment or ${ENV_FILE}."
+    warn "You can configure it via the web UI request body."
+else
+    success "GEMINI_API_KEY is loaded."
 fi
-success "GEMINI_API_KEY is set."
 
-# Prompt for OPENALEX_EMAIL (optional)
-if [[ -z "${OPENALEX_EMAIL:-}" ]]; then
-    echo ""
-    echo -e "${BOLD}Enter your email for OpenAlex polite pool (optional, press Enter to skip):${NC}"
-    read -rp "  OPENALEX_EMAIL: " OPENALEX_EMAIL
-    echo ""
-fi
-if [[ -n "$OPENALEX_EMAIL" ]]; then
+if [[ -n "${OPENALEX_EMAIL:-}" ]]; then
     success "OPENALEX_EMAIL is set to: $OPENALEX_EMAIL"
 else
     warn "OPENALEX_EMAIL not set — anonymous access will be used."
 fi
 
-# 4. Persist to .env so next launch doesn't re-prompt
-cat > "$ENV_FILE" <<ENVEOF
-GEMINI_API_KEY=${GEMINI_API_KEY}
-OPENALEX_EMAIL=${OPENALEX_EMAIL}
-ENVEOF
-chmod 600 "$ENV_FILE"
-info "Credentials saved to ${ENV_FILE} (chmod 600)."
+# 4. Save credentials to .env if set
+rm -f "$ENV_FILE"
+if [[ -n "${GEMINI_API_KEY:-}" ]]; then
+    echo "GEMINI_API_KEY=${GEMINI_API_KEY}" >> "$ENV_FILE"
+fi
+if [[ -n "${OPENALEX_EMAIL:-}" ]]; then
+    echo "OPENALEX_EMAIL=${OPENALEX_EMAIL}" >> "$ENV_FILE"
+fi
+if [[ -f "$ENV_FILE" ]]; then
+    chmod 600 "$ENV_FILE"
+    info "Credentials saved to ${ENV_FILE} (chmod 600)."
+fi
 
 # 5. Generate docker-compose.yml
 info "Generating ${COMPOSE_FILE} …"
