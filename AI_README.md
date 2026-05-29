@@ -49,7 +49,7 @@ newcode/
 │   ├── run_graphselect.sh       # Linux/macOS docker setup bootstrap script
 │   └── run_graphselect.bat      # Windows docker setup bootstrap script
 ├── bump_version.py              # CLI tool for unified version bumping
-├── LICENSE                      # MIT License
+├── LICENSE                      # BSD 3-Clause License
 ├── CONTRIBUTING.md              # Open-source contribution guidelines
 └── SECURITY.md                  # Security vulnerability report procedures
 ```
