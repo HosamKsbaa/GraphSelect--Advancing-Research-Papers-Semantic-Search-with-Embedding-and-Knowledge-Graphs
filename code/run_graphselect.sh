@@ -125,18 +125,14 @@ else
     warn "OPENALEX_EMAIL not set — anonymous access will be used."
 fi
 
-# 4. Save credentials to .env if set
-rm -f "$ENV_FILE"
-if [[ -n "${GEMINI_API_KEY:-}" ]]; then
-    echo "GEMINI_API_KEY=${GEMINI_API_KEY}" >> "$ENV_FILE"
-fi
-if [[ -n "${OPENALEX_EMAIL:-}" ]]; then
-    echo "OPENALEX_EMAIL=${OPENALEX_EMAIL}" >> "$ENV_FILE"
-fi
-if [[ -f "$ENV_FILE" ]]; then
-    chmod 600 "$ENV_FILE"
-    info "Credentials saved to ${ENV_FILE} (chmod 600)."
-fi
+# 4. Save credentials to .env
+cat > "$ENV_FILE" <<ENVEOF
+# GraphSelect Environment Configurations
+GEMINI_API_KEY=${GEMINI_API_KEY:-}
+OPENALEX_EMAIL=${OPENALEX_EMAIL:-}
+ENVEOF
+chmod 600 "$ENV_FILE"
+info "Credentials saved to ${ENV_FILE} (chmod 600)."
 
 # 5. Generate docker-compose.yml
 info "Generating ${COMPOSE_FILE} …"

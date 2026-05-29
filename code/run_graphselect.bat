@@ -107,12 +107,11 @@ if "%OPENALEX_EMAIL%"=="" (
 )
 
 REM ── 4. Save credentials to .env ──────────────────────────────────────────────
-if not "%GEMINI_API_KEY%"=="" (
-    echo GEMINI_API_KEY=%GEMINI_API_KEY%> "%ENV_FILE%"
-)
-if not "%OPENALEX_EMAIL%"=="" (
-    echo OPENALEX_EMAIL=%OPENALEX_EMAIL%>> "%ENV_FILE%"
-)
+(
+echo # GraphSelect Environment Configurations
+echo GEMINI_API_KEY=%GEMINI_API_KEY%
+echo OPENALEX_EMAIL=%OPENALEX_EMAIL%
+) > "%ENV_FILE%"
 echo [INFO]  Credentials saved to %ENV_FILE%.
 
 REM ── 5. Generate docker-compose.yml ───────────────────────────────────────────
