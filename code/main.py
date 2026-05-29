@@ -16,6 +16,8 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
 )
 
+APP_VERSION = (Path(__file__).parent / 'VERSION').read_text(encoding='utf-8').strip()
+
 app: FastAPI = FastAPI(
     title='ALRS GraphSelect API',
     description=(
@@ -23,7 +25,7 @@ app: FastAPI = FastAPI(
         'Implements semantic paper search using citation graph traversal,\n'
         'Gemini embeddings, cosine similarity filtering, and PageRank ranking.'
     ),
-    version='2.3.2-beta',
+    version=APP_VERSION,
 )
 
 app.include_router(search_router)
@@ -62,6 +64,12 @@ async def serve_ui() -> HTMLResponse:
 async def health_check() -> dict[str, str]:
     """Health check endpoint."""
     return {'status': 'healthy', 'service': 'ALRS GraphSelect API'}
+
+
+@app.get('/api/version')
+async def version_info() -> dict[str, str]:
+    """Return the current application version."""
+    return {'version': APP_VERSION}
 
 
 if __name__ == "__main__":

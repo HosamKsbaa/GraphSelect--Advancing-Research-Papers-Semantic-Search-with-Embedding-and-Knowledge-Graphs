@@ -8,6 +8,12 @@
 set -euo pipefail
 
 # ── Constants ────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/VERSION" ]]; then
+    APP_VERSION=$(cat "$SCRIPT_DIR/VERSION" | tr -d '\r\n ')
+else
+    APP_VERSION="latest"
+fi
 IMAGE="ghcr.io/hosamksbaa/graphselect:latest"
 COMPOSE_FILE="docker-compose.yml"
 HEALTH_URL="http://localhost:8000/api/health"
@@ -43,7 +49,7 @@ print_banner() {
    ║   ███████║███████╗███████╗███████╗╚██████╗   ██║             ║
    ║   ╚══════╝╚══════╝╚══════╝╚══════╝ ╚═════╝   ╚═╝             ║
    ║                                                              ║
-   ║                  v2.3.2-beta  ·  Docker Launcher              ║
+   ║              v${APP_VERSION}  ·  Docker Launcher               ║
    ║                                                              ║
    ╚══════════════════════════════════════════════════════════════╝
 EOF
@@ -208,7 +214,7 @@ fi
 # 9. Final status
 echo ""
 echo -e "${GREEN}${BOLD}══════════════════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}${BOLD}  GraphSelect v2.3.2-beta is running!${NC}"
+echo -e "${GREEN}${BOLD}  GraphSelect v${APP_VERSION} is running!${NC}"
 echo -e "${GREEN}${BOLD}  URL : ${APP_URL}${NC}"
 echo -e "${GREEN}${BOLD}══════════════════════════════════════════════════════════════${NC}"
 echo ""

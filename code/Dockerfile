@@ -14,9 +14,13 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # ── Stage 2: Runtime ─────────────────────────────────────
 FROM python:3.11-slim
 
+# Copy VERSION file early for labeling
+COPY VERSION .
+ARG APP_VERSION
+RUN APP_VERSION=$(cat VERSION) && echo "APP_VERSION=$APP_VERSION"
+
 LABEL org.opencontainers.image.title="ALRS GraphSelect API" \
       org.opencontainers.image.description="Automated Literature Review System — GraphSelect Algorithm" \
-      org.opencontainers.image.version="2.3.2-beta" \
       org.opencontainers.image.source="https://github.com/HosamKsbaa/MasterProject2" \
       org.opencontainers.image.licenses="MIT"
 
