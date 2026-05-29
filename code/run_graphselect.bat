@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableDelayedExpansion
 :: =============================================================================
 ::  GraphSelect — One-Click Docker Launcher (Windows)
@@ -202,5 +203,6 @@ echo     * View logs   : docker compose logs -f graphselect
 echo     * Stop        : run_graphselect.bat --stop
 echo     * Restart     : docker compose restart graphselect
 echo.
-
+echo   Press any key to close this launcher window ...
+pause >nul
 endlocal

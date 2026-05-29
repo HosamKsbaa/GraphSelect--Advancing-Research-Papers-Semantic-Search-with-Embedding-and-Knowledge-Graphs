@@ -1,6 +1,6 @@
 # ALRS GraphSelect API
 
-![Version](https://img.shields.io/badge/version-2.3.4--beta-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-2.3.5--beta-blue?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
