@@ -1,6 +1,6 @@
 # ALRS GraphSelect API
 
-![Version](https://img.shields.io/badge/version-2.4.0-blue?style=flat-square)
+![Version](https://img.shields.io/badge/version-2.4.1--beta-blue?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
@@ -86,6 +86,14 @@ POST /api/search
   "max_neighbors_per_level": 25
 }
 ```
+
+## 🌿 Branching & Release Strategy
+
+We follow a structured branching and release strategy to ensure code quality and seamless deployments:
+
+* **`main` (Production)**: Holds the stable, production-ready code. Stable production releases (e.g., `v2.4.0`) are tagged and published solely from this branch. Never commit directly to `main`.
+* **`dev` (Development / Beta)**: The primary integration branch for active refactoring and additions. All beta test releases (e.g., `v2.4.0-beta.1`) are tagged and published solely from this branch.
+* **Isolated Branches (`feature/*`, `bugfix/*`)**: All isolated tasks and experimental feature edits must be hosted on separate branches, and then merged into `dev` via pull requests.
 
 ---
 
