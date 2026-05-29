@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     pagerank_weight: float = 0.3
     rate_limit_delay_ms: int = 100
     embedding_model: str = "gemini-embedding-001"
+    open_browser: bool = True
 
 
 @lru_cache

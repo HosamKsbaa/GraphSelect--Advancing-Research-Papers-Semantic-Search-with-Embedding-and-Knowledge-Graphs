@@ -638,6 +638,101 @@
       .tree-legend { gap: .4rem; }
       .tree-root ul { margin-left: 16px; }
     }
+
+    /* ─── Guide Modal Styles ─── */
+    .guide-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 14, 20, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn .3s ease;
+      padding: 1.5rem;
+    }
+    .guide-modal-content {
+      background: rgba(20, 24, 33, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 580px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      overflow: hidden;
+      animation: scaleUp .3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes scaleUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .guide-modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .guide-modal-header h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      background: linear-gradient(135deg, #c084fc, var(--accent-l));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .guide-close {
+      background: none;
+      border: none;
+      color: var(--text-dim);
+      font-size: 1.5rem;
+      cursor: pointer;
+      transition: color .2s;
+    }
+    .guide-close:hover { color: var(--text); }
+    .guide-modal-body {
+      padding: 1.5rem;
+      max-height: 70vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    .guide-step {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      font-size: .88rem;
+      line-height: 1.5;
+      color: var(--text-dim);
+    }
+    .guide-step strong { color: var(--text); }
+    .guide-step code {
+      background: var(--surface);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent-l);
+      font-size: .8rem;
+    }
+    .guide-step ul {
+      margin-top: 6px;
+      padding-left: 18px;
+      list-style-type: disc;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .step-num {
+      background: linear-gradient(135deg, var(--accent), #7c3aed);
+      color: #fff;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .78rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      box-shadow: 0 0 10px rgba(99,102,241,0.3);
+    }
   </style>
 </head>
 <body>
@@ -647,11 +742,66 @@
   <header>
     <h1>ALRS GraphSelect</h1>
     <p>Semantic paper search via citation graphs, embeddings &amp; PageRank</p>
-    <div class="status-badge" id="statusBadge">
-      <span class="status-dot"></span>
-      <span id="statusText">Checking…</span>
+    <div style="display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: .6rem;">
+      <div class="status-badge" id="statusBadge" style="margin-top:0;">
+        <span class="status-dot"></span>
+        <span id="statusText">Checking…</span>
+      </div>
+      <div class="status-badge" style="background:rgba(56,189,248,0.1); border-color:rgba(56,189,248,0.25); color:var(--info); cursor:pointer; margin-top:0;" id="guidBadge" onclick="copyGuid()" title="Click to copy Page GUID">
+        <span style="font-weight:600;">GUID:</span>&nbsp;<span id="pageGuid">Generating…</span>
+      </div>
+      <div class="status-badge" style="background:rgba(168,85,247,0.1); border-color:rgba(168,85,247,0.25); color:#c084fc; cursor:pointer; margin-top:0;" id="guideBtn" onclick="toggleGuide()">
+        📖 User Guide
+      </div>
     </div>
   </header>
+
+  <!-- Sleek Modern Modal for the Page Guide -->
+  <div id="guideModal" class="guide-modal" style="display:none;" onclick="handleModalClick(event)">
+    <div class="guide-modal-content">
+      <div class="guide-modal-header">
+        <h3>🔬 GraphSelect Guide (v2.3.1)</h3>
+        <button class="guide-close" onclick="toggleGuide()">&times;</button>
+      </div>
+      <div class="guide-modal-body">
+        <div class="guide-step">
+          <span class="step-num">1</span>
+          <div>
+            <strong>Configure Credentials:</strong> Enter your <code>Gemini API Key</code> (to compute paper embeddings) and <code>OpenAlex Email</code> (optional, for polite API pool). Your credentials are saved securely in local session cookies for convenience.
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="step-num">2</span>
+          <div>
+            <strong>Input Seed DOI:</strong> Provide a starting academic paper DOI (e.g. <code>10.1145/3292500.3330648</code>). The algorithm will construct a citation graph around this seed.
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="step-num">3</span>
+          <div>
+            <strong>Specify Research Questions:</strong> Enter up to 6 natural language questions describing your literature review goals. Gemini embeddings will map these questions to compute semantic relevance.
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="step-num">4</span>
+          <div>
+            <strong>Tune Parameters:</strong>
+            <ul>
+              <li><code>Similarity Threshold</code>: Filter out papers with cosine similarity below this value (default 0.3).</li>
+              <li><code>Max BFS Depth</code>: How deep to crawl the citation graph (citations and references).</li>
+              <li><code>Neighbors / Level</code>: Limit API calls by selecting top N neighbors at each level.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="guide-step">
+          <span class="step-num">5</span>
+          <div>
+            <strong>Run &amp; Visualize:</strong> Hit <em>Run Search</em> to stream real-time events. Watch the interactive <strong>Paper Tree</strong> grow with citations and references, dynamically calculated scores, and PageRank weights.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Search form -->
   <div class="card">
@@ -1291,6 +1441,47 @@
     const d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  // ─── GUID & Interactive Guide Utilities ───
+  function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
+  const sessionGuid = generateUUID();
+  document.getElementById('pageGuid').textContent = sessionGuid;
+
+  function copyGuid() {
+    navigator.clipboard.writeText(sessionGuid).then(() => {
+      const badge = document.getElementById('guidBadge');
+      badge.style.background = 'rgba(52,211,153,0.15)';
+      badge.style.borderColor = 'rgba(52,211,153,0.3)';
+      badge.style.color = 'var(--success)';
+      const orig = badge.innerHTML;
+      badge.innerHTML = '<span style="font-weight:600;">✓ Copied!</span>';
+      setTimeout(() => {
+        badge.style.background = 'rgba(56,189,248,0.1)';
+        badge.style.borderColor = 'rgba(56,189,248,0.25)';
+        badge.style.color = 'var(--info)';
+        badge.innerHTML = `<span style="font-weight:600;">GUID:</span>&nbsp;<span>${sessionGuid}</span>`;
+      }, 1500);
+    });
+  }
+
+  function toggleGuide() {
+    const modal = document.getElementById('guideModal');
+    modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+  }
+
+  function handleModalClick(event) {
+    const modal = document.getElementById('guideModal');
+    if (event.target === modal) {
+      modal.style.display = 'none';
+    }
   }
 </script>
 
