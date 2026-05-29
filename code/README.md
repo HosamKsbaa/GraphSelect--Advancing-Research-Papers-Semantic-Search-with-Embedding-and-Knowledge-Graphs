@@ -1,4 +1,4 @@
-# ALRS GraphSelect API
+# ALRS GraphSelect API (v2.3.1)
 
 Python/FastAPI implementation of the **GraphSelect algorithm** — a semantic paper search system for the Automated Literature Review System (ALRS).
 
