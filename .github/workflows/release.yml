@@ -47,5 +47,8 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+          files: |
+            code/run_graphselect.sh
+            code/run_graphselect.bat
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
