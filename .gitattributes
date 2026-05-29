@@ -1,0 +1,6 @@
+# Enforce line endings for cross-platform stability
+*.bat text eol=crlf
+*.sh text eol=lf
+
+# Explicitly ensure VERSION has LF endings
+VERSION text eol=lf
