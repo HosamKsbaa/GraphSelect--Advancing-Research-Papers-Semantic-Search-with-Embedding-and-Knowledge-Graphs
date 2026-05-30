@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any  # Any: for flexible log extra data
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,19 @@ class LogService:
                     level.upper(),
                     module,
                     message,
-                    json.dumps(extra) if extra else None,
+                    json.dumps(extra, default=str) if extra else None,
                 ),
             )
         except Exception as e:
             logger.error('Failed to persist log: %s', e)
+            logger.warning(
+                '[FALLBACK APP LOG] session_id=%s level=%s module=%s message=%s extra=%s',
+                session_id,
+                level,
+                module,
+                message,
+                extra,
+            )
 
     async def log_api_request(
         self,
@@ -51,13 +59,17 @@ class LogService:
     ) -> None:
         """Record an outgoing API request/response to MySQL."""
         try:
+            canonical_service = {
+                "openalex": "OpenAlex",
+                "gemini": "Gemini",
+            }.get(service.lower(), service)
             await self._mysql.execute(
                 '''INSERT INTO api_logs
                    (session_id, service, method, url, status_code, response_time_ms, payload_summary)
                    VALUES (%s, %s, %s, %s, %s, %s, %s)''',
                 (
                     session_id,
-                    service,
+                    canonical_service,
                     method.upper(),
                     url,
                     status_code,
@@ -67,6 +79,16 @@ class LogService:
             )
         except Exception as e:
             logger.error('Failed to log API request: %s', e)
+            logger.warning(
+                '[FALLBACK API LOG] session_id=%s service=%s method=%s url=%s status_code=%s response_time_ms=%s payload_summary=%s',
+                session_id,
+                service,
+                method,
+                url,
+                status_code,
+                response_time_ms,
+                payload_summary,
+            )
 
     async def purge_expired_logs(self, retention_hours: int = 24) -> int:
         """Delete logs older than retention_hours. Returns count of deleted rows."""
@@ -93,14 +115,19 @@ class LogService:
         conditions: list[str] = []
         args: list[object] = []
         if service:
+            canonical_service = {
+                "openalex": "OpenAlex",
+                "gemini": "Gemini",
+            }.get(service.lower(), service)
             conditions.append('service = %s')
-            args.append(service)
+            args.append(canonical_service)
         if session_id:
             conditions.append('session_id = %s')
             args.append(session_id)
         if since:
+            since_utc = since.astimezone(timezone.utc) if since.tzinfo is not None else since
             conditions.append('created_at >= %s')
-            args.append(since.strftime('%Y-%m-%d %H:%M:%S'))
+            args.append(since_utc.strftime('%Y-%m-%d %H:%M:%S'))
         where = ' AND '.join(conditions) if conditions else '1=1'
         query = f'SELECT * FROM api_logs WHERE {where} ORDER BY created_at DESC LIMIT %s'  # noqa: S608
         args.append(limit)
@@ -127,8 +154,9 @@ class LogService:
             conditions.append('session_id = %s')
             args.append(session_id)
         if since:
+            since_utc = since.astimezone(timezone.utc) if since.tzinfo is not None else since
             conditions.append('created_at >= %s')
-            args.append(since.strftime('%Y-%m-%d %H:%M:%S'))
+            args.append(since_utc.strftime('%Y-%m-%d %H:%M:%S'))
         where = ' AND '.join(conditions) if conditions else '1=1'
         query = f'SELECT * FROM app_logs WHERE {where} ORDER BY created_at DESC LIMIT %s'  # noqa: S608
         args.append(limit)

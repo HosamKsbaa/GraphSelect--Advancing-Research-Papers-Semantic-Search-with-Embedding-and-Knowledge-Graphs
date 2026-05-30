@@ -5,9 +5,11 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 
 from models.session import SessionRead, SessionList, SessionStatus, SearchMode
+from db.mysql_service import MySQLService
+from dependencies import get_mysql_service
 
 logger = logging.getLogger(__name__)
 
@@ -15,17 +17,11 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
 @router.get("", response_model=SessionList)
-async def list_sessions() -> SessionList:
+async def list_sessions(
+    mysql: MySQLService = Depends(get_mysql_service),
+) -> SessionList:
     """List all search sessions."""
-    from main import mysql_service
-
-    if mysql_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MySQL service not initialized",
-        )
-
-    rows = await mysql_service.fetch_all(
+    rows = await mysql.fetch_all(
         "SELECT * FROM sessions ORDER BY created_at DESC"
     )
     sessions: list[SessionRead] = []
@@ -52,17 +48,12 @@ async def list_sessions() -> SessionList:
 
 
 @router.get("/{session_id}", response_model=SessionRead)
-async def get_session(session_id: str) -> SessionRead:
+async def get_session(
+    session_id: str,
+    mysql: MySQLService = Depends(get_mysql_service),
+) -> SessionRead:
     """Get a specific session by ID."""
-    from main import mysql_service
-
-    if mysql_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MySQL service not initialized",
-        )
-
-    row = await mysql_service.fetch_one(
+    row = await mysql.fetch_one(
         "SELECT * FROM sessions WHERE session_id = %s", (session_id,)
     )
     if row is None:
@@ -91,17 +82,12 @@ async def get_session(session_id: str) -> SessionRead:
 
 
 @router.delete("/{session_id}")
-async def delete_session(session_id: str) -> dict[str, str]:
+async def delete_session(
+    session_id: str,
+    mysql: MySQLService = Depends(get_mysql_service),
+) -> dict[str, str]:
     """Delete a session and its associated data."""
-    from main import mysql_service
-
-    if mysql_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MySQL service not initialized",
-        )
-
-    deleted = await mysql_service.execute(
+    deleted = await mysql.execute(
         "DELETE FROM sessions WHERE session_id = %s", (session_id,)
     )
     if deleted == 0:

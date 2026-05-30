@@ -17,8 +17,8 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parent / "code"
-VERSION_FILE = ROOT / "VERSION"
+ROOT = Path(__file__).parent
+VERSION_FILE = ROOT / "code" / "backend" / "VERSION"
 README_FILE = ROOT / "README.md"
 
 

@@ -166,4 +166,44 @@ deactivate backend
 frontend --> user : Display session list
 deactivate frontend
 
+== 5. Retrieve Session Results ==
+
+user -> frontend : Select session / View results
+activate frontend
+frontend -> backend : GET /api/search/{session_id}/results
+activate backend
+backend -> neo4j : Compute similarities + PageRank\n(zero-RAM Cypher GDS)
+activate neo4j
+neo4j --> backend : paper DOIs + hybrid scores
+deactivate neo4j
+backend -> mysql : Fetch session parameters & questions
+activate mysql
+mysql --> backend : session questions + config
+deactivate mysql
+backend -> backend : Group papers by question\nand sort by hybrid score desc
+backend --> frontend : 200 OK\n{GroupedResults}
+deactivate backend
+frontend --> user : Render glassmorphism results cards
+deactivate frontend
+
+== 6. Re-rank Session Results ==
+
+user -> frontend : Adjust similarity threshold slider
+activate frontend
+frontend -> backend : POST /api/search/{session_id}/rerank\n{threshold: 0.55}
+activate backend
+backend -> mysql : UPDATE sessions SET\nsimilarity_threshold = 0.55
+activate mysql
+mysql --> backend : OK
+deactivate mysql
+backend -> neo4j : Fetch similarities with new threshold\n(no re-embedding, fast)
+activate neo4j
+neo4j --> backend : paper DOIs + scores
+deactivate neo4j
+backend -> backend : Re-group & re-sort papers
+backend --> frontend : 200 OK\n{GroupedResults}
+deactivate backend
+frontend --> user : Render updated results cards instantly
+deactivate frontend
+
 @enduml

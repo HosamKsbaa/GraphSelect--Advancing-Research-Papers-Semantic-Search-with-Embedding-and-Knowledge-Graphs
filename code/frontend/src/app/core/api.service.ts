@@ -100,6 +100,85 @@ export class ApiService {
   createSearchStream(sessionId: string): EventSource {
     return new EventSource(`${this.baseUrl}/search/${sessionId}/stream`);
   }
+
+  // --- Results and Re-ranking ---
+  getResults(sessionId: string, similarityWeight = 0.7, pagerankWeight = 0.3): Observable<GroupedResults> {
+    return this.http.get<GroupedResults>(
+      `${this.baseUrl}/search/${sessionId}/results?similarity_weight=${similarityWeight}&pagerank_weight=${pagerankWeight}`
+    );
+  }
+
+  rerank(
+    sessionId: string,
+    similarityThreshold: number,
+    similarityWeight = 0.7,
+    pagerankWeight = 0.3
+  ): Observable<GroupedResults> {
+    return this.http.post<GroupedResults>(
+      `${this.baseUrl}/search/${sessionId}/rerank`,
+      {
+        similarity_threshold: similarityThreshold,
+        similarity_weight: similarityWeight,
+        pagerank_weight: pagerankWeight
+      }
+    );
+  }
+
+  // --- Logs ---
+  getAppLogs(
+    level?: string,
+    module?: string,
+    sessionId?: string,
+    limit = 100
+  ): Observable<AppLog[]> {
+    let params = `limit=${limit}`;
+    if (level) params += `&level=${encodeURIComponent(level)}`;
+    if (module) params += `&module=${encodeURIComponent(module)}`;
+    if (sessionId) params += `&session_id=${encodeURIComponent(sessionId)}`;
+    return this.http.get<AppLog[]>(`${this.baseUrl}/logs?${params}`);
+  }
+
+  getApiLogs(
+    service?: string,
+    sessionId?: string,
+    limit = 100
+  ): Observable<ApiLog[]> {
+    let params = `limit=${limit}`;
+    if (service) params += `&service=${encodeURIComponent(service)}`;
+    if (sessionId) params += `&session_id=${encodeURIComponent(sessionId)}`;
+    return this.http.get<ApiLog[]>(`${this.baseUrl}/logs/api-requests?${params}`);
+  }
+
+  // --- Debug ---
+  debugTestRetrieve(doi: string): Observable<DebugRetrieveResponse> {
+    return this.http.post<DebugRetrieveResponse>(
+      `${this.baseUrl}/debug/test-retrieve`,
+      { doi }
+    );
+  }
+
+  debugTestEmbed(text: string): Observable<DebugEmbedResponse> {
+    return this.http.post<DebugEmbedResponse>(
+      `${this.baseUrl}/debug/test-embed`,
+      { text }
+    );
+  }
+
+  debugTestSimilarity(textA: string, textB: string): Observable<DebugSimilarityResponse> {
+    return this.http.post<DebugSimilarityResponse>(
+      `${this.baseUrl}/debug/test-similarity`,
+      { text_a: textA, text_b: textB }
+    );
+  }
+
+  // --- Settings ---
+  getSettings(): Observable<SettingsResponse> {
+    return this.http.get<SettingsResponse>(`${this.baseUrl}/settings`);
+  }
+
+  updateSettings(body: SettingsUpdateRequest): Observable<SettingsUpdateResponse> {
+    return this.http.put<SettingsUpdateResponse>(`${this.baseUrl}/settings`, body);
+  }
 }
 
 export interface ProgressEvent {
@@ -109,4 +188,106 @@ export interface ProgressEvent {
   progress_percent: number;
   message: string;
   data?: Record<string, unknown>;
+}
+
+export interface AppLog {
+  id: number;
+  session_id: string | null;
+  level: string;
+  module: string;
+  message: string;
+  extra: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ApiLog {
+  id: number;
+  session_id: string | null;
+  service: string;
+  method: string;
+  url: string;
+  status_code: number | null;
+  response_time_ms: number | null;
+  payload_summary: string | null;
+  created_at: string;
+}
+
+export interface RankedPaper {
+  doi: string;
+  title: string;
+  year: number | null;
+  cited_by_count: number;
+  similarity_score: number;
+  pagerank_score: number;
+  hybrid_score: number;
+  question_group: string;
+  abstract_snippet: string | null;
+  authors: string[];
+}
+
+export interface QuestionGroup {
+  question: string;
+  papers: RankedPaper[];
+  avg_similarity: number;
+  paper_count: number;
+}
+
+export interface GroupedResults {
+  session_id: string;
+  groups: QuestionGroup[];
+  total_papers: number;
+  similarity_threshold: number;
+  similarity_weight: number;
+  pagerank_weight: number;
+}
+
+// --- Debug interfaces ---
+export interface DebugRetrieveResponse {
+  success: boolean;
+  doi?: string;
+  title?: string;
+  abstract?: string;
+  year?: number;
+  cited_by_count?: number;
+  elapsed_ms: number;
+  error?: string;
+}
+
+export interface DebugEmbedResponse {
+  success: boolean;
+  dimensions?: number;
+  first_5_values?: number[];
+  elapsed_ms: number;
+  error?: string;
+}
+
+export interface DebugSimilarityResponse {
+  success: boolean;
+  similarity_score?: number;
+  dimensions?: number;
+  elapsed_ms: number;
+  error?: string;
+}
+
+// --- Settings interfaces ---
+export interface SettingsResponse {
+  gemini_api_key_set: boolean;
+  gemini_api_key_preview: string;
+  openalex_api_key_set: boolean;
+  openalex_api_key_preview: string;
+  openalex_email: string;
+  embedding_model: string;
+  embedding_dimensions: number;
+}
+
+export interface SettingsUpdateRequest {
+  gemini_api_key?: string;
+  openalex_api_key?: string;
+  openalex_email?: string;
+}
+
+export interface SettingsUpdateResponse {
+  success: boolean;
+  message: string;
+  restart_required: boolean;
 }

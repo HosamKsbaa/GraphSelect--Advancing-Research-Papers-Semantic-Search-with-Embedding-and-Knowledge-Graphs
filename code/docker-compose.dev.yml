@@ -45,6 +45,10 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/app            # Bind-mount entire backend for live editing
+    environment:
+      - HTTP_PROXY=http://mitmproxy:8080
+      - HTTPS_PROXY=http://mitmproxy:8080
+      - NO_PROXY=localhost,127.0.0.1,neo4j,mysql,generativelanguage.googleapis.com,googleapis.com
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       neo4j:
@@ -101,6 +105,16 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    restart: unless-stopped
+
+  # --- Outgoing HTTP Request Debugging Proxy & Live Console ---
+  mitmproxy:
+    image: mitmproxy/mitmproxy:latest
+    container_name: alrs-mitmproxy
+    command: mitmweb --web-host 0.0.0.0 --web-port 8081 --no-web-open-browser --set web_password=admin
+    ports:
+      - "8081:8081"   # Beautiful live dashboard web UI
+      - "8080:8080"   # HTTP/HTTPS proxy listening port
     restart: unless-stopped
 
 volumes:

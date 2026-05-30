@@ -26,4 +26,14 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/logs/logs.page').then(m => m.LogsPage),
   },
+  {
+    path: 'debug',
+    loadComponent: () =>
+      import('./features/debug/debug.page').then(m => m.DebugPage),
+  },
+  {
+    path: 'settings',
+    loadComponent: () =>
+      import('./features/settings/settings.page').then(m => m.SettingsPage),
+  },
 ];

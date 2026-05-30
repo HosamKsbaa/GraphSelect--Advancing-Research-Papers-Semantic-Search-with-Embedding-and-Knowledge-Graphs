@@ -7,7 +7,7 @@ An agent-based automated literature review assistant. A researcher provides a se
 ```
 newcode/code/
 ├── backend/       # FastAPI + Neo4j + MySQL (Python)
-├── frontend/      # Flutter UI (Dart)
+├── frontend/      # Angular SPA (TypeScript)
 ├── legacy/        # v2.x codebase (archived — do not modify)
 ├── docker-compose.yml  # Orchestrates all services
 └── README.md      # This file
@@ -26,7 +26,7 @@ docker-compose up -d
 # 3. Access
 # Backend API:  http://localhost:8000
 # Neo4j Browser: http://localhost:7474
-# Flutter Web:   http://localhost:8080 (when built)
+# Angular App:   http://localhost:4200
 ```
 
 ## Tech Stack
@@ -36,9 +36,9 @@ docker-compose up -d
 | Backend | FastAPI, Python 3.11+ |
 | Graph DB | Neo4j 5.x + GDS Plugin |
 | Relational DB | MySQL 8.0 |
-| Embeddings | Gemini API (gemini-embedding-001) |
+| Embeddings | Gemini API (text-embedding-005) |
 | Agent Framework | Google ADK |
-| Frontend | Flutter (Web + Desktop) |
+| Frontend | Angular 19 SPA (TypeScript) |
 | Deployment | Docker Compose |
 
 ## Development

@@ -3,7 +3,7 @@
 ## Overview
 - **Actor**: System (automated)
 - **Priority**: P1
-- **Status**: 🔴 Not Started
+- **Status**: 🟢 Complete
 - **Phase**: Phase 4
 
 ## Description
@@ -18,7 +18,7 @@ The system embeds all research questions using the Gemini embedding model and co
 
 ## Main Flow
 1. System retrieves the researcher's list of research questions
-2. System embeds each research question using `gemini-embedding-2` with task prefix `task: search result | query: {question}`
+2. System embeds each research question using `text-embedding-005` with `task_type="RETRIEVAL_QUERY"`
 3. System stores question embeddings as vector properties on ResearchQuestion nodes in Neo4j
 4. System creates a GDS vector similarity projection over Paper and ResearchQuestion nodes
 5. For each research question:

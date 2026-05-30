@@ -9,6 +9,7 @@ SCHEMA_QUERIES: list[str] = [
     'CREATE CONSTRAINT paper_doi_unique IF NOT EXISTS FOR (p:Paper) REQUIRE p.doi IS UNIQUE',
     'CREATE CONSTRAINT author_openalex_unique IF NOT EXISTS FOR (a:Author) REQUIRE a.openalex_id IS UNIQUE',
     'CREATE CONSTRAINT venue_openalex_unique IF NOT EXISTS FOR (v:Venue) REQUIRE v.openalex_id IS UNIQUE',
+    'CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.session_id IS UNIQUE',
     'CREATE CONSTRAINT question_session_text_unique IF NOT EXISTS FOR (q:Question) REQUIRE (q.session_id, q.text) IS UNIQUE',
     # Indexes for fast lookups
     'CREATE INDEX paper_openalex_idx IF NOT EXISTS FOR (p:Paper) ON (p.openalex_id)',

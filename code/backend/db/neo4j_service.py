@@ -170,7 +170,7 @@ class Neo4jService:
         self,
         doi: str,
         embedding: list[float],
-        model: str = 'gemini-embedding-001',
+        model: str = 'text-embedding-005',
     ) -> None:
         """Store embedding vector on a Paper node.
 
@@ -217,6 +217,7 @@ class Neo4jService:
         session_id: str,
         question_text: str,
         embedding: list[float],
+        model: str = 'text-embedding-005',
     ) -> None:
         """Store a research question embedding.
 
@@ -225,13 +226,14 @@ class Neo4jService:
         query = """
         MERGE (q:Question {session_id: $session_id, text: $question_text})
         SET q.embedding       = $embedding,
-            q.embedding_model = 'gemini-embedding-001',
+            q.embedding_model = $model,
             q.embedded_at     = datetime()
         """
         await self.execute_write(query, {
             'session_id': session_id,
             'question_text': question_text,
             'embedding': embedding,
+            'model': model,
         })
 
     async def get_session_dois(
@@ -308,3 +310,195 @@ class Neo4jService:
             'embedded_papers': int(row.get('embedded_papers', 0)),
             'papers_with_abstract': int(row.get('papers_with_abstract', 0)),
         }
+
+    async def compute_similarities(
+        self,
+        session_id: str,
+        threshold: float,
+        top_k: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Compute cosine similarity between all paper embeddings in a session
+        and all research question embeddings in that session using the ANN vector index.
+
+        Returns a list of dicts with keys: doi, question, score.
+        Does not load embedding vectors into Python memory.
+        """
+        query = """
+        MATCH (q:Question {session_id: $session_id})
+        WHERE q.embedding IS NOT NULL
+        CALL db.index.vector.queryNodes('paper_embeddings', $top_k, q.embedding)
+        YIELD node AS p, score
+        MATCH (s:Session {session_id: $session_id})-[:CONTAINS]->(p)
+        WHERE score >= $threshold
+        RETURN p.doi AS doi, q.text AS question, score AS score
+        """
+        records = await self.execute_read(query, {
+            'session_id': session_id,
+            'threshold': threshold,
+            'top_k': top_k,
+        })
+        return records
+
+    async def compute_pagerank(
+        self,
+        session_id: str,
+        iterations: int = 20,
+        damping: float = 0.85,
+    ) -> dict[str, float]:
+        """Compute PageRank for papers in the session's citation subgraph.
+
+        Uses Neo4j GDS if available, otherwise falls back to standard
+        pure-Python NetworkX PageRank calculation.
+        """
+        import uuid
+        graph_name = f"subgraph_{session_id.replace('-', '_')}_{uuid.uuid4().hex[:8]}"
+
+        try:
+            # 1. Project the citation subgraph for papers in this session
+            project_nodes = """
+            MATCH (s:Session {session_id: $session_id})-[:CONTAINS]->(p:Paper)
+            RETURN id(p) AS id, ["Paper"] AS labels
+            """
+            project_edges = """
+            MATCH (s:Session {session_id: $session_id})-[:CONTAINS]->(p1:Paper)-[:CITES]->(p2:Paper)
+            WHERE (s)-[:CONTAINS]->(p2)
+            RETURN id(p1) AS source, id(p2) AS target, "CITES" AS type
+            """
+            await self.execute_write(
+                "CALL gds.graph.project.cypher($graph_name, $nodes, $edges, {parameters: {session_id: $session_id}})",
+                {
+                    "graph_name": graph_name,
+                    "nodes": project_nodes,
+                    "edges": project_edges,
+                    "session_id": session_id,
+                }
+            )
+
+            # 2. Run PageRank stream
+            pagerank_query = """
+            CALL gds.pageRank.stream($graph_name, {
+                maxIterations: $iterations,
+                dampingFactor: $damping
+            })
+            YIELD nodeId, score
+            RETURN gds.util.asNode(nodeId).doi AS doi, score AS score
+            """
+            records = await self.execute_read(pagerank_query, {
+                "graph_name": graph_name,
+                "iterations": iterations,
+                "damping": damping,
+            })
+
+            # 3. Clean up the projected graph
+            await self.execute_write(
+                "CALL gds.graph.drop($graph_name, false)",
+                {"graph_name": graph_name}
+            )
+
+            # Map results
+            scores = {str(r["doi"]): float(r["score"]) for r in records if r.get("doi")}
+
+            # Normalization to [0.0, 1.0] range
+            if scores:
+                min_s = min(scores.values())
+                max_s = max(scores.values())
+                diff = max_s - min_s
+                if diff > 0.0:
+                    scores = {k: (v - min_s) / diff for k, v in scores.items()}
+                else:
+                    scores = {k: 1.0 for k in scores}
+            return scores
+
+        except Exception as e:
+            logger.warning(
+                "Neo4j GDS PageRank failed (plugin may not be installed). "
+                "Falling back to pure-Python NetworkX PageRank. Error: %s",
+                e
+            )
+            # Try to drop graph just in case
+            try:
+                await self.execute_write(
+                    "CALL gds.graph.drop($graph_name, false)",
+                    {"graph_name": graph_name}
+                )
+            except Exception:
+                pass
+            return await self._compute_pagerank_fallback(session_id, iterations, damping)
+
+    async def _compute_pagerank_fallback(
+        self,
+        session_id: str,
+        iterations: int = 20,
+        damping: float = 0.85,
+    ) -> dict[str, float]:
+        """Pure-Python NetworkX fallback for PageRank computation."""
+        try:
+            import networkx as nx
+        except ImportError:
+            logger.error("networkx package not installed. Degree centrality will be used as fallback.")
+            return await self._compute_degree_centrality_fallback(session_id)
+
+        # 1. Fetch all nodes in the session
+        nodes_query = """
+        MATCH (s:Session {session_id: $session_id})-[:CONTAINS]->(p:Paper)
+        RETURN p.doi AS doi
+        """
+        node_records = await self.execute_read(nodes_query, {"session_id": session_id})
+        dois = [str(r["doi"]) for r in node_records if r.get("doi")]
+
+        if not dois:
+            return {}
+
+        # 2. Fetch CITES relations within these DOIs
+        edges_query = """
+        MATCH (s:Session {session_id: $session_id})-[:CONTAINS]->(p1:Paper)-[:CITES]->(p2:Paper)
+        WHERE (s)-[:CONTAINS]->(p2)
+        RETURN p1.doi AS source, p2.doi AS target
+        """
+        edge_records = await self.execute_read(edges_query, {"session_id": session_id})
+
+        # 3. Construct graph
+        g = nx.DiGraph()
+        g.add_nodes_from(dois)
+        for r in edge_records:
+            if r.get("source") and r.get("target"):
+                g.add_edge(str(r["source"]), str(r["target"]))
+
+        # 4. Calculate PageRank
+        try:
+            pr_scores = nx.pagerank(g, alpha=damping, max_iter=iterations)
+        except Exception as pr_err:
+            logger.warning("NetworkX pagerank error, using degree centrality fallback: %s", pr_err)
+            return await self._compute_degree_centrality_fallback(session_id)
+
+        # Scale scores to [0.0, 1.0] range
+        scores = {k: float(v) for k, v in pr_scores.items()}
+        if scores:
+            min_s = min(scores.values())
+            max_s = max(scores.values())
+            diff = max_s - min_s
+            if diff > 0.0:
+                scores = {k: (v - min_s) / diff for k, v in scores.items()}
+            else:
+                scores = {k: 1.0 for k in scores}
+        return scores
+
+    async def _compute_degree_centrality_fallback(self, session_id: str) -> dict[str, float]:
+        """Trivial citation-degree fallback if NetworkX is also not installed."""
+        query = """
+        MATCH (s:Session {session_id: $session_id})-[:CONTAINS]->(p:Paper)
+        OPTIONAL MATCH (p)-[:CITES]-(other:Paper)
+        WHERE (s)-[:CONTAINS]->(other)
+        RETURN p.doi AS doi, count(other) AS degree
+        """
+        records = await self.execute_read(query, {"session_id": session_id})
+        scores = {str(r["doi"]): float(r["degree"]) for r in records if r.get("doi")}
+        if scores:
+            min_s = min(scores.values())
+            max_s = max(scores.values())
+            diff = max_s - min_s
+            if diff > 0.0:
+                scores = {k: (v - min_s) / diff for k, v in scores.items()}
+            else:
+                scores = {k: 1.0 for k in scores}
+        return scores

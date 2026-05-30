@@ -1,6 +1,6 @@
 # GraphSelect: Embedding-Guided Graph Traversal for Scalable Semantic Paper Search
 
-[![Version](https://img.shields.io/badge/version-2.4.2--beta-blue?style=flat-square)](./code/VERSION)
+[![Version](https://img.shields.io/badge/version-3.0.0--alpha.1-blue?style=flat-square)](./code/backend/VERSION)
 [![DOI](https://img.shields.io/badge/DOI-10.1109%2FSRC65875.2025.11263707-1070ca?style=flat-square&logo=ieee&logoColor=white)](https://doi.org/10.1109/SRC65875.2025.11263707)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)

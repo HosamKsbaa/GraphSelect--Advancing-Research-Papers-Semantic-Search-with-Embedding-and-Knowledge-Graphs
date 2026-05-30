@@ -217,6 +217,8 @@ package "Services" as services #E2EFDA {
     + has_embedding(doi) : bool
     + store_question_embedding(session_id, text, embedding)
     + get_unembedded_dois(session_id) : list[str]
+    + compute_similarities(session_id, threshold) : list[dict]
+    + compute_pagerank(session_id, iterations?, damping?) : dict[str, float]
     .. Session ..
     + get_session_dois(session_id, depth?) : list[str]
     + link_paper_to_session(doi, session_id, depth)
@@ -252,6 +254,7 @@ package "Services" as services #E2EFDA {
     + run_full_search(session_id, seed_doi,\n    research_questions, similarity_threshold,\n    max_depth, mode, progress_callback?)
     + embed_papers(dois, progress_callback?) : int
     + embed_questions(session_id, questions)
+    + rank_papers(session_id, similarity_weight?, pagerank_weight?) : GroupedResults
     - _ensure_stub_and_cite(citing_doi, cited_doi)
     - _emit(callback, event_type, ...)
   }

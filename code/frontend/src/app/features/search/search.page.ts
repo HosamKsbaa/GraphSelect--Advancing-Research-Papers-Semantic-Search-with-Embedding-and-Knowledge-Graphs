@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { ApiService, PaperSummary, SearchRequest, SearchResponse, ProgressEvent } from '../../core/api.service';
+import { ToastService } from '../../core/toast.service';
+import { ResultsComponent } from './results/results.component';
 
 interface StreamEvent {
   type: string;
@@ -14,19 +16,22 @@ interface StreamEvent {
 @Component({
   selector: 'alrs-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, ResultsComponent],
   templateUrl: './search.page.html',
   styleUrl: './search.page.scss',
 })
 export class SearchPage implements OnDestroy {
   // Step 1: Resolve title
-  searchTitle = '';
+  searchTitle = 'GraphSelect: Embedding-Guided Graph Traversal for Scalable Semantic Paper Search';
   candidates: PaperSummary[] = [];
   selectedDoi = '';
   resolving = false;
 
   // Step 2: Research questions
-  questions: string[] = [''];
+  questions: string[] = [
+    'How does selective graph expansion compare to full vector database indexes?',
+    'What is the performance benefit of combining cosine similarity with PageRank?'
+  ];
   similarityThreshold = 0.5;
   maxDepth = 2;
   mode: 'interactive' | 'automated' = 'automated';
@@ -44,7 +49,7 @@ export class SearchPage implements OnDestroy {
   streamMessage = '';
   private eventSource: EventSource | null = null;
 
-  constructor(private api: ApiService) {}
+  constructor(private api: ApiService, private toast: ToastService) {}
 
   ngOnDestroy(): void {
     this.closeStream();
@@ -156,9 +161,21 @@ export class SearchPage implements OnDestroy {
           if (data.event_type === 'search_complete') {
             this.streamStatus = 'complete';
             this.closeStream();
+            this.currentStep = 4;
           } else if (data.event_type === 'search_failed') {
             this.streamStatus = 'failed';
             this.closeStream();
+            
+            if (data.message.includes('400') || data.message.toLowerCase().includes('api key')) {
+              this.toast.error(
+                'Invalid API Key or Bad Request',
+                'The Gemini API returned a 400 error. Please check that your API key is valid in Settings.',
+                10000,
+                { label: 'Go to Settings', routerLink: '/settings' }
+              );
+            } else {
+              this.toast.error('Search Failed', data.message);
+            }
           }
         } catch (e) {
           console.warn('Failed to parse SSE event:', e);
@@ -203,10 +220,13 @@ export class SearchPage implements OnDestroy {
     this.closeStream();
     this.currentStep = 1;
     this.searchResult = null;
-    this.searchTitle = '';
+    this.searchTitle = 'GraphSelect: Embedding-Guided Graph Traversal for Scalable Semantic Paper Search';
     this.candidates = [];
     this.selectedDoi = '';
-    this.questions = [''];
+    this.questions = [
+      'How does selective graph expansion compare to full vector database indexes?',
+      'What is the performance benefit of combining cosine similarity with PageRank?'
+    ];
     this.streamEvents = [];
     this.streamProgress = 0;
     this.streamStatus = 'idle';

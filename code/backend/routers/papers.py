@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 
 from models.paper import PaperRead
+from db.neo4j_service import Neo4jService
+from dependencies import get_neo4j_service
 
 logger = logging.getLogger(__name__)
 
@@ -13,21 +15,16 @@ router = APIRouter(prefix="/api/papers", tags=["papers"])
 
 
 @router.get("/{doi:path}", response_model=PaperRead)
-async def get_paper_by_doi(doi: str) -> PaperRead:
+async def get_paper_by_doi(
+    doi: str,
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+) -> PaperRead:
     """Fetch paper metadata from Neo4j by DOI.
 
     The embedding field is NEVER included in the response (zero RAM policy).
     """
-    from main import neo4j_service
-
-    if neo4j_service is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Neo4j service not initialized",
-        )
-
     # Query paper WITHOUT embedding field
-    records = await neo4j_service.execute_read(
+    records = await neo4j.execute_read(
         """MATCH (p:Paper {doi: $doi})
            OPTIONAL MATCH (p)<-[:AUTHORED]-(a:Author)
            OPTIONAL MATCH (p)-[:PUBLISHED_IN]->(v:Venue)

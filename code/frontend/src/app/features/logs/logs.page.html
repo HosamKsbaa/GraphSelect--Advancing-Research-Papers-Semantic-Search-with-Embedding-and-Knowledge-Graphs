@@ -1,25 +1,220 @@
 <div class="logs-page animate-fade-in">
-  <h1 class="page-title">API Logs</h1>
-  <p class="text-secondary" style="margin-bottom: var(--space-8);">
-    View API requests to Gemini and OpenAlex. Logs are retained for 24 hours (configurable).
-  </p>
-
-  <div class="card coming-soon">
-    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
-      <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
-    </svg>
-    <h3>Log Viewer Coming Soon</h3>
+  <div class="page-header">
+    <h1 class="page-title">Logs & Monitoring</h1>
     <p class="text-secondary">
-      This page will display all Gemini API and OpenAlex API requests with timestamps,
-      status codes, and response times. Logs are stored in MySQL and viewable for a
-      configurable retention period.
+      Monitor FastAPI internal execution events and scholarly crawler HTTP transactions. Relational logs are auto-purged periodically.
     </p>
-    <div class="planned-features">
-      <div class="feature-tag badge badge-accent">API Request Log</div>
-      <div class="feature-tag badge badge-accent">Response Times</div>
-      <div class="feature-tag badge badge-accent">Rate Limit Events</div>
-      <div class="feature-tag badge badge-accent">Session Filtering</div>
-      <div class="feature-tag badge badge-accent">Auto-Purge</div>
-    </div>
   </div>
+
+  <!-- Logs Navigation Tabs -->
+  <div class="tabs-header glass">
+    <button class="tab-btn" [class.active]="activeTab === 'app'" (click)="setTab('app')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+        <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+        <line x1="6" y1="6" x2="6.01" y2="6"/>
+        <line x1="6" y1="18" x2="6.01" y2="18"/>
+      </svg>
+      Application Logs
+    </button>
+    <button class="tab-btn" [class.active]="activeTab === 'api'" (click)="setTab('api')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </svg>
+      Scholarly API Requests
+    </button>
+  </div>
+
+  <!-- Filter & Action Controls -->
+  <div class="filter-bar card glass">
+    <div class="filter-controls">
+      @if (activeTab === 'app') {
+        <div class="control-item">
+          <label for="level-select">Severity Level</label>
+          <select id="level-select" [(ngModel)]="levelFilter" (change)="loadLogs()">
+            <option value="">All Severities</option>
+            <option value="DEBUG">DEBUG</option>
+            <option value="INFO">INFO</option>
+            <option value="WARNING">WARNING</option>
+            <option value="ERROR">ERROR</option>
+          </select>
+        </div>
+      } @else {
+        <div class="control-item">
+          <label for="service-select">Scholar Service</label>
+          <select id="service-select" [(ngModel)]="serviceFilter" (change)="loadLogs()">
+            <option value="">All Services</option>
+            <option value="OpenAlex">OpenAlex API</option>
+            <option value="OpenCitations">OpenCitations API</option>
+            <option value="Gemini">Gemini Embedding API</option>
+          </select>
+        </div>
+      }
+
+      <div class="control-item">
+        <label for="limit-select">Logs Limit</label>
+        <select id="limit-select" [(ngModel)]="limit" (change)="loadLogs()">
+          <option [value]="25">25 rows</option>
+          <option [value]="50">50 rows</option>
+          <option [value]="100">100 rows</option>
+          <option [value]="250">250 rows</option>
+        </select>
+      </div>
+    </div>
+
+    <button class="btn-primary" (click)="loadLogs()" [disabled]="loading">
+      @if (loading) {
+        <span class="animate-pulse">Loading...</span>
+      } @else {
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Refresh Console
+      }
+    </button>
+  </div>
+
+  <!-- Loading State -->
+  @if (loading) {
+    <div class="skeleton-container card glass">
+      <div class="skeleton-row skeleton" style="height: 48px; margin-bottom: 8px;"></div>
+      <div class="skeleton-row skeleton" style="height: 48px; margin-bottom: 8px;"></div>
+      <div class="skeleton-row skeleton" style="height: 48px;"></div>
+    </div>
+  }
+
+  <!-- Error Alert -->
+  @if (error) {
+    <div class="error-banner card glass" style="margin-top: var(--space-4);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span>{{ error }}</span>
+    </div>
+  }
+
+  <!-- Logs Terminal Console -->
+  @if (!loading && !error) {
+    <div class="terminal-console card glass">
+      
+      <!-- Application Logs Table -->
+      @if (activeTab === 'app') {
+        @if (appLogs.length === 0) {
+          <div class="empty-logs">
+            <p class="text-secondary">No internal application logs found matching the filters.</p>
+          </div>
+        } @else {
+          <div class="table-responsive">
+            <table class="logs-table">
+              <thead>
+                <tr>
+                  <th style="width: 180px;">Timestamp</th>
+                  <th style="width: 100px;">Severity</th>
+                  <th style="width: 150px;">Module</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (log of appLogs; track log.id) {
+                  <tr class="log-row">
+                    <td class="mono text-muted text-xs">{{ log.created_at | date:'yyyy-MM-dd HH:mm:ss' }}</td>
+                    <td>
+                      <span class="badge {{ log.badgeClass }}">{{ log.level }}</span>
+                    </td>
+                    <td class="mono text-accent text-xs truncate" [title]="log.module">{{ log.module }}</td>
+                    <td class="log-message">
+                      <span class="message-text">{{ log.message }}</span>
+                      @if (log.session_id) {
+                        <span class="badge badge-accent session-tag" style="text-transform: none;">session: {{ log.session_id.slice(0, 8) }}</span>
+                      }
+                      @if (log.extra) {
+                        <details class="extra-details">
+                          <summary class="text-xs text-muted">View extra payload</summary>
+                          <div class="pre-container">
+                            <button class="copy-btn glass" (click)="copyToClipboard(log.formattedExtra || '', log.id, 'app', $event)">
+                              @if (copiedId === log.id && copiedType === 'app') {
+                                Copied!
+                              } @else {
+                                Copy JSON
+                              }
+                            </button>
+                            <pre class="extra-pre mono">{{ log.formattedExtra }}</pre>
+                          </div>
+                        </details>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      <!-- Scholar API Request Logs Table -->
+      @if (activeTab === 'api') {
+        @if (apiLogs.length === 0) {
+          <div class="empty-logs">
+            <p class="text-secondary">No scholarly API crawler transactions logged.</p>
+          </div>
+        } @else {
+          <div class="table-responsive">
+            <table class="logs-table">
+              <thead>
+                <tr>
+                  <th style="width: 180px;">Timestamp</th>
+                  <th style="width: 120px;">Scholar Service</th>
+                  <th style="width: 80px;">Method</th>
+                  <th>HTTP Target Resource URL</th>
+                  <th style="width: 100px; text-align: center;">Status</th>
+                  <th style="width: 100px; text-align: right;">Latency</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (api of apiLogs; track api.id) {
+                  <tr class="log-row">
+                    <td class="mono text-muted text-xs">{{ api.created_at | date:'yyyy-MM-dd HH:mm:ss' }}</td>
+                    <td>
+                      <span class="badge badge-accent">{{ api.service }}</span>
+                    </td>
+                    <td class="mono text-xs font-bold">{{ api.method }}</td>
+                    <td class="log-url mono text-xs">
+                      <span class="url-text" [title]="api.url">{{ api.url }}</span>
+                      @if (api.session_id) {
+                        <span class="badge badge-accent session-tag" style="text-transform: none; margin-top: 4px; display: inline-block;">session: {{ api.session_id.slice(0, 8) }}</span>
+                      }
+                      @if (api.payload_summary) {
+                        <details class="extra-details" style="margin-top: 6px;">
+                          <summary class="text-xs text-muted">View transaction payload</summary>
+                          <div class="pre-container">
+                            <button class="copy-btn glass" (click)="copyToClipboard(api.payload_summary, api.id, 'api', $event)">
+                              @if (copiedId === api.id && copiedType === 'api') {
+                                Copied!
+                              } @else {
+                                Copy Payload
+                              }
+                            </button>
+                            <pre class="extra-pre mono">{{ api.payload_summary }}</pre>
+                          </div>
+                        </details>
+                      }
+                    </td>
+                    <td style="text-align: center;">
+                      <span class="badge {{ api.statusClass }}">
+                        {{ api.status_code || 'PENDING' }}
+                      </span>
+                    </td>
+                    <td class="mono text-xs text-accent text-right font-bold">
+                      {{ api.response_time_ms ? api.response_time_ms + 'ms' : '--' }}
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+    </div>
+  }
 </div>

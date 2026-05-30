@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
@@ -17,9 +17,6 @@ from db.mysql_service import MySQLService
 logger = logging.getLogger(__name__)
 
 # --- Application state (populated during lifespan) ---
-neo4j_service: Neo4jService | None = None
-mysql_service: MySQLService | None = None
-
 
 def _read_version() -> str:
     """Read version from VERSION file."""
@@ -32,7 +29,6 @@ def _read_version() -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan: startup and shutdown events."""
-    global neo4j_service, mysql_service  # noqa: PLW0603
 
     settings = get_settings()
 
@@ -47,6 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await neo4j_service.connect()
     await initialize_schema(neo4j_service, settings.embedding_dimensions)
+    app.state.neo4j_service = neo4j_service
 
     # MySQL
     mysql_service = MySQLService(
@@ -58,6 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await mysql_service.connect()
     await mysql_service.initialize_schema()
+    app.state.mysql_service = mysql_service
 
     logger.info("ALRS v2 backend started successfully")
 
@@ -65,10 +63,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # --- Shutdown ---
     logger.info("Shutting down ALRS v2 backend...")
-    if neo4j_service is not None:
-        await neo4j_service.close()
-    if mysql_service is not None:
-        await mysql_service.close()
+    if hasattr(app.state, "neo4j_service") and app.state.neo4j_service is not None:
+        await app.state.neo4j_service.close()
+    if hasattr(app.state, "mysql_service") and app.state.mysql_service is not None:
+        await app.state.mysql_service.close()
     logger.info("ALRS v2 backend shut down")
 
 
@@ -83,7 +81,12 @@ app = FastAPI(
 # --- CORS middleware ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:4200",
+        "http://127.0.0.1:4200",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,14 +95,14 @@ app.add_middleware(
 
 # --- Health and version endpoints ---
 @app.get("/api/health")
-async def health_check() -> dict[str, object]:
+async def health_check(request: Request) -> dict[str, object]:
     """Health check endpoint verifying Neo4j + MySQL connectivity."""
     neo4j_ok = False
     mysql_ok = False
-    if neo4j_service is not None:
-        neo4j_ok = await neo4j_service.health_check()
-    if mysql_service is not None:
-        mysql_ok = await mysql_service.health_check()
+    if hasattr(request.app.state, "neo4j_service") and request.app.state.neo4j_service is not None:
+        neo4j_ok = await request.app.state.neo4j_service.health_check()
+    if hasattr(request.app.state, "mysql_service") and request.app.state.mysql_service is not None:
+        mysql_ok = await request.app.state.mysql_service.health_check()
 
     status = "healthy" if (neo4j_ok and mysql_ok) else "degraded"
     return {
@@ -119,10 +122,16 @@ async def get_version() -> dict[str, str]:
 from routers.search import router as search_router
 from routers.sessions import router as sessions_router
 from routers.papers import router as papers_router
+from routers.logs import router as logs_router
+from routers.debug import router as debug_router
+from routers.settings import router as settings_router
 
 app.include_router(search_router)
 app.include_router(sessions_router)
 app.include_router(papers_router)
+app.include_router(logs_router, prefix="/api")
+app.include_router(debug_router, prefix="/api")
+app.include_router(settings_router, prefix="/api")
 
 
 # --- Configure logging ---

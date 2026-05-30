@@ -20,7 +20,8 @@ DDL_STATEMENTS: list[str] = [
         current_depth INT NOT NULL DEFAULT 0,
         full_state JSON,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_sessions_created_at (created_at)
     )''',
     '''CREATE TABLE IF NOT EXISTS settings (
         setting_key VARCHAR(100) PRIMARY KEY,
@@ -39,7 +40,8 @@ DDL_STATEMENTS: list[str] = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_api_logs_session (session_id),
         INDEX idx_api_logs_service (service),
-        INDEX idx_api_logs_created (created_at)
+        INDEX idx_api_logs_created (created_at),
+        INDEX idx_api_logs_session_created (session_id, created_at)
     )''',
     '''CREATE TABLE IF NOT EXISTS app_logs (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -51,7 +53,8 @@ DDL_STATEMENTS: list[str] = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_app_logs_session (session_id),
         INDEX idx_app_logs_level (level),
-        INDEX idx_app_logs_created (created_at)
+        INDEX idx_app_logs_created (created_at),
+        INDEX idx_app_logs_session_created (session_id, created_at)
     )''',
 ]
 
@@ -84,7 +87,8 @@ class MySQLService:
             db=self._database,
             autocommit=True,
             minsize=2,
-            maxsize=10,
+            maxsize=30,
+            init_command="SET time_zone='+00:00'",
         )
         logger.info('MySQL connection pool created: %s:%d/%s', self._host, self._port, self._database)
 
@@ -107,7 +111,7 @@ class MySQLService:
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(query, args)
-                return cur.rowcount
+                return int(cur.rowcount)
 
     async def fetch_one(
         self, query: str, args: tuple[object, ...] | None = None
@@ -117,7 +121,7 @@ class MySQLService:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, args)
                 row = await cur.fetchone()
-                return dict(row) if row else None  # type: ignore[arg-type]
+                return dict(row) if row else None
 
     async def fetch_all(
         self, query: str, args: tuple[object, ...] | None = None
@@ -127,7 +131,7 @@ class MySQLService:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, args)
                 rows = await cur.fetchall()
-                return [dict(r) for r in rows]  # type: ignore[arg-type]
+                return [dict(r) for r in rows]
 
     async def initialize_schema(self) -> None:
         """Run DDL statements to create tables if they don't exist."""
@@ -171,10 +175,10 @@ class MySQLService:
         updates: list[str] = []
         params: list[object] = []
         if papers_discovered is not None:
-            updates.append('papers_discovered = %s')
+            updates.append('papers_discovered = papers_discovered + %s')
             params.append(papers_discovered)
         if papers_relevant is not None:
-            updates.append('papers_relevant = %s')
+            updates.append('papers_relevant = papers_relevant + %s')
             params.append(papers_relevant)
         if current_depth is not None:
             updates.append('current_depth = %s')

@@ -1,0 +1,277 @@
+<div class="debug-page animate-fade-in">
+  <div class="page-header">
+    <h1 class="page-title">Debug Console</h1>
+    <p class="text-secondary">
+      Test individual subsystems — paper retrieval, text embeddings, and cosine similarity.
+      All operations are logged at <span class="badge badge-debug">DEBUG</span> level.
+    </p>
+  </div>
+
+  <!-- ─── Panel 1: Paper Retrieval ─── -->
+  <div class="debug-panel card glass">
+    <div class="panel-header">
+      <div class="panel-icon panel-icon-retrieve">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+          <polyline points="14,2 14,8 20,8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+      </div>
+      <div>
+        <h2 class="panel-title">Paper Retrieval</h2>
+        <p class="panel-subtitle text-muted">Fetch a paper from OpenAlex by DOI</p>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div class="input-row">
+        <div class="input-group">
+          <label for="debug-doi">DOI</label>
+          <input
+            id="debug-doi"
+            type="text"
+            placeholder="e.g. 10.1109/SRC65875.2025.11263707"
+            [(ngModel)]="retrieveDoi"
+            (keyup.enter)="runRetrieve()"
+          />
+        </div>
+        <button
+          class="btn-primary btn-run"
+          (click)="runRetrieve()"
+          [disabled]="retrieveLoading || !retrieveDoi.trim()"
+        >
+          @if (retrieveLoading) {
+            <span class="animate-pulse">Running…</span>
+          } @else {
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5,3 19,12 5,21 5,3"/>
+            </svg>
+            Run Test
+          }
+        </button>
+      </div>
+
+      @if (retrieveResult) {
+        <div class="result-card" [class.result-success]="retrieveResult.success" [class.result-error]="!retrieveResult.success">
+          <div class="result-header">
+            <span class="result-badge" [class.badge-success]="retrieveResult.success" [class.badge-error]="!retrieveResult.success">
+              {{ retrieveResult.success ? 'SUCCESS' : 'FAILED' }}
+            </span>
+            <span class="result-latency mono">{{ retrieveResult.elapsed_ms }}ms</span>
+          </div>
+
+          @if (retrieveResult.success) {
+            <div class="result-body">
+              <div class="result-field">
+                <span class="field-label">DOI</span>
+                <span class="field-value mono">{{ retrieveResult.doi }}</span>
+              </div>
+              <div class="result-field">
+                <span class="field-label">Title</span>
+                <span class="field-value">{{ retrieveResult.title }}</span>
+              </div>
+              <div class="result-field">
+                <span class="field-label">Year</span>
+                <span class="field-value">{{ retrieveResult.year || '—' }}</span>
+              </div>
+              <div class="result-field">
+                <span class="field-label">Citations</span>
+                <span class="field-value">{{ retrieveResult.cited_by_count }}</span>
+              </div>
+              @if (retrieveResult.abstract) {
+                <div class="result-field result-field-full">
+                  <span class="field-label">Abstract</span>
+                  <p class="field-value abstract-text">{{ retrieveResult.abstract }}</p>
+                </div>
+              } @else {
+                <div class="result-field result-field-full">
+                  <span class="field-label">Abstract</span>
+                  <span class="field-value text-muted">No abstract available</span>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="result-body">
+              <p class="error-message">{{ retrieveResult.error }}</p>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- ─── Panel 2: Text Embedding ─── -->
+  <div class="debug-panel card glass">
+    <div class="panel-header">
+      <div class="panel-icon panel-icon-embed">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      </div>
+      <div>
+        <h2 class="panel-title">Text Embedding</h2>
+        <p class="panel-subtitle text-muted">Generate a vector embedding via Gemini API</p>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div class="input-group">
+        <label for="debug-embed-text">Text to Embed</label>
+        <textarea
+          id="debug-embed-text"
+          rows="4"
+          placeholder="Paste an abstract or any text passage here…"
+          [(ngModel)]="embedText"
+        ></textarea>
+      </div>
+      <div class="input-row" style="margin-top: var(--space-4);">
+        <div></div>
+        <button
+          class="btn-primary btn-run"
+          (click)="runEmbed()"
+          [disabled]="embedLoading || !embedText.trim()"
+        >
+          @if (embedLoading) {
+            <span class="animate-pulse">Embedding…</span>
+          } @else {
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5,3 19,12 5,21 5,3"/>
+            </svg>
+            Run Test
+          }
+        </button>
+      </div>
+
+      @if (embedResult) {
+        <div class="result-card" [class.result-success]="embedResult.success" [class.result-error]="!embedResult.success">
+          <div class="result-header">
+            <span class="result-badge" [class.badge-success]="embedResult.success" [class.badge-error]="!embedResult.success">
+              {{ embedResult.success ? 'SUCCESS' : 'FAILED' }}
+            </span>
+            <span class="result-latency mono">{{ embedResult.elapsed_ms }}ms</span>
+          </div>
+
+          @if (embedResult.success) {
+            <div class="result-body">
+              <div class="result-field">
+                <span class="field-label">Dimensions</span>
+                <span class="field-value mono">{{ embedResult.dimensions }}</span>
+              </div>
+              <div class="result-field result-field-full">
+                <span class="field-label">First 5 Values</span>
+                <code class="field-value mono vector-values">[ {{ embedResult.first_5_values?.join(', ') }} … ]</code>
+              </div>
+            </div>
+          } @else {
+            <div class="result-body">
+              <p class="error-message">{{ embedResult.error }}</p>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- ─── Panel 3: Cosine Similarity ─── -->
+  <div class="debug-panel card glass">
+    <div class="panel-header">
+      <div class="panel-icon panel-icon-similarity">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="20" x2="18" y2="10"/>
+          <line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+      </div>
+      <div>
+        <h2 class="panel-title">Cosine Similarity</h2>
+        <p class="panel-subtitle text-muted">Compare semantic similarity between two passages</p>
+      </div>
+    </div>
+
+    <div class="panel-body">
+      <div class="similarity-inputs">
+        <div class="input-group">
+          <label for="debug-sim-a">Paragraph A</label>
+          <textarea
+            id="debug-sim-a"
+            rows="4"
+            placeholder="Enter the first text passage…"
+            [(ngModel)]="simTextA"
+          ></textarea>
+        </div>
+        <div class="vs-divider">
+          <span class="vs-badge">VS</span>
+        </div>
+        <div class="input-group">
+          <label for="debug-sim-b">Paragraph B</label>
+          <textarea
+            id="debug-sim-b"
+            rows="4"
+            placeholder="Enter the second text passage…"
+            [(ngModel)]="simTextB"
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="input-row" style="margin-top: var(--space-4);">
+        <div></div>
+        <button
+          class="btn-primary btn-run"
+          (click)="runSimilarity()"
+          [disabled]="simLoading || !simTextA.trim() || !simTextB.trim()"
+        >
+          @if (simLoading) {
+            <span class="animate-pulse">Computing…</span>
+          } @else {
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5,3 19,12 5,21 5,3"/>
+            </svg>
+            Run Test
+          }
+        </button>
+      </div>
+
+      @if (simResult) {
+        <div class="result-card" [class.result-success]="simResult.success" [class.result-error]="!simResult.success">
+          <div class="result-header">
+            <span class="result-badge" [class.badge-success]="simResult.success" [class.badge-error]="!simResult.success">
+              {{ simResult.success ? 'SUCCESS' : 'FAILED' }}
+            </span>
+            <span class="result-latency mono">{{ simResult.elapsed_ms }}ms</span>
+          </div>
+
+          @if (simResult.success) {
+            <div class="result-body">
+              <div class="similarity-gauge">
+                <div class="gauge-label">
+                  <span class="field-label">Cosine Similarity</span>
+                  <span class="gauge-value mono">{{ simResult.similarity_score }}</span>
+                </div>
+                <div class="gauge-bar">
+                  <div
+                    class="gauge-fill {{ getSimilarityColor() }}"
+                    [style.width.%]="getSimilarityPercent()"
+                  ></div>
+                </div>
+                <div class="gauge-legend">
+                  <span class="text-muted text-xs">0.0 — Unrelated</span>
+                  <span class="text-muted text-xs">1.0 — Identical</span>
+                </div>
+              </div>
+              <div class="result-field">
+                <span class="field-label">Dimensions</span>
+                <span class="field-value mono">{{ simResult.dimensions }}</span>
+              </div>
+            </div>
+          } @else {
+            <div class="result-body">
+              <p class="error-message">{{ simResult.error }}</p>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>

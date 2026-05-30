@@ -1,0 +1,216 @@
+<div class="settings-page animate-fade-in">
+  <div class="page-header">
+    <h1 class="page-title">Settings</h1>
+    <p class="text-secondary">
+      Configure API keys and contact email. Changes are saved to the backend <code class="mono">.env</code> file.
+    </p>
+  </div>
+
+  @if (loading) {
+    <div class="skeleton-container card glass">
+      <div class="skeleton" style="height: 48px; margin-bottom: 16px; border-radius: 8px;"></div>
+      <div class="skeleton" style="height: 48px; margin-bottom: 16px; border-radius: 8px;"></div>
+      <div class="skeleton" style="height: 48px; border-radius: 8px;"></div>
+    </div>
+  }
+
+  @if (!loading) {
+    <!-- ─── API Keys Section ─── -->
+    <div class="settings-section card glass">
+      <div class="section-header">
+        <div class="section-icon section-icon-keys">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="section-title">API Keys</h2>
+          <p class="section-subtitle text-muted">Enter your API keys to connect to external services</p>
+        </div>
+      </div>
+
+      <div class="section-body">
+        <!-- Gemini API Key -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Gemini API Key</div>
+            <div class="setting-description text-muted">
+              Required for text embeddings and semantic similarity.
+              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-accent">Get a key →</a>
+            </div>
+            <div class="setting-status">
+              @if (settings?.gemini_api_key_set) {
+                <span class="badge badge-success">Active</span>
+                <span class="mono text-xs text-muted">{{ settings?.gemini_api_key_preview }}</span>
+              } @else {
+                <span class="badge badge-error">Not Set</span>
+                <span class="text-xs text-muted">Embedding & similarity features won't work</span>
+              }
+            </div>
+          </div>
+          <div class="setting-input">
+            <div class="input-with-toggle">
+              <input
+                id="gemini-key"
+                [type]="showGeminiKey ? 'text' : 'password'"
+                placeholder="Enter new Gemini API key…"
+                [(ngModel)]="geminiApiKey"
+                autocomplete="off"
+              />
+              <button class="toggle-btn" (click)="toggleGeminiVisibility()" type="button" title="Toggle visibility">
+                @if (showGeminiKey) {
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                } @else {
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-divider"></div>
+
+        <!-- OpenAlex API Key -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">OpenAlex API Key</div>
+            <div class="setting-description text-muted">
+              Optional. Provides higher rate limits for paper retrieval.
+              <a href="https://openalex.org/users" target="_blank" rel="noopener" class="text-accent">Get a key →</a>
+            </div>
+            <div class="setting-status">
+              @if (settings?.openalex_api_key_set) {
+                <span class="badge badge-success">Active</span>
+                <span class="mono text-xs text-muted">{{ settings?.openalex_api_key_preview }}</span>
+              } @else {
+                <span class="badge badge-warning">Not Set</span>
+                <span class="text-xs text-muted">Using polite pool (lower rate limits)</span>
+              }
+            </div>
+          </div>
+          <div class="setting-input">
+            <div class="input-with-toggle">
+              <input
+                id="openalex-key"
+                [type]="showOpenalexKey ? 'text' : 'password'"
+                placeholder="Enter new OpenAlex API key…"
+                [(ngModel)]="openalexApiKey"
+                autocomplete="off"
+              />
+              <button class="toggle-btn" (click)="toggleOpenalexVisibility()" type="button" title="Toggle visibility">
+                @if (showOpenalexKey) {
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                } @else {
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Contact Info Section ─── -->
+    <div class="settings-section card glass">
+      <div class="section-header">
+        <div class="section-icon section-icon-email">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="section-title">Contact Email</h2>
+          <p class="section-subtitle text-muted">Used for OpenAlex polite pool identification</p>
+        </div>
+      </div>
+
+      <div class="section-body">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">Email Address</div>
+            <div class="setting-description text-muted">
+              OpenAlex uses your email for polite pool access (better rate limits, no key needed).
+            </div>
+          </div>
+          <div class="setting-input">
+            <input
+              id="openalex-email"
+              type="email"
+              placeholder="your-email@example.com"
+              [(ngModel)]="openalexEmail"
+              autocomplete="email"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── System Info Section ─── -->
+    @if (settings) {
+      <div class="settings-section card glass">
+        <div class="section-header">
+          <div class="section-icon section-icon-info">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="section-title">System Info</h2>
+            <p class="section-subtitle text-muted">Current backend configuration (read-only)</p>
+          </div>
+        </div>
+
+        <div class="section-body">
+          <div class="info-grid">
+            <div class="info-item">
+              <span class="info-label">Embedding Model</span>
+              <span class="info-value mono">{{ settings.embedding_model }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Dimensions</span>
+              <span class="info-value mono">{{ settings.embedding_dimensions }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- ─── Save Button ─── -->
+    <div class="save-bar">
+      <button
+        class="btn-primary btn-save"
+        (click)="saveSettings()"
+        [disabled]="saving"
+      >
+        @if (saving) {
+          <span class="animate-pulse">Saving…</span>
+        } @else {
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          Save Settings
+        }
+      </button>
+      <span class="save-hint text-muted text-xs">
+        A server restart may be required for API key changes to take full effect.
+      </span>
+    </div>
+  }
+</div>

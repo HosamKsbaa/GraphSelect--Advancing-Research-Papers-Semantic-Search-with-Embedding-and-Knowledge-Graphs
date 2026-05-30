@@ -1,0 +1,248 @@
+<div class="results-view animate-fade-in">
+  <!-- Loading & Error overlays -->
+  @if (loading) {
+    <div class="skeleton-container card glass">
+      <div class="skeleton-header skeleton"></div>
+      <div class="skeleton-tabs">
+        <div class="skeleton-tab skeleton"></div>
+        <div class="skeleton-tab skeleton"></div>
+      </div>
+      <div class="skeleton-content">
+        <div class="skeleton-card skeleton" style="height: 120px;"></div>
+        <div class="skeleton-card skeleton" style="height: 120px;"></div>
+      </div>
+    </div>
+  } @else if (error) {
+    <div class="error-state card glass">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-error)" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <h2>Failed to load literature review</h2>
+      <p class="text-secondary">{{ error }}</p>
+      <button class="btn-secondary" (click)="loadResults()" style="margin-top: var(--space-4);">Retry Loading</button>
+    </div>
+  } @else if (results) {
+    <div class="results-layout">
+      <!-- Sidebar Control Card -->
+      <aside class="control-panel card glass animate-slide-in">
+        <div class="session-meta">
+          <div class="meta-label">SESSION ID</div>
+          <div class="meta-value mono truncate" [title]="results.session_id">{{ results.session_id }}</div>
+        </div>
+
+        <hr class="divider" />
+
+        <div class="sliders-section">
+          <h3>Ranking Controls</h3>
+          <p class="text-secondary" style="font-size: var(--text-xs); margin-bottom: var(--space-4);">
+            Adjust the thresholds and weights below. The papers will instantly re-rank database-side without re-computing embeddings.
+          </p>
+
+          <!-- Similarity Threshold Slider -->
+          <div class="control-group">
+            <div class="control-header">
+              <label for="threshold-slider">Relevance Threshold</label>
+              <span class="value-readout mono">{{ similarityThreshold.toFixed(2) }}</span>
+            </div>
+            <input
+              #thresholdSlider
+              id="threshold-slider"
+              type="range"
+              [value]="similarityThreshold"
+              (input)="similarityThreshold = +thresholdSlider.value"
+              (change)="triggerRerank()"
+              min="0.0"
+              max="1.0"
+              step="0.05"
+              [disabled]="reranking"
+            />
+            <div class="control-desc text-muted">
+              Filter out papers with cosine similarity below this value.
+            </div>
+          </div>
+
+          <!-- Weight Split Slider -->
+          <div class="control-group" style="margin-top: var(--space-5);">
+            <div class="control-header">
+              <label for="weight-slider">Scoring Balance</label>
+              <span class="value-readout mono">
+                {{ (similarityWeight * 100).toFixed(0) }}% / {{ (pagerankWeight * 100).toFixed(0) }}%
+              </span>
+            </div>
+            <input
+              #weightSlider
+              id="weight-slider"
+              type="range"
+              [value]="similarityWeight"
+              (input)="similarityWeight = +weightSlider.value; pagerankWeight = +(1 - similarityWeight).toFixed(2)"
+              (change)="triggerRerank()"
+              min="0.0"
+              max="1.0"
+              step="0.05"
+              [disabled]="reranking"
+            />
+            <div class="weight-labels text-muted mono">
+              <span>Similarity</span>
+              <span>PageRank</span>
+            </div>
+            <div class="control-desc text-muted" style="margin-top: var(--space-1);">
+              Balance local relevance (Similarity) vs. graph-based importance (PageRank).
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider" />
+
+        <!-- Quick Stats -->
+        <div class="quick-stats">
+          <h3>Overview</h3>
+          <div class="stat-row">
+            <span class="text-muted">Total Relevant Papers</span>
+            <span class="mono text-accent" style="font-weight: 700; font-size: var(--text-lg);">{{ results.total_papers }}</span>
+          </div>
+        </div>
+
+        <button class="btn-primary reset-btn" (click)="onReset()" style="margin-top: var(--space-6); width: 100%;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+          New Search
+        </button>
+      </aside>
+
+      <!-- Main Results Display -->
+      <main class="main-display">
+        <!-- Question tabs -->
+        <div class="question-tabs glass">
+          @for (group of results.groups; track $index; let i = $index) {
+            <button
+              class="tab-btn"
+              [class.active]="activeTabIndex === i"
+              (click)="selectTab(i)"
+            >
+              <span class="tab-index mono">Q{{ i + 1 }}</span>
+              <span class="tab-text truncate">{{ group.question }}</span>
+              <span class="tab-badge badge" [class.badge-accent]="group.papers.length > 0" [class.badge-info]="group.papers.length === 0">
+                {{ group.papers.length }}
+              </span>
+            </button>
+          }
+        </div>
+
+        <!-- Papers list for active question group -->
+        <div class="papers-list-container">
+          @if (results.groups[activeTabIndex]) {
+            @let activeGroup = results.groups[activeTabIndex];
+            
+            <div class="group-header">
+              <div class="group-title-row">
+                <h2>Research Question {{ activeTabIndex + 1 }}</h2>
+                @if (activeGroup.papers.length > 0) {
+                  <span class="badge badge-success">Average Similarity: {{ (activeGroup.avg_similarity * 100).toFixed(1) }}%</span>
+                }
+              </div>
+              <p class="question-desc text-secondary">{{ activeGroup.question }}</p>
+            </div>
+
+            <!-- List -->
+            @if (activeGroup.papers.length === 0) {
+              <div class="empty-group card glass animate-fade-in">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <h3>No papers match this question</h3>
+                <p class="text-secondary">Try reducing the "Relevance Threshold" in the control panel to retrieve papers with lower matching scores.</p>
+              </div>
+            } @else {
+              <div class="papers-list">
+                @for (paper of activeGroup.papers; track paper.doi; let index = $index) {
+                  <div
+                    class="paper-card card glass animate-fade-in"
+                    [class.expanded]="isPaperExpanded(paper.doi)"
+                    (click)="togglePaperDetails(paper.doi)"
+                  >
+                    <!-- Card Header / Always visible -->
+                    <div class="paper-card-header">
+                      <!-- Rank & Score Circle -->
+                      <div class="score-display">
+                        <div class="score-ring">
+                          <span class="score-val">{{ (paper.hybrid_score * 100).toFixed(0) }}</span>
+                          <span class="score-label">SCORE</span>
+                        </div>
+                        <span class="rank-label">#{{ index + 1 }}</span>
+                      </div>
+
+                      <!-- Paper Meta -->
+                      <div class="paper-info">
+                        <h3 class="paper-title" [title]="paper.title">{{ paper.title }}</h3>
+                        <div class="paper-authors-row text-secondary">
+                          <span class="authors">{{ getAuthorsText(paper.authors) }}</span>
+                          <span class="bullet">&bull;</span>
+                          @if (paper.year) {
+                            <span class="year badge badge-info">{{ paper.year }}</span>
+                          }
+                        </div>
+                        
+                        <!-- Mini scores row -->
+                        <div class="scores-row mono text-muted">
+                          <span class="score-item" title="Cosine Similarity to Question">
+                            <span class="dot similarity"></span>
+                            Sim: <strong class="text-accent">{{ paper.similarity_score.toFixed(3) }}</strong>
+                          </span>
+                          <span class="score-item" title="Topological Influence inside citation graph">
+                            <span class="dot pagerank"></span>
+                            PageRank: <strong class="text-accent">{{ paper.pagerank_score.toFixed(3) }}</strong>
+                          </span>
+                          <span class="score-item" title="Total global citation count">
+                            <span class="dot citations"></span>
+                            Citations: <strong class="text-accent">{{ paper.cited_by_count }}</strong>
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Expand toggle arrow -->
+                      <div class="expand-arrow">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="arrow-icon">
+                          <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                      </div>
+                    </div>
+
+                    <!-- Expandable Drawer / Abstract & Details -->
+                    <div class="paper-card-drawer">
+                      <div class="drawer-content">
+                        @if (paper.abstract_snippet) {
+                          <div class="abstract-section">
+                            <h4>Abstract Snippet</h4>
+                            <p class="abstract text-secondary">{{ paper.abstract_snippet }}</p>
+                          </div>
+                        } @else {
+                          <div class="abstract-section">
+                            <p class="abstract text-muted italic">Abstract not available for this paper.</p>
+                          </div>
+                        }
+
+                        <div class="actions-section">
+                          <div class="doi-row">
+                            <span class="text-muted">DOI:</span>
+                            <a [href]="'https://doi.org/' + paper.doi" target="_blank" class="mono doi-link" (click)="$event.stopPropagation();">
+                              {{ paper.doi }}
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: 2px; vertical-align: middle;">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/>
+                              </svg>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          }
+        </div>
+      </main>
+    </div>
+  }
+</div>

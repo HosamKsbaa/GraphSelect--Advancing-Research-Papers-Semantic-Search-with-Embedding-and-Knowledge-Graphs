@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # --- OpenAlex API ---
     openalex_api_key: str = Field(..., description="OpenAlex API key (required)")
+    openalex_email: str | None = Field(default=None, description="Email for OpenAlex polite pool")
 
     # --- Neo4j ---
     neo4j_uri: str = Field(default="bolt://localhost:7687")
@@ -36,6 +37,7 @@ class Settings(BaseSettings):
 
     # --- Application ---
     log_retention_hours: int = Field(default=24, ge=1, le=720)
+    embedding_model: str = Field(default="gemini-embedding-2")
     embedding_dimensions: int = Field(default=768)
     openalex_rate_limit: float = Field(default=9.0, ge=0.1, le=100.0)
     app_host: str = Field(default="0.0.0.0")

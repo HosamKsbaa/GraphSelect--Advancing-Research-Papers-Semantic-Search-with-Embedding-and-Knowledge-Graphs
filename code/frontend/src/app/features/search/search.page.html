@@ -16,9 +16,14 @@
       <span>Questions</span>
     </div>
     <div class="step-line" [class.active]="currentStep > 2"></div>
-    <div class="step" [class.active]="currentStep >= 3">
+    <div class="step" [class.active]="currentStep >= 3" [class.done]="currentStep > 3">
       <div class="step-number">3</div>
       <span>Crawl</span>
+    </div>
+    <div class="step-line" [class.active]="currentStep > 3"></div>
+    <div class="step" [class.active]="currentStep >= 4">
+      <div class="step-number">4</div>
+      <span>Results</span>
     </div>
   </div>
 
@@ -265,10 +270,21 @@
       <!-- Actions -->
       <div class="step-actions" style="margin-top: var(--space-6);">
         @if (streamStatus === 'complete' || streamStatus === 'failed') {
+          @if (streamStatus === 'complete') {
+            <button class="btn-primary" (click)="currentStep = 4">View Results &rarr;</button>
+          }
           <a routerLink="/sessions" class="btn-secondary">View Sessions</a>
           <button class="btn-primary" (click)="resetSearch()">+ New Search</button>
         }
       </div>
     </div>
+  }
+
+  <!-- Step 4: Search Results -->
+  @if (currentStep === 4 && searchResult) {
+    <alrs-results
+      [sessionId]="searchResult.session_id"
+      (reset)="resetSearch()"
+    ></alrs-results>
   }
 </div>

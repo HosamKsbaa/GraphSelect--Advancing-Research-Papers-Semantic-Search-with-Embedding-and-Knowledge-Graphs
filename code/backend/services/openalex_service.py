@@ -44,10 +44,17 @@ class OpenAlexService:
         else:
             logger.info("OpenAlex: using API key authentication")
 
+        import os
+        verify_ssl = True
+        if os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY"):
+            verify_ssl = False
+            logger.info("OpenAlex: detected HTTP proxy, disabling SSL verification for debugging")
+
         self._client = httpx.AsyncClient(
             base_url=OPENALEX_BASE_URL,
             timeout=30.0,
             headers=headers,
+            verify=verify_ssl,
         )
 
     async def close(self) -> None:
@@ -76,43 +83,70 @@ class OpenAlexService:
             httpx.HTTPStatusError: On non-retryable HTTP errors.
         """
         import time
+        import asyncio
 
         if params is None:
             params = {}
         if self._api_key:
             params["api_key"] = self._api_key
 
-        if self._rate_limiter is not None:
-            await self._rate_limiter.acquire()
-
-        start_ms = int(time.monotonic() * 1000)
         url = f"{OPENALEX_BASE_URL}{path}"
+        max_retries = 3
 
-        response = await self._client.request(method, path, params=params)
-        elapsed_ms = int(time.monotonic() * 1000) - start_ms
-
-        if self._log_service is not None:
-            await self._log_service.log_api_request(
-                service="openalex",
-                method=method,
-                url=url,
-                status_code=response.status_code,
-                response_time_ms=elapsed_ms,
-                payload_summary=f"params={list(params.keys())}",
-                session_id=session_id,
-            )
-
-        if response.status_code == 429:
+        for attempt in range(max_retries + 1):
             if self._rate_limiter is not None:
-                self._rate_limiter.on_429()
-            response.raise_for_status()
+                await self._rate_limiter.acquire()
 
-        if self._rate_limiter is not None:
-            self._rate_limiter.on_success()
+            start_ms = int(time.monotonic() * 1000)
+            try:
+                response = await self._client.request(method, path, params=params)
+                elapsed_ms = int(time.monotonic() * 1000) - start_ms
 
-        response.raise_for_status()
-        result: dict[str, object] = response.json()
-        return result
+                if self._log_service is not None:
+                    await self._log_service.log_api_request(
+                        service="OpenAlex",
+                        method=method,
+                        url=url,
+                        status_code=response.status_code,
+                        response_time_ms=elapsed_ms,
+                        payload_summary=f"params={list(params.keys())}",
+                        session_id=session_id,
+                    )
+
+                if response.status_code == 429:
+                    if self._rate_limiter is not None:
+                        self._rate_limiter.on_429()
+                    if attempt < max_retries:
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    response.raise_for_status()
+
+                if self._rate_limiter is not None:
+                    self._rate_limiter.on_success()
+
+                response.raise_for_status()
+                result: dict[str, object] = response.json()
+                return result
+            except Exception as exc:
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429 and attempt < max_retries:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+
+                elapsed_ms = int(time.monotonic() * 1000) - start_ms
+                status_code = getattr(getattr(exc, "response", None), "status_code", 500)
+                if self._log_service is not None:
+                    await self._log_service.log_api_request(
+                        service="OpenAlex",
+                        method=method,
+                        url=url,
+                        status_code=status_code,
+                        response_time_ms=elapsed_ms,
+                        payload_summary=f"FAILED: {str(exc)}",
+                        session_id=session_id,
+                    )
+                raise exc
+        
+        raise RuntimeError("Unreachable")
 
     async def get_paper_by_doi(
         self,
@@ -261,15 +295,46 @@ class OpenAlexService:
         return dois
 
     @staticmethod
+    def _reconstruct_abstract(abstract_inverted_index: dict[str, list[int]] | None) -> str | None:
+        """Reconstruct the plain text abstract from OpenAlex's abstract_inverted_index."""
+        if not abstract_inverted_index or not isinstance(abstract_inverted_index, dict):
+            return None
+
+        try:
+            word_positions: list[tuple[int, str]] = []
+            for word, positions in abstract_inverted_index.items():
+                if isinstance(positions, list):
+                    for pos in positions:
+                        if isinstance(pos, int):
+                            word_positions.append((pos, word))
+
+            if not word_positions:
+                return None
+
+            word_positions.sort(key=lambda x: x[0])
+            return " ".join(word for _, word in word_positions)
+        except Exception as e:
+            logger.warning("Failed to reconstruct abstract from inverted index: %s", e)
+            return None
+
+    @staticmethod
     def _parse_work(data: dict[str, object]) -> PaperCreate:
         """Parse an OpenAlex work response into a PaperCreate model."""
         doi_raw = data.get("doi", "")
         doi = str(doi_raw).replace("https://doi.org/", "") if doi_raw else ""
 
+        abstract = None
+        if data.get("abstract"):
+            abstract = str(data.get("abstract"))
+        elif data.get("abstract_inverted_index"):
+            abstract = OpenAlexService._reconstruct_abstract(
+                data.get("abstract_inverted_index")  # type: ignore[arg-type]
+            )
+
         return PaperCreate(
             doi=doi,
             title=str(data.get("title", "")),
-            abstract=str(data.get("abstract", "")) if data.get("abstract") else None,
+            abstract=abstract,
             year=data.get("publication_year"),  # type: ignore[arg-type]
             cited_by_count=int(data.get("cited_by_count", 0)),  # type: ignore[arg-type]
             openalex_id=str(data.get("id", "")) if data.get("id") else None,
