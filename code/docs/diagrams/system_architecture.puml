@@ -1,0 +1,95 @@
+@startuml system_architecture
+
+title ALRS v2 — System Architecture
+skinparam roundcorner 10
+skinparam componentStyle uml2
+skinparam defaultFontSize 11
+
+skinparam component {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+  FontColor #0D47A1
+}
+
+skinparam package {
+  BackgroundColor #FAFAFA
+  BorderColor #90A4AE
+  FontColor #37474F
+}
+
+skinparam database {
+  BackgroundColor #FFF3E0
+  BorderColor #E65100
+  FontColor #BF360C
+}
+
+skinparam cloud {
+  BackgroundColor #F3E5F5
+  BorderColor #6A1B9A
+  FontColor #4A148C
+}
+
+actor "User" as user #FFECB3
+
+node "Browser" as browser #FFF9C4 {
+  component "Angular 19\nSPA" as angular
+}
+
+package "Docker Compose" as docker #ECEFF1 {
+
+  package "frontend-container" as fcontainer #E8F5E9 {
+    component "Nginx / Dev Server\n:4200" as nginx
+  }
+
+  package "backend-container" as bcontainer #E3F2FD {
+    component "FastAPI\n:8000" as fastapi
+    component "BFS Engine" as bfs
+    component "Embedding\nService" as embedsvc
+    component "SSE Stream\nManager" as sse
+  }
+
+  package "neo4j-container" as ncontainer #E8EAF6 {
+    database "Neo4j\n:7474 (HTTP)\n:7687 (Bolt)" as neo4j
+    component "GDS Plugin" as gds
+  }
+
+  package "mysql-container" as mcontainer #FFF3E0 {
+    database "MySQL 8\n:3306" as mysql
+  }
+}
+
+cloud "External APIs" as external {
+  component "OpenAlex API\napi.openalex.org" as openalex #F3E5F5
+  component "Gemini Embedding API\ngenerativelanguage.\ngoogleapis.com" as gemini #F3E5F5
+}
+
+' ── Connections ────────────────────────────
+
+user --> angular : "interacts"
+angular --> nginx : "HTTP\n:4200"
+nginx --> fastapi : "proxy /api/*\n:8000"
+
+fastapi --> bfs
+fastapi --> sse
+bfs --> embedsvc
+
+fastapi -[#1565C0]-> neo4j : "Bolt :7687\n(papers, graph)"
+fastapi -[#E65100]-> mysql : "TCP :3306\n(sessions, logs)"
+
+bfs -[#6A1B9A]-> openalex : "HTTPS\n(paper metadata,\ncitations)"
+embedsvc -[#6A1B9A]-> gemini : "HTTPS\n(text embeddings)"
+
+neo4j --> gds : "uses"
+
+' ── Legend ─────────────────────────────────
+
+legend bottom
+  |= Color |= Component |
+  | <#E8F5E9> | Frontend Container |
+  | <#E3F2FD> | Backend Container |
+  | <#E8EAF6> | Neo4j Container |
+  | <#FFF3E0> | MySQL Container |
+  | <#F3E5F5> | External APIs |
+end legend
+
+@enduml

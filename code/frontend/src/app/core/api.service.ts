@@ -91,4 +91,22 @@ export class ApiService {
   deleteSession(sessionId: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.baseUrl}/sessions/${sessionId}`);
   }
+
+  // --- SSE Streaming ---
+  /**
+   * Subscribe to BFS crawl progress events via Server-Sent Events.
+   * Returns an EventSource that emits ProgressEvent objects.
+   */
+  createSearchStream(sessionId: string): EventSource {
+    return new EventSource(`${this.baseUrl}/search/${sessionId}/stream`);
+  }
+}
+
+export interface ProgressEvent {
+  event_type: string;
+  session_id: string;
+  timestamp: string;
+  progress_percent: number;
+  message: string;
+  data?: Record<string, unknown>;
 }

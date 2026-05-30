@@ -1,0 +1,169 @@
+@startuml api_flow
+
+title ALRS v2 — Search Workflow (API Sequence Diagram)
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+skinparam maxMessageSize 200
+skinparam defaultFontSize 11
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 8
+
+skinparam participant {
+  BackgroundColor #E3F2FD
+  BorderColor #1565C0
+  FontColor #0D47A1
+}
+
+skinparam sequence {
+  LifeLineBorderColor #90A4AE
+  LifeLineBackgroundColor #FAFAFA
+  ArrowColor #37474F
+  DividerBackgroundColor #ECEFF1
+  DividerFontColor #455A64
+  GroupBackgroundColor #F5F5F5
+  GroupBorderColor #BDBDBD
+}
+
+actor "User" as user #FFECB3
+participant "Frontend\n(Angular)" as frontend #E8F5E9
+participant "Backend\n(FastAPI)" as backend #E3F2FD
+database "MySQL" as mysql #FFF3E0
+database "Neo4j" as neo4j #E8EAF6
+participant "OpenAlex\nAPI" as openalex #F3E5F5
+participant "Gemini\nEmbedding API" as gemini #F3E5F5
+
+== 1. Resolve Paper Title ==
+
+user -> frontend : Enter paper title
+activate frontend
+frontend -> backend : POST /api/search/resolve-title\n{title: "..."}
+activate backend
+backend -> openalex : GET /works?search=...\n(search by title)
+activate openalex
+openalex --> backend : candidate papers[]
+deactivate openalex
+backend --> frontend : 200 OK\n{candidates: [...]}
+deactivate backend
+frontend --> user : Display matching papers
+deactivate frontend
+
+== 2. Start Search Session ==
+
+user -> frontend : Select paper + enter\nresearch questions
+activate frontend
+frontend -> backend : POST /api/search/start\n{doi, questions[], config}
+activate backend
+
+backend -> backend : Generate session_id (UUID)
+
+backend -> mysql : INSERT INTO sessions\n(session_id, seed_doi, ...)
+activate mysql
+mysql --> backend : OK
+deactivate mysql
+
+backend -> openalex : GET /works/{doi}\n(fetch full metadata)
+activate openalex
+openalex --> backend : paper metadata
+deactivate openalex
+
+backend -> gemini : POST /v1/models/embed\n(embed questions + abstract)
+activate gemini
+gemini --> backend : embeddings Float[768]
+deactivate gemini
+
+backend -> neo4j : CREATE (p:Paper {doi, ...})\nCREATE (s:Session)-[:CONTAINS]->(p)
+activate neo4j
+neo4j --> backend : OK
+deactivate neo4j
+
+backend --> frontend : 200 OK\n{session_id: "abc-123"}
+deactivate backend
+frontend --> user : Show session created
+deactivate frontend
+
+== 3. SSE Stream — BFS Exploration ==
+
+user -> frontend : Connect to live stream
+activate frontend
+frontend -> backend : GET /api/search/{id}/stream\n(SSE connection)
+activate backend
+
+backend -> mysql : UPDATE sessions SET\nstatus='running'
+activate mysql
+mysql --> backend : OK
+deactivate mysql
+
+group BFS Loop (depth 0..max_depth)
+
+  backend -> neo4j : MATCH (p:Paper)-[:CITES]->()\nWHERE ... RETURN refs
+  activate neo4j
+  neo4j --> backend : reference DOIs
+  deactivate neo4j
+
+  backend -> openalex : GET /works/{ref_doi}\n(fetch cited paper)
+  activate openalex
+  openalex --> backend : cited paper metadata
+  deactivate openalex
+
+  backend -> gemini : POST /v1/models/embed\n(embed abstract)
+  activate gemini
+  gemini --> backend : embedding Float[768]
+  deactivate gemini
+
+  backend -> neo4j : Cosine similarity search\nvs question embeddings
+  activate neo4j
+  neo4j --> backend : similarity score
+  deactivate neo4j
+
+  alt similarity >= threshold
+    backend -> neo4j : CREATE (p:Paper)\n+ relationships
+    activate neo4j
+    neo4j --> backend : OK
+    deactivate neo4j
+
+    backend -> mysql : UPDATE sessions\nSET papers_relevant += 1
+    activate mysql
+    mysql --> backend : OK
+    deactivate mysql
+
+    backend --> frontend : SSE event: paper_found\n{paper, score, depth}
+    frontend --> user : Update graph + table
+  else similarity < threshold
+    backend --> frontend : SSE event: paper_skipped\n{doi, score}
+  end
+
+  backend -> mysql : UPDATE sessions\nSET papers_discovered += 1
+  activate mysql
+  mysql --> backend : OK
+  deactivate mysql
+
+  backend --> frontend : SSE event: progress\n{depth, discovered, relevant}
+
+end
+
+backend -> mysql : UPDATE sessions\nSET status='completed'
+activate mysql
+mysql --> backend : OK
+deactivate mysql
+
+backend --> frontend : SSE event: complete\n{summary}
+deactivate backend
+frontend --> user : Show completion summary
+deactivate frontend
+
+== 4. List Sessions ==
+
+user -> frontend : View session history
+activate frontend
+frontend -> backend : GET /api/sessions
+activate backend
+backend -> mysql : SELECT * FROM sessions\nORDER BY created_at DESC
+activate mysql
+mysql --> backend : sessions[]
+deactivate mysql
+backend --> frontend : 200 OK\n{sessions: [...]}
+deactivate backend
+frontend --> user : Display session list
+deactivate frontend
+
+@enduml

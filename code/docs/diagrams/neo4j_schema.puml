@@ -1,0 +1,99 @@
+@startuml neo4j_schema
+
+title ALRS v2 — Neo4j Graph Schema
+skinparam linetype ortho
+skinparam roundcorner 10
+skinparam classAttributeIconSize 0
+skinparam defaultFontSize 11
+skinparam classFontSize 13
+skinparam classFontStyle bold
+
+skinparam class {
+  BorderColor #555555
+  FontColor #333333
+  ArrowColor #666666
+}
+
+class "Paper" as Paper <<Node>> #LightBlue {
+  **doi** : String <<UNIQUE>>
+  title : String
+  abstract : String
+  year : Integer
+  cited_by_count : Integer
+  openalex_id : String <<INDEX>>
+  publication_date : String
+  source : String
+  embedding : Float[768] <<VECTOR INDEX>>
+  embedding_model : String
+  is_seed : Boolean
+  created_at : DateTime
+  updated_at : DateTime
+}
+
+class "Author" as Author <<Node>> #LightYellow {
+  **openalex_id** : String <<UNIQUE>>
+  name : String <<INDEX>>
+  orcid : String
+  institution : String
+}
+
+class "Venue" as Venue <<Node>> #LightGreen {
+  **openalex_id** : String <<UNIQUE>>
+  name : String <<INDEX>>
+  issn : String
+  venue_type : String
+}
+
+class "Keyword" as Keyword <<Node>> #LightSalmon {
+  term : String <<INDEX>>
+}
+
+class "Session" as Session <<Node>> #LightCoral {
+  session_id : String
+  created_at : DateTime
+}
+
+class "Question" as Question <<Node>> #Plum {
+  session_id : String
+  text : String
+  embedding : Float[768]
+  embedding_model : String
+  ..
+  <<UNIQUE>> (session_id, text)
+}
+
+' ── Relationships ──────────────────────────
+
+Paper -[#2196F3]-> Paper : "CITES"
+
+Author -[#FF9800]-> Paper : "AUTHORED\n{position: int}"
+
+Paper -[#4CAF50]-> Venue : "PUBLISHED_IN"
+
+Paper -[#FF5722]-> Keyword : "HAS_KEYWORD"
+
+Session -[#E91E63]-> Paper : "CONTAINS\n{depth: int}"
+
+' ── Legend ──────────────────────────────────
+
+legend right
+  **Indexes & Constraints**
+  ----
+  **UNIQUE Constraints:**
+  • Paper.doi
+  • Author.openalex_id
+  • Venue.openalex_id
+  • (Question.session_id, Question.text)
+
+  **Property Indexes:**
+  • Paper.openalex_id
+  • Author.name
+  • Venue.name
+  • Keyword.term
+
+  **Vector Index:**
+  • Paper.embedding
+    (768 dims, cosine similarity)
+end legend
+
+@enduml

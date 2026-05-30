@@ -30,13 +30,24 @@ class OpenAlexService:
         rate_limiter: AdaptiveRateLimiter | None = None,
         log_service: LogService | None = None,
     ) -> None:
-        self._api_key = api_key
+        # Detect placeholder keys and treat them as "no key"
+        _placeholder_keys = {"", "your_openalex_api_key_here"}
+        self._api_key = api_key if api_key not in _placeholder_keys else ""
         self._rate_limiter = rate_limiter
         self._log_service = log_service
+
+        headers: dict[str, str] = {"Accept": "application/json"}
+        if not self._api_key:
+            # Use email-based polite pool for better rate limits without a key
+            headers["User-Agent"] = "mailto:alrs-dev@example.com"
+            logger.info("OpenAlex: no API key configured, using polite pool")
+        else:
+            logger.info("OpenAlex: using API key authentication")
+
         self._client = httpx.AsyncClient(
             base_url=OPENALEX_BASE_URL,
             timeout=30.0,
-            headers={"Accept": "application/json"},
+            headers=headers,
         )
 
     async def close(self) -> None:
@@ -68,7 +79,8 @@ class OpenAlexService:
 
         if params is None:
             params = {}
-        params["api_key"] = self._api_key
+        if self._api_key:
+            params["api_key"] = self._api_key
 
         if self._rate_limiter is not None:
             await self._rate_limiter.acquire()

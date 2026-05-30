@@ -18,7 +18,7 @@
     <div class="step-line" [class.active]="currentStep > 2"></div>
     <div class="step" [class.active]="currentStep >= 3">
       <div class="step-number">3</div>
-      <span>Review</span>
+      <span>Crawl</span>
     </div>
   </div>
 
@@ -163,31 +163,111 @@
     </div>
   }
 
-  <!-- Step 3: Result -->
-  @if (currentStep === 3 && searchResult) {
-    <div class="card step-card result-card animate-fade-in">
-      <div class="result-icon">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
-          <polyline points="22,4 12,14.01 9,11.01"/>
-        </svg>
+  <!-- Step 3: BFS Crawl Progress -->
+  @if (currentStep === 3) {
+    <div class="card step-card animate-fade-in">
+      <!-- Header -->
+      <div class="crawl-header">
+        @if (streamStatus === 'running') {
+          <div class="crawl-status-icon running">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" stroke-dasharray="31.4" stroke-dashoffset="10" class="spin-circle"/>
+            </svg>
+          </div>
+          <h2>BFS Crawl in Progress</h2>
+        } @else if (streamStatus === 'complete') {
+          <div class="crawl-status-icon complete">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+              <polyline points="22,4 12,14.01 9,11.01"/>
+            </svg>
+          </div>
+          <h2>Search Complete</h2>
+        } @else if (streamStatus === 'failed') {
+          <div class="crawl-status-icon failed">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+            </svg>
+          </div>
+          <h2>Search Failed</h2>
+        } @else {
+          <h2>Preparing Search...</h2>
+        }
       </div>
-      <h2>Search Created</h2>
-      <p class="text-secondary">{{ searchResult.message }}</p>
 
-      <div class="result-details">
-        <div class="detail-row">
-          <span class="text-muted">Session ID</span>
-          <span class="mono">{{ searchResult.session_id }}</span>
+      <!-- Progress bar -->
+      <div class="progress-container">
+        <div class="progress-bar">
+          <div
+            class="progress-fill"
+            [class.running]="streamStatus === 'running'"
+            [class.complete]="streamStatus === 'complete'"
+            [class.failed]="streamStatus === 'failed'"
+            [style.width.%]="streamProgress"
+          ></div>
         </div>
-        <div class="detail-row">
-          <span class="text-muted">Seed DOI</span>
-          <span class="mono text-accent">{{ searchResult.seed_paper_doi }}</span>
+        <div class="progress-text">
+          <span class="mono">{{ streamProgress | number:'1.0-0' }}%</span>
+          <span class="text-secondary">{{ streamMessage }}</span>
         </div>
-        <div class="detail-row">
-          <span class="text-muted">Status</span>
-          <span class="badge badge-success">{{ searchResult.status }}</span>
+      </div>
+
+      <!-- Session info -->
+      @if (searchResult) {
+        <div class="result-details" style="margin-top: var(--space-5);">
+          <div class="detail-row">
+            <span class="text-muted">Session ID</span>
+            <span class="mono" style="font-size: var(--text-xs);">{{ searchResult.session_id }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="text-muted">Seed DOI</span>
+            <span class="mono text-accent">{{ searchResult.seed_paper_doi }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="text-muted">Status</span>
+            <span class="badge"
+              [class.badge-info]="streamStatus === 'running'"
+              [class.badge-success]="streamStatus === 'complete'"
+              [class.badge-warning]="streamStatus === 'failed'"
+            >{{ streamStatus | uppercase }}</span>
+          </div>
         </div>
+      }
+
+      <!-- Event log -->
+      @if (streamEvents.length > 0) {
+        <div class="event-log" style="margin-top: var(--space-6);">
+          <h3 style="margin-bottom: var(--space-3);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 6px;">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            Event Log
+          </h3>
+          <div class="event-list">
+            @for (event of streamEvents; track $index) {
+              <div class="event-item"
+                [class.event-start]="event.type === 'search_started'"
+                [class.event-level]="event.type === 'level_complete'"
+                [class.event-embed]="event.type === 'embedding_progress'"
+                [class.event-complete]="event.type === 'search_complete'"
+                [class.event-fail]="event.type === 'search_failed'"
+              >
+                <span class="event-badge">{{ event.type }}</span>
+                <span class="event-message">{{ event.message }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Actions -->
+      <div class="step-actions" style="margin-top: var(--space-6);">
+        @if (streamStatus === 'complete' || streamStatus === 'failed') {
+          <a routerLink="/sessions" class="btn-secondary">View Sessions</a>
+          <button class="btn-primary" (click)="resetSearch()">+ New Search</button>
+        }
       </div>
     </div>
   }

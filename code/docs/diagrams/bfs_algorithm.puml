@@ -1,0 +1,117 @@
+@startuml BFS_Algorithm_Activity_Diagram
+!theme plain
+title ALRS v2 — BFS Citation Crawl Algorithm
+caption Activity Diagram — GraphSearchService.run_full_search()
+
+|#LightBlue| BFS Cycle |
+|#LightGreen| Embedding |
+|#LightYellow| Decision |
+
+|BFS Cycle|
+start
+:Receive **queued_dois** list\nand session parameters;
+note right
+  Parameters:
+  - session_id
+  - seed_doi
+  - research_questions
+  - similarity_threshold
+  - max_depth
+  - mode (automated | interactive)
+end note
+
+:Emit **SEARCH_STARTED** event (0%);
+:Embed research questions\n(GeminiService.embed_question);
+
+|Decision|
+:Initialize queue ← [seed_doi];
+
+|BFS Cycle|
+while (queue is not empty\nAND depth ≤ max_depth?) is (yes)
+
+  :Pre-fetch existing session DOIs\nfrom Neo4j (get_session_dois);
+
+  while (For each DOI in queue) is (next DOI)
+
+    if (DOI already in session graph?) then (yes)
+      :Skip DOI\n(already processed);
+    else (no)
+
+      :Rate-limit: **acquire** token\n(AdaptiveRateLimiter);
+
+      :Fetch paper metadata\nfrom **OpenAlex**\n(get_paper_by_doi);
+
+      if (Paper found?) then (yes)
+
+        :MERGE Paper node\nin **Neo4j**\n(create_paper);
+
+        :Link paper to session\nat current depth\n(link_paper_to_session);
+
+        :Rate-limit: acquire token;
+        :Fetch **citations** from OpenAlex\n(get_citations → citing DOIs);
+
+        :Rate-limit: acquire token;
+        :Fetch **references** from OpenAlex\n(get_references → referenced DOIs);
+
+        while (For each neighbour DOI) is (next)
+          :Create **stub** Paper node\nif not exists;
+          :MERGE **CITES** edge\n(create_citation);
+        endwhile (done)
+
+        :Collect new DOIs\n(not yet in session);
+
+      else (not found)
+        :Log error:\n"Not found in OpenAlex";
+      endif
+
+    endif
+
+  endwhile (all DOIs processed)
+
+  :Emit **LEVEL_COMPLETE** event;
+  :Return **CycleResult**\n{level, papers_discovered,\npapers_new, new_dois, errors};
+
+  |Embedding|
+  :Get unembedded DOIs\n(get_unembedded_dois);
+
+  while (For each unembedded DOI) is (next DOI)
+
+    if (has_embedding == true?) then (yes)
+      :Skip (already embedded);
+    else (no)
+
+      :Fetch abstract\nfrom Neo4j\n(get_paper_abstract);
+
+      if (Abstract exists?) then (yes)
+        :Rate-limit: acquire token;
+        :Call **Gemini** embed_paper\n(RETRIEVAL_DOCUMENT task type);
+        :Store embedding vector\nin **Neo4j**\n(store_paper_embedding);
+      else (no abstract)
+        :Skip embedding;
+      endif
+
+    endif
+
+  endwhile (done)
+
+  :Emit **EMBEDDING_PROGRESS** event;
+
+  |Decision|
+  if (mode == automated?) then (automated)
+    :queue ← cycle.new_dois\n(feed ALL new DOIs to next level);
+    :depth++;
+  else (interactive)
+    :Emit **CYCLE_RESULTS** event\nwith level stats;
+    :Set session status = PAUSED;
+    :PAUSE — await user /enqueue;
+    stop
+  endif
+
+endwhile (queue empty OR depth exceeded)
+
+|Decision|
+:Update session stats\n(update_session_stats);
+:Emit **SEARCH_COMPLETE** event (100%);
+stop
+
+@enduml

@@ -1,0 +1,186 @@
+@startuml SSE_Events_Sequence_Diagram
+!theme plain
+title ALRS v2 — SSE Event Flow During BFS Search
+caption Sequence Diagram — Automated, Error, and Interactive Scenarios
+
+participant "Frontend\n(EventSource)" as FE #LightBlue
+participant "SSE Stream\n(/api/search/{id}/stream)" as SSE #LightGreen
+participant "BFS Engine\n(GraphSearchService)" as BFS #LightYellow
+participant "Neo4j\n(Graph DB)" as NEO #LightCoral
+participant "Gemini\n(Embedding API)" as GEM #Plum
+
+== Automated Mode — Full Search ==
+
+FE -> SSE : GET /api/search/{session_id}/stream\n(EventSource connect)
+activate SSE
+SSE -> FE : **search_started** (0%)\n{seed_doi, max_depth, mode: "automated"}
+
+note over SSE : Session status → RUNNING
+
+SSE -> BFS : run_bfs_cycle(level=1)
+activate BFS
+
+BFS -> NEO : get_session_dois(session_id)
+NEO --> BFS : existing DOIs
+
+loop For each DOI in queue
+  BFS -> NEO : paper_exists(doi)?
+  NEO --> BFS : false
+
+  BFS -> BFS : rate_limiter.acquire()
+
+  BFS -> SSE : fetch paper from OpenAlex
+  SSE --> BFS : PaperCreate
+
+  BFS -> NEO : create_paper(paper)
+  BFS -> NEO : link_paper_to_session(doi, depth=1)
+
+  BFS -> SSE : get_citations(doi)
+  SSE --> BFS : citing DOIs
+
+  BFS -> SSE : get_references(doi)
+  SSE --> BFS : referenced DOIs
+
+  BFS -> NEO : create stub + CITES edges
+end
+
+BFS --> SSE : CycleResult{level=1}
+deactivate BFS
+
+SSE -> FE : **level_complete** (~25%)\n{papers_discovered, papers_new}
+
+SSE -> NEO : get_unembedded_dois(session_id)
+NEO --> SSE : unembedded DOIs
+
+SSE -> BFS : embed_papers(unembedded_dois)
+activate BFS
+
+loop For each unembedded DOI
+  BFS -> NEO : has_embedding(doi)?
+  NEO --> BFS : false
+
+  BFS -> NEO : get_paper_abstract(doi)
+  NEO --> BFS : abstract text
+
+  BFS -> BFS : rate_limiter.acquire()
+  BFS -> GEM : embed_paper(abstract)\n[RETRIEVAL_DOCUMENT]
+  GEM --> BFS : float[768]
+
+  BFS -> NEO : store_paper_embedding(doi, vector)
+end
+
+BFS --> SSE : embedded_count
+deactivate BFS
+
+SSE -> FE : **embedding_progress** (~35%)\n{embedded_count, level: 1}
+
+|||
+
+note over SSE : Level 2 begins\n(queue = cycle.new_dois)
+
+SSE -> BFS : run_bfs_cycle(level=2)
+activate BFS
+BFS --> SSE : CycleResult{level=2}
+deactivate BFS
+
+SSE -> FE : **level_complete** (~60%)\n{papers_discovered, papers_new}
+
+SSE -> BFS : embed_papers(unembedded_dois)
+activate BFS
+BFS --> SSE : embedded_count
+deactivate BFS
+
+SSE -> FE : **embedding_progress** (~70%)\n{embedded_count, level: 2}
+
+|||
+
+SSE -> BFS : embed_questions(research_questions)
+activate BFS
+BFS -> GEM : embed_question(q)\n[RETRIEVAL_QUERY]
+GEM --> BFS : float[768]
+BFS -> NEO : store_question_embedding
+BFS --> SSE : done
+deactivate BFS
+
+SSE -> FE : **embedding_progress** (85%)\n"Research questions embedded"
+
+SSE -> FE : **search_complete** (100%)\n{total_papers}
+note over SSE : Session status → COMPLETED
+deactivate SSE
+
+== Error Recovery Scenario ==
+
+FE -> SSE : (connection active)
+activate SSE
+
+SSE -> BFS : run_bfs_cycle(...)
+activate BFS
+
+BFS -> BFS : OpenAlex returns HTTP 429
+BFS -> BFS : rate_limiter.on_429()\n(halve rate)
+
+SSE -> FE : **error_recovered**\n{service: "openalex",\nold_rate, new_rate}
+
+note over BFS : Retry succeeds\nafter backoff
+BFS -> BFS : rate_limiter.on_success()\n(slowly recover rate)
+BFS --> SSE : CycleResult (partial)
+deactivate BFS
+
+|||
+
+SSE -> BFS : Unrecoverable error
+activate BFS
+BFS --> SSE : Exception raised
+deactivate BFS
+
+SSE -> FE : **search_failed**\n{message: "Unrecoverable error: ..."}
+note over SSE : Session status → FAILED
+deactivate SSE
+
+== Interactive Mode ==
+
+FE -> SSE : GET /api/search/{session_id}/stream
+activate SSE
+
+SSE -> FE : **search_started** (0%)\n{mode: "interactive"}
+
+SSE -> BFS : run_bfs_cycle(level=1)
+activate BFS
+BFS --> SSE : CycleResult
+deactivate BFS
+
+SSE -> FE : **level_complete** (~25%)
+
+SSE -> BFS : embed_papers(...)
+activate BFS
+BFS --> SSE : embedded_count
+deactivate BFS
+
+SSE -> FE : **embedding_progress**
+
+SSE -> FE : **cycle_results** (PAUSE)\n{level: 1, papers_discovered,\npapers_new, top_papers}
+note over SSE : Session status → PAUSED
+deactivate SSE
+
+|||
+
+note over FE : Researcher reviews results\nand selects papers
+
+FE -> SSE : POST /api/search/{session_id}/enqueue\n{dois: ["10.xxx/a", "10.xxx/b"]}
+SSE --> FE : **enqueue_confirmation**\n{enqueued: 2}
+
+note over SSE : Session status → RUNNING
+
+FE -> SSE : GET /api/search/{session_id}/stream\n(reconnect for next level)
+activate SSE
+
+SSE -> BFS : run_bfs_cycle(level=2,\nqueued_dois=enqueued)
+activate BFS
+BFS --> SSE : CycleResult
+deactivate BFS
+
+SSE -> FE : **level_complete**
+SSE -> FE : **cycle_results** (PAUSE)\nor **search_complete** (100%)
+deactivate SSE
+
+@enduml

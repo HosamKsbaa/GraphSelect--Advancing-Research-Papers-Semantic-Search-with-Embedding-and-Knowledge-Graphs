@@ -1,0 +1,80 @@
+@startuml mysql_schema
+!theme cyborg
+
+title ALRS v2 — MySQL Database Schema
+skinparam linetype ortho
+skinparam roundcorner 8
+skinparam entityBackgroundColor #2B2B2B
+skinparam entityFontColor #E0E0E0
+skinparam entityBorderColor #4FC3F7
+skinparam entityHeaderBackgroundColor #37474F
+skinparam ArrowColor #81D4FA
+
+entity "sessions" as sessions {
+  * **session_id** : VARCHAR(36) <<PK>>
+  --
+  * seed_doi : VARCHAR(255) <<NOT NULL>>
+  * research_questions : JSON <<NOT NULL>>
+  similarity_threshold : FLOAT = 0.5
+  max_depth : INT = 2
+  mode : VARCHAR(20) = 'interactive'
+  status : VARCHAR(20) = 'created'
+  ..//created | running | paused | completed | failed//..
+  papers_discovered : INT = 0
+  papers_relevant : INT = 0
+  current_depth : INT = 0
+  full_state : JSON
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "settings" as settings {
+  * **setting_key** : VARCHAR(100) <<PK>>
+  --
+  * setting_value : TEXT <<NOT NULL>>
+  updated_at : TIMESTAMP
+}
+
+entity "api_logs" as api_logs {
+  * **id** : BIGINT <<PK, AUTO_INCREMENT>>
+  --
+  * session_id : VARCHAR(36) <<FK>>
+  * service : VARCHAR(50) <<NOT NULL>>
+  * method : VARCHAR(10) <<NOT NULL>>
+  * url : TEXT <<NOT NULL>>
+  status_code : INT
+  response_time_ms : INT
+  payload_summary : TEXT
+  created_at : TIMESTAMP
+  ..
+  <<INDEX>> (session_id, service, created_at)
+}
+
+entity "app_logs" as app_logs {
+  * **id** : BIGINT <<PK, AUTO_INCREMENT>>
+  --
+  * session_id : VARCHAR(36) <<FK>>
+  * level : VARCHAR(10) <<NOT NULL>>
+  * module : VARCHAR(100) <<NOT NULL>>
+  * message : TEXT <<NOT NULL>>
+  extra : JSON
+  created_at : TIMESTAMP
+  ..
+  <<INDEX>> (session_id, level, created_at)
+}
+
+sessions ||--o{ api_logs : "session_id"
+sessions ||--o{ app_logs : "session_id"
+
+note bottom of sessions
+  Core session tracking table.
+  Stores BFS search state and
+  progress counters.
+end note
+
+note bottom of settings
+  Application-wide key-value
+  configuration store.
+end note
+
+@enduml

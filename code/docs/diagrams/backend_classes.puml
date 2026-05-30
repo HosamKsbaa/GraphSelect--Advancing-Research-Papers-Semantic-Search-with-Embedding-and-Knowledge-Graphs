@@ -1,0 +1,374 @@
+@startuml Backend_Class_Diagram
+!theme plain
+title ALRS v2 — Backend Class Diagram
+caption Models, Services, and Routers with Dependencies
+
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+' ============================================================
+'  MODELS PACKAGE
+' ============================================================
+package "Models" as models #DDEBF7 {
+
+  class PaperCreate {
+    + doi : str  <<pattern: 10.XXXX/...>>
+    + title : str
+    + abstract : str | None
+    + year : int | None
+    + cited_by_count : int = 0
+    + openalex_id : str | None
+    + publication_date : str | None
+    + source : str = "openalex"
+  }
+
+  class PaperRead {
+    + doi : str
+    + title : str
+    + abstract : str | None
+    + year : int | None
+    + cited_by_count : int = 0
+    + openalex_id : str | None
+    + publication_date : str | None
+    + source : str
+    + authors : list[AuthorRead]
+    + venue : VenueRead | None
+    + keywords : list[str]
+    + created_at : datetime | None
+    __
+    //NO embedding field//
+    //(zero-RAM-copy policy)//
+  }
+
+  class PaperSummary {
+    + doi : str
+    + title : str
+    + year : int | None
+    + cited_by_count : int = 0
+    + authors : list[str]
+  }
+
+  class AuthorRead {
+    + name : str
+    + openalex_id : str | None
+    + orcid : str | None
+    + institution : str | None
+    + paper_count : int = 0
+  }
+
+  class VenueRead {
+    + name : str
+    + openalex_id : str | None
+    + issn : str | None
+    + venue_type : str | None
+    + paper_count : int = 0
+  }
+
+  class SearchRequest {
+    + seed_doi : str | None
+    + seed_title : str | None
+    + research_questions : list[str] <<1..6>>
+    + similarity_threshold : float = 0.5
+    + max_depth : int = 2  <<1..5>>
+    + mode : SearchMode = INTERACTIVE
+    --
+    + validate_questions()
+    + validate_doi()
+  }
+
+  class SearchResponse {
+    + session_id : str
+    + status : SessionStatus
+    + seed_paper_doi : str
+    + message : str
+  }
+
+  class SessionRead {
+    + session_id : str
+    + seed_doi : str
+    + research_questions : list[str]
+    + similarity_threshold : float
+    + max_depth : int
+    + mode : SearchMode
+    + status : SessionStatus
+    + papers_discovered : int = 0
+    + papers_relevant : int = 0
+    + current_depth : int = 0
+    + created_at : datetime
+    + updated_at : datetime | None
+  }
+
+  enum SessionStatus {
+    CREATED
+    RUNNING
+    PAUSED
+    COMPLETED
+    FAILED
+  }
+
+  enum SearchMode {
+    INTERACTIVE
+    AUTOMATED
+  }
+
+  enum EventType {
+    SEARCH_STARTED
+    LEVEL_COMPLETE
+    EMBEDDING_PROGRESS
+    CYCLE_RESULTS
+    RANKING_COMPLETE
+    SEARCH_COMPLETE
+    ERROR_RECOVERED
+    SEARCH_FAILED
+    THROTTLED
+    ENQUEUE_CONFIRMATION
+  }
+
+  class ProgressEvent {
+    + event_type : EventType
+    + session_id : str
+    + timestamp : datetime
+    + progress_percent : float <<0..100>>
+    + message : str
+    + data : dict | None
+  }
+
+  class CycleResult {
+    + level : int
+    + papers_discovered : int
+    + papers_new : int
+    + new_dois : list[str]
+    + errors : list[str]
+  }
+
+  class CycleResultsData {
+    + level : int
+    + papers_discovered : int
+    + papers_new : int
+    + top_papers : list[dict]
+  }
+
+  class RankedPaper {
+    + doi : str
+    + title : str
+    + year : int | None
+    + cited_by_count : int = 0
+    + similarity_score : float = 0.0
+    + pagerank_score : float = 0.0
+    + hybrid_score : float = 0.0
+    + question_group : str
+    + abstract_snippet : str | None
+    + authors : list[str]
+  }
+
+  class QuestionGroup {
+    + question : str
+    + papers : list[RankedPaper]
+    + avg_similarity : float = 0.0
+    + paper_count : int = 0
+  }
+
+  class GroupedResults {
+    + session_id : str
+    + groups : list[QuestionGroup]
+    + total_papers : int = 0
+    + similarity_threshold : float = 0.5
+    + similarity_weight : float = 0.7
+    + pagerank_weight : float = 0.3
+  }
+
+  PaperCreate <|-- PaperRead : extends
+  PaperRead *-- AuthorRead
+  PaperRead *-- VenueRead
+  GroupedResults *-- QuestionGroup
+  QuestionGroup *-- RankedPaper
+  ProgressEvent --> EventType
+  SearchRequest --> SearchMode
+  SearchResponse --> SessionStatus
+  SessionRead --> SessionStatus
+  SessionRead --> SearchMode
+}
+
+' ============================================================
+'  SERVICES PACKAGE
+' ============================================================
+package "Services" as services #E2EFDA {
+
+  class Neo4jService <<db>> {
+    - _uri : str
+    - _user : str
+    - _password : str
+    - _driver : AsyncDriver | None
+    --
+    + connect()
+    + close()
+    + health_check() : bool
+    + execute_read(query, params) : list[dict]
+    + execute_write(query, params) : list[dict]
+    .. Paper CRUD ..
+    + create_paper(paper: PaperCreate) : dict
+    + get_paper_by_doi(doi) : dict | None
+    + paper_exists(doi) : bool
+    + create_citation(citing_doi, cited_doi)
+    + get_paper_abstract(doi) : str | None
+    .. Embedding ..
+    + store_paper_embedding(doi, embedding, model)
+    + has_embedding(doi) : bool
+    + store_question_embedding(session_id, text, embedding)
+    + get_unembedded_dois(session_id) : list[str]
+    .. Session ..
+    + get_session_dois(session_id, depth?) : list[str]
+    + link_paper_to_session(doi, session_id, depth)
+    + update_session_stats(session_id) : dict
+  }
+
+  class MySQLService <<db>> {
+    - _host : str
+    - _port : int
+    - _pool : aiomysql.Pool | None
+    --
+    + connect()
+    + close()
+    + health_check() : bool
+    + execute(query, args) : int
+    + fetch_one(query, args) : dict | None
+    + fetch_all(query, args) : list[dict]
+    + initialize_schema()
+    .. Session helpers ..
+    + update_session_status(session_id, status)
+    + update_session_progress(session_id, ...)
+    + get_session(session_id) : dict | None
+  }
+
+  class GraphSearchService <<engine>> {
+    - _neo4j : Neo4jService
+    - _openalex : OpenAlexService
+    - _gemini : GeminiService
+    - _rate_limiter : AdaptiveRateLimiter
+    - _log_service : LogService | None
+    --
+    + run_bfs_cycle(session_id, queued_dois,\n    current_depth, max_depth,\n    progress_callback?) : CycleResult
+    + run_full_search(session_id, seed_doi,\n    research_questions, similarity_threshold,\n    max_depth, mode, progress_callback?)
+    + embed_papers(dois, progress_callback?) : int
+    + embed_questions(session_id, questions)
+    - _ensure_stub_and_cite(citing_doi, cited_doi)
+    - _emit(callback, event_type, ...)
+  }
+
+  class OpenAlexService <<api-client>> {
+    - _api_key : str
+    - _client : httpx.AsyncClient
+    - _rate_limiter : AdaptiveRateLimiter | None
+    - _log_service : LogService | None
+    --
+    + close()
+    + get_paper_by_doi(doi, session_id?) : PaperCreate | None
+    + search_by_title(title, max_results?) : list[PaperSummary]
+    + get_citations(doi, max_results?) : list[str]
+    + get_references(doi, max_results?) : list[str]
+    - _request(method, path, params, session_id?) : dict
+    - {static} _parse_work(data) : PaperCreate
+  }
+
+  class GeminiService <<api-client>> {
+    - _client : genai.Client
+    - _output_dimensionality : int = 768
+    - _log_service : LogService | None
+    + {static} MODEL_NAME : str = "gemini-embedding-001"
+    --
+    + embed_paper(text) : list[float]
+    + embed_question(question) : list[float]
+    - _embed(text, task_type) : list[float]
+    - {static} _normalize(embedding) : list[float]
+  }
+
+  class AdaptiveRateLimiter <<rate-control>> {
+    - _initial_rate : float = 9.0
+    - _current_rate : float
+    - _min_rate : float = 0.5
+    - _recovery_increment : float = 0.5
+    - _tokens : float
+    - _lock : asyncio.Lock
+    --
+    + acquire() <<async>>
+    + on_429() : float
+    + on_success() : float
+    + reset()
+    + current_rate : float <<property>>
+  }
+
+  class LogService <<logging>> {
+    - _mysql : MySQLService
+    --
+    + log(level, module, message, session_id?, extra?)
+    + log_api_request(service, method, url,\n    status_code?, response_time_ms?,\n    payload_summary?, session_id?)
+    + purge_expired_logs(retention_hours?) : int
+    + get_api_logs(service?, session_id?, since?, limit?) : list[dict]
+    + get_app_logs(level?, module?, session_id?, since?, limit?) : list[dict]
+  }
+}
+
+' ============================================================
+'  ROUTERS PACKAGE
+' ============================================================
+package "Routers" as routers #FCE4D6 {
+
+  class SearchRouter <<FastAPI Router>> {
+    + {static} prefix = "/api/search"
+    --
+    + POST /resolve-title\n    resolve_title(title, max_results?) : list[PaperSummary]
+    + POST /start\n    start_search(request: SearchRequest) : SearchResponse
+    + GET /{session_id}/stream\n    stream_search(session_id) : EventSourceResponse
+    + POST /{session_id}/enqueue\n    enqueue_papers(session_id, dois) : dict
+  }
+
+  class SessionsRouter <<FastAPI Router>> {
+    + {static} prefix = "/api/sessions"
+    --
+    + GET /\n    list_sessions() : SessionList
+    + GET /{session_id}\n    get_session(session_id) : SessionRead
+    + DELETE /{session_id}\n    delete_session(session_id) : dict
+  }
+
+  class PapersRouter <<FastAPI Router>> {
+    + {static} prefix = "/api/papers"
+    --
+    + GET /{doi:path}\n    get_paper_by_doi(doi) : PaperRead
+  }
+}
+
+' ============================================================
+'  DEPENDENCY ARROWS
+' ============================================================
+
+' Router → Service dependencies
+SearchRouter -down--> GraphSearchService : <<creates & uses>>
+SearchRouter -down--> OpenAlexService : <<resolve title>>
+SearchRouter -down--> MySQLService : <<session CRUD>>
+SearchRouter -down--> Neo4jService : <<seed paper>>
+
+SessionsRouter -down--> MySQLService : <<session queries>>
+
+PapersRouter -down--> Neo4jService : <<paper lookup>>
+
+' GraphSearchService → collaborators
+GraphSearchService -down--> Neo4jService : <<graph persistence>>
+GraphSearchService -down--> OpenAlexService : <<scholarly metadata>>
+GraphSearchService -down--> GeminiService : <<embedding vectors>>
+GraphSearchService -down--> AdaptiveRateLimiter : <<rate control>>
+GraphSearchService .down.> LogService : <<optional logging>>
+
+' Service → Service dependencies
+OpenAlexService .down.> AdaptiveRateLimiter : <<optional>>
+OpenAlexService .down.> LogService : <<optional>>
+GeminiService .down.> LogService : <<optional>>
+LogService -down--> MySQLService : <<persistence>>
+
+' Model usage (lighter lines)
+GraphSearchService ..> CycleResult : <<returns>>
+GraphSearchService ..> ProgressEvent : <<emits>>
+OpenAlexService ..> PaperCreate : <<returns>>
+OpenAlexService ..> PaperSummary : <<returns>>
+
+@enduml

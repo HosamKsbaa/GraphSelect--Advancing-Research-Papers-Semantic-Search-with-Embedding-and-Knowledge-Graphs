@@ -1,0 +1,14 @@
+# Development Dockerfile — runs Angular dev server with HMR
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Install dependencies first (cached layer)
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Source is bind-mounted at runtime, not copied
+EXPOSE 4200
+
+# ng serve with Docker proxy config and polling for volume compatibility
+CMD ["npx", "ng", "serve", "--host", "0.0.0.0", "--port", "4200", "--poll", "2000", "--proxy-config", "proxy.conf.docker.json"]

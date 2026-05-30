@@ -146,3 +146,52 @@ class MySQLService:
             return result is not None and result.get('ok') == 1
         except Exception:
             return False
+
+    # --- Session helpers ---
+
+    async def update_session_status(
+        self, session_id: str, status: str
+    ) -> None:
+        """Update the status of a session."""
+        await self.execute(
+            'UPDATE sessions SET status = %s WHERE session_id = %s',
+            (status, session_id),
+        )
+
+    async def update_session_progress(
+        self,
+        session_id: str,
+        *,
+        papers_discovered: int | None = None,
+        papers_relevant: int | None = None,
+        current_depth: int | None = None,
+        status: str | None = None,
+    ) -> None:
+        """Update session progress counters."""
+        updates: list[str] = []
+        params: list[object] = []
+        if papers_discovered is not None:
+            updates.append('papers_discovered = %s')
+            params.append(papers_discovered)
+        if papers_relevant is not None:
+            updates.append('papers_relevant = %s')
+            params.append(papers_relevant)
+        if current_depth is not None:
+            updates.append('current_depth = %s')
+            params.append(current_depth)
+        if status is not None:
+            updates.append('status = %s')
+            params.append(status)
+        if not updates:
+            return
+        params.append(session_id)
+        sql = f'UPDATE sessions SET {", ".join(updates)} WHERE session_id = %s'
+        await self.execute(sql, tuple(params))
+
+    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+        """Fetch a session by ID."""
+        return await self.fetch_one(
+            'SELECT * FROM sessions WHERE session_id = %s',
+            (session_id,),
+        )
+

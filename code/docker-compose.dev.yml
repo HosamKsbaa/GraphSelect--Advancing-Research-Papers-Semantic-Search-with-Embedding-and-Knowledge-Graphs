@@ -1,0 +1,109 @@
+# =============================================================================
+#  ALRS v2 — Development Stack (Hot Reload, No Rebuilds!)
+# =============================================================================
+#  Usage:
+#    First time:   docker compose -f docker-compose.dev.yml up --build
+#    After that:   docker compose -f docker-compose.dev.yml up
+#    Stop:         docker compose -f docker-compose.dev.yml down
+#
+#  What's different from production (docker-compose.yml):
+#    • Frontend: runs `ng serve` with HMR — edits reflect instantly
+#    • Backend:  source bind-mounted + uvicorn --reload — edits reflect instantly
+#    • Neo4j & MySQL: same images, separate dev volumes (data stays isolated)
+#    • No image rebuilds needed for code changes!
+# =============================================================================
+
+services:
+  # --- Angular Dev Server (HMR, live reload) ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: alrs-frontend-dev
+    ports:
+      - "4200:4200"
+    volumes:
+      - ./frontend:/app           # Bind-mount entire frontend for live editing
+      - /app/node_modules          # Anonymous volume — keeps container's node_modules
+      - ./frontend/proxy.conf.docker.json:/app/proxy.conf.docker.json  # Docker proxy
+    environment:
+      - NODE_ENV=development
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # --- FastAPI Backend (auto-reload on file save) ---
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: alrs-api-dev
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend:/app            # Bind-mount entire backend for live editing
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # --- Neo4j Graph Database ---
+  neo4j:
+    image: neo4j:5-community
+    container_name: alrs-neo4j-dev
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
+      - NEO4J_PLUGINS=["graph-data-science"]
+      - NEO4J_server_memory_heap_initial__size=256m
+      - NEO4J_server_memory_heap_max__size=512m
+    volumes:
+      - neo4j_data_dev:/data
+      - neo4j_logs_dev:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD:-changeme}", "RETURN 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  # --- MySQL Relational Database ---
+  mysql:
+    image: mysql:8.0
+    container_name: alrs-mysql-dev
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-changeme}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-alrs}
+      - MYSQL_USER=${MYSQL_USER:-alrs}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-changeme}
+    volumes:
+      - mysql_data_dev:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_PASSWORD:-changeme}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  neo4j_data_dev:
+  neo4j_logs_dev:
+  mysql_data_dev:
