@@ -1,0 +1,18 @@
+.logs-page { max-width: var(--max-content-width); }
+.page-title {
+  font-size: var(--text-3xl); font-weight: 800;
+  letter-spacing: -0.02em;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.coming-soon {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: var(--space-12) var(--space-8);
+  h3 { margin-top: var(--space-4); font-size: var(--text-lg); font-weight: 600; }
+  p { margin-top: var(--space-2); max-width: 480px; }
+}
+.planned-features {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  justify-content: center; margin-top: var(--space-6);
+}

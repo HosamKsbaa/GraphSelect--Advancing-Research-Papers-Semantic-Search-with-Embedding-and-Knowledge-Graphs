@@ -1,0 +1,149 @@
+<div class="dashboard animate-fade-in">
+  <!-- Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="text-secondary">Automated Literature Review System</p>
+    </div>
+    <a routerLink="/search" class="btn-primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      New Search
+    </a>
+  </div>
+
+  <!-- Status Cards -->
+  <div class="status-grid">
+    <!-- System Health -->
+    <div class="card status-card">
+      <div class="status-card-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+        </svg>
+        <span class="text-secondary">System Status</span>
+      </div>
+      @if (health) {
+        <div class="status-value">
+          <span class="badge" [class]="getStatusBadge(health.status)">{{ health.status }}</span>
+        </div>
+        <div class="status-details">
+          <div class="detail-row">
+            <span class="text-muted">Neo4j</span>
+            <span class="badge" [class]="getStatusBadge(health.neo4j)">{{ health.neo4j }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="text-muted">MySQL</span>
+            <span class="badge" [class]="getStatusBadge(health.mysql)">{{ health.mysql }}</span>
+          </div>
+        </div>
+      } @else {
+        <div class="skeleton" style="height: 40px; margin: 8px 0;"></div>
+        <div class="skeleton" style="height: 24px; width: 60%;"></div>
+      }
+    </div>
+
+    <!-- Version -->
+    <div class="card status-card">
+      <div class="status-card-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+        </svg>
+        <span class="text-secondary">Version</span>
+      </div>
+      <div class="version-display mono">
+        {{ version || '...' }}
+      </div>
+      <div class="text-muted" style="font-size: var(--text-xs); margin-top: var(--space-2);">
+        Alpha release — Phase 1
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="card status-card">
+      <div class="status-card-header">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+          <polyline points="14,2 14,8 20,8"/>
+        </svg>
+        <span class="text-secondary">Sessions</span>
+      </div>
+      <div class="stat-number">{{ sessions.length }}</div>
+      <div class="text-muted" style="font-size: var(--text-xs); margin-top: var(--space-2);">
+        Recent sessions
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Banner -->
+  @if (error) {
+    <div class="error-banner card">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <div>
+        <strong>Connection Error</strong>
+        <p>{{ error }}</p>
+      </div>
+    </div>
+  }
+
+  <!-- Recent Sessions -->
+  <div class="section">
+    <h2 class="section-title">Recent Sessions</h2>
+
+    @if (loading) {
+      <div class="sessions-grid">
+        @for (i of [1, 2, 3]; track i) {
+          <div class="card session-card">
+            <div class="skeleton" style="height: 20px; width: 80%; margin-bottom: 12px;"></div>
+            <div class="skeleton" style="height: 14px; width: 60%; margin-bottom: 8px;"></div>
+            <div class="skeleton" style="height: 14px; width: 40%;"></div>
+          </div>
+        }
+      </div>
+    } @else if (sessions.length === 0) {
+      <div class="empty-state card">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <h3>No sessions yet</h3>
+        <p class="text-secondary">Start your first literature search to see results here.</p>
+        <a routerLink="/search" class="btn-primary" style="margin-top: var(--space-4);">
+          Start a Search
+        </a>
+      </div>
+    } @else {
+      <div class="sessions-grid">
+        @for (session of sessions; track session.session_id) {
+          <div class="card session-card animate-fade-in">
+            <div class="session-header">
+              <span class="mono text-accent" style="font-size: var(--text-xs);">
+                {{ session.seed_doi }}
+              </span>
+              <span class="badge" [class]="getSessionStatusBadge(session.status)">
+                {{ session.status }}
+              </span>
+            </div>
+            <div class="session-questions">
+              @for (q of session.research_questions.slice(0, 2); track q) {
+                <p class="question-text">{{ q }}</p>
+              }
+            </div>
+            <div class="session-stats">
+              <span class="stat">
+                <strong>{{ session.papers_discovered }}</strong> papers
+              </span>
+              <span class="stat">
+                <strong>{{ session.papers_relevant }}</strong> relevant
+              </span>
+              <span class="stat">
+                Depth {{ session.current_depth }}/{{ session.max_depth }}
+              </span>
+            </div>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

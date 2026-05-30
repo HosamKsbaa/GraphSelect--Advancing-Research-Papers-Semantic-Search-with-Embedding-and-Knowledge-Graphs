@@ -1,0 +1,43 @@
+<div class="sessions-page animate-fade-in">
+  <h1 class="page-title">Sessions</h1>
+  <p class="text-secondary" style="margin-bottom: var(--space-8);">Manage your literature review sessions.</p>
+
+  @if (loading) {
+    <div class="sessions-list">
+      @for (i of [1, 2, 3]; track i) {
+        <div class="card"><div class="skeleton" style="height: 80px;"></div></div>
+      }
+    </div>
+  } @else if (sessions.length === 0) {
+    <div class="empty-state card">
+      <h3>No sessions</h3>
+      <p class="text-secondary">Start a search to create your first session.</p>
+    </div>
+  } @else {
+    <div class="sessions-list">
+      @for (session of sessions; track session.session_id) {
+        <div class="card session-row animate-fade-in">
+          <div class="session-info">
+            <div class="session-top">
+              <span class="mono text-accent" style="font-size: var(--text-xs);">{{ session.seed_doi }}</span>
+              <span class="badge" [class]="getStatusBadge(session.status)">{{ session.status }}</span>
+            </div>
+            <div class="session-questions-preview">
+              @for (q of session.research_questions.slice(0, 2); track q) {
+                <p>→ {{ q }}</p>
+              }
+            </div>
+            <div class="session-meta text-muted">
+              {{ session.papers_discovered }} papers · {{ session.papers_relevant }} relevant · Depth {{ session.current_depth }}/{{ session.max_depth }}
+            </div>
+          </div>
+          <button class="btn-ghost delete-btn" (click)="deleteSession(session.session_id)" title="Delete session">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3,6 5,6 21,6"/><path d="M19,6v14a2,2 0 0,1-2,2H7a2,2 0 0,1-2-2V6m3,0V4a2,2 0 0,1,2-2h4a2,2 0 0,1,2,2v2"/>
+            </svg>
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

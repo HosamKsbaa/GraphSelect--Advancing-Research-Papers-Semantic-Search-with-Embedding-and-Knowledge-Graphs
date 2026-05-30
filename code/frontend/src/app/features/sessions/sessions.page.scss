@@ -1,0 +1,27 @@
+.sessions-page { max-width: var(--max-content-width); }
+.page-title {
+  font-size: var(--text-3xl); font-weight: 800;
+  letter-spacing: -0.02em;
+  background: var(--gradient-primary);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.sessions-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.session-row {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: var(--space-5) var(--space-6);
+}
+.session-info { flex: 1; }
+.session-top { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+.session-questions-preview {
+  font-size: var(--text-sm); color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+  p { margin-bottom: var(--space-1); }
+}
+.session-meta { font-size: var(--text-xs); }
+.delete-btn { color: var(--color-text-muted); &:hover { color: var(--color-error); } }
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: var(--space-12);
+  h3 { font-size: var(--text-lg); margin-bottom: var(--space-2); }
+}
