@@ -100,7 +100,7 @@ async def test_log_service_successful_api_log() -> None:
     args = mock_mysql.execute.call_args[0][1]
 
     assert "INSERT INTO api_logs" in query
-    assert args == ("session-123", "OpenAlex", "GET", "https://api.openalex.org/works", 200, 150, "Successful fetch")
+    assert args == ("session-123", "OpenAlex", "GET", "https://api.openalex.org/works", 200, 150, "Successful fetch", None, None)
 
 
 @pytest.mark.asyncio
@@ -237,19 +237,19 @@ async def test_log_service_api_log_service_canonicalization() -> None:
     args = mock_mysql.execute.call_args[0][1]
     assert args[1] == "Gemini"  # Stored as uniform "Gemini"
 
-    # 2. Test querying canonicalization
+    # 2. Test querying canonicalization (database query is case-insensitive LOWER matching)
     mock_mysql.reset_mock()
     mock_mysql.fetch_all.return_value = []
     await log_service.get_api_logs(service="openalex")
     mock_mysql.fetch_all.assert_called_once()
     query_args = mock_mysql.fetch_all.call_args[0][1]
-    assert "OpenAlex" in query_args
+    assert "openalex" in query_args
 
     mock_mysql.reset_mock()
     await log_service.get_api_logs(service="gemini")
     mock_mysql.fetch_all.assert_called_once()
     query_args = mock_mysql.fetch_all.call_args[0][1]
-    assert "Gemini" in query_args
+    assert "gemini" in query_args
 
 
 @pytest.mark.asyncio
