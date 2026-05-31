@@ -131,7 +131,7 @@ export class ApiService {
     sessionId?: string,
     limit = 100
   ): Observable<AppLog[]> {
-    let params = `limit=${limit}`;
+    let params = `limit=${limit}&_t=${new Date().getTime()}`;
     if (level) params += `&level=${encodeURIComponent(level)}`;
     if (module) params += `&module=${encodeURIComponent(module)}`;
     if (sessionId) params += `&session_id=${encodeURIComponent(sessionId)}`;
@@ -143,7 +143,7 @@ export class ApiService {
     sessionId?: string,
     limit = 100
   ): Observable<ApiLog[]> {
-    let params = `limit=${limit}`;
+    let params = `limit=${limit}&_t=${new Date().getTime()}`;
     if (service) params += `&service=${encodeURIComponent(service)}`;
     if (sessionId) params += `&session_id=${encodeURIComponent(sessionId)}`;
     return this.http.get<ApiLog[]>(`${this.baseUrl}/logs/api-requests?${params}`);
@@ -209,6 +209,8 @@ export interface ApiLog {
   status_code: number | null;
   response_time_ms: number | null;
   payload_summary: string | null;
+  request_body?: string | null;
+  response_body?: string | null;
   created_at: string;
 }
 

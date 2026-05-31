@@ -93,6 +93,7 @@ class Neo4jService:
         """
         query = """
         MERGE (p:Paper {doi: $doi})
+        ON CREATE SET p.created_at = datetime()
         SET p.title           = $title,
             p.abstract        = $abstract,
             p.year            = $year,
@@ -101,7 +102,6 @@ class Neo4jService:
             p.publication_date = $publication_date,
             p.source          = $source,
             p.updated_at      = datetime()
-        ON CREATE SET p.created_at = datetime()
         RETURN p.doi           AS doi,
                p.title         AS title,
                p.abstract      AS abstract,
@@ -150,6 +150,23 @@ class Neo4jService:
         """
         records = await self.execute_read(query, {'doi': doi})
         return bool(records and records[0].get('cnt', 0) > 0)
+
+    async def ensure_stub_and_cite(self, citing_doi: str, cited_doi: str) -> None:
+        """Atomically create paper stubs (if missing) and a CITES relationship.
+        
+        Uses MERGE ... ON CREATE SET to prevent overwriting real paper data.
+        """
+        query = """
+        MERGE (a:Paper {doi: $citing_doi})
+        ON CREATE SET a.title = '[pending]', a.source = 'stub', a.created_at = datetime(), a.updated_at = datetime()
+        MERGE (b:Paper {doi: $cited_doi})
+        ON CREATE SET b.title = '[pending]', b.source = 'stub', b.created_at = datetime(), b.updated_at = datetime()
+        MERGE (a)-[:CITES]->(b)
+        """
+        await self.execute_write(query, {
+            'citing_doi': citing_doi,
+            'cited_doi': cited_doi,
+        })
 
     async def create_citation(self, citing_doi: str, cited_doi: str) -> None:
         """Create a CITES relationship between two papers.
@@ -274,7 +291,8 @@ class Neo4jService:
         query = """
         MATCH (p:Paper {doi: $doi})
         MERGE (s:Session {session_id: $session_id})
-        MERGE (s)-[:CONTAINS {depth: $depth}]->(p)
+        MERGE (s)-[r:CONTAINS]->(p)
+        ON CREATE SET r.depth = $depth
         """
         await self.execute_write(query, {
             'doi': doi,
@@ -487,8 +505,7 @@ class Neo4jService:
         """Trivial citation-degree fallback if NetworkX is also not installed."""
         query = """
         MATCH (s:Session {session_id: $session_id})-[:CONTAINS]->(p:Paper)
-        OPTIONAL MATCH (p)-[:CITES]-(other:Paper)
-        WHERE (s)-[:CONTAINS]->(other)
+        OPTIONAL MATCH (s)-[:CONTAINS]->(other:Paper)-[:CITES]->(p)
         RETURN p.doi AS doi, count(other) AS degree
         """
         records = await self.execute_read(query, {"session_id": session_id})

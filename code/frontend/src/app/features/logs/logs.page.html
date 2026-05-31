@@ -31,7 +31,7 @@
       @if (activeTab === 'app') {
         <div class="control-item">
           <label for="level-select">Severity Level</label>
-          <select id="level-select" [(ngModel)]="levelFilter" (change)="loadLogs()">
+          <select id="level-select" [(ngModel)]="levelFilter" (ngModelChange)="loadLogs()">
             <option value="">All Severities</option>
             <option value="DEBUG">DEBUG</option>
             <option value="INFO">INFO</option>
@@ -42,7 +42,7 @@
       } @else {
         <div class="control-item">
           <label for="service-select">Scholar Service</label>
-          <select id="service-select" [(ngModel)]="serviceFilter" (change)="loadLogs()">
+          <select id="service-select" [(ngModel)]="serviceFilter" (ngModelChange)="loadLogs()">
             <option value="">All Services</option>
             <option value="OpenAlex">OpenAlex API</option>
             <option value="OpenCitations">OpenCitations API</option>
@@ -53,11 +53,11 @@
 
       <div class="control-item">
         <label for="limit-select">Logs Limit</label>
-        <select id="limit-select" [(ngModel)]="limit" (change)="loadLogs()">
-          <option [value]="25">25 rows</option>
-          <option [value]="50">50 rows</option>
-          <option [value]="100">100 rows</option>
-          <option [value]="250">250 rows</option>
+        <select id="limit-select" [(ngModel)]="limit" (ngModelChange)="loadLogs()">
+          <option [ngValue]="25">25 rows</option>
+          <option [ngValue]="50">50 rows</option>
+          <option [ngValue]="100">100 rows</option>
+          <option [ngValue]="250">250 rows</option>
         </select>
       </div>
     </div>
@@ -195,6 +195,36 @@
                               }
                             </button>
                             <pre class="extra-pre mono">{{ api.payload_summary }}</pre>
+                          </div>
+                        </details>
+                      }
+                      @if (api.request_body) {
+                        <details class="extra-details" style="margin-top: 6px;">
+                          <summary class="text-xs text-muted">View Request Body</summary>
+                          <div class="pre-container">
+                            <button class="copy-btn glass" (click)="copyToClipboard(api.formatted_request_body || '', api.id, 'api-req', $event)">
+                              @if (copiedId === api.id && copiedType === 'api-req') {
+                                Copied!
+                              } @else {
+                                Copy Body
+                              }
+                            </button>
+                            <pre class="extra-pre mono">{{ api.formatted_request_body }}</pre>
+                          </div>
+                        </details>
+                      }
+                      @if (api.response_body) {
+                        <details class="extra-details" style="margin-top: 6px;">
+                          <summary class="text-xs text-muted">View Response Body</summary>
+                          <div class="pre-container">
+                            <button class="copy-btn glass" (click)="copyToClipboard(api.formatted_response_body || '', api.id, 'api-res', $event)">
+                              @if (copiedId === api.id && copiedType === 'api-res') {
+                                Copied!
+                              } @else {
+                                Copy Response
+                              }
+                            </button>
+                            <pre class="extra-pre mono">{{ api.formatted_response_body }}</pre>
                           </div>
                         </details>
                       }

@@ -84,13 +84,33 @@ class GraphSearchService:
                 data={'level': depth, 'queue_size': len(queue)},
             )
 
-            cycle = await self._crawler.run_bfs_cycle(
-                session_id=session_id,
-                queued_dois=queue,
-                current_depth=depth + 1,
-                max_depth=max_depth,
-                progress_callback=None,
+            import asyncio
+            q: asyncio.Queue[ProgressEvent] = asyncio.Queue()
+
+            async def progress_callback(evt: ProgressEvent) -> None:
+                await q.put(evt)
+
+            task = asyncio.create_task(
+                self._crawler.run_bfs_cycle(
+                    session_id=session_id,
+                    queued_dois=queue,
+                    current_depth=depth + 1,
+                    max_depth=max_depth,
+                    progress_callback=progress_callback,
+                )
             )
+
+            while not task.done():
+                try:
+                    evt = await asyncio.wait_for(q.get(), timeout=0.1)
+                    yield evt
+                except asyncio.TimeoutError:
+                    pass
+
+            while not q.empty():
+                yield q.get_nowait()
+
+            cycle = task.result()
 
             total_discovered += cycle.papers_discovered
 

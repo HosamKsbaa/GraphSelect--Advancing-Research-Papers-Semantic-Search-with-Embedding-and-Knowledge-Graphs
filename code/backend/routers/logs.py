@@ -4,7 +4,7 @@ Exposes relational application and API crawl logs to the frontend with flexible 
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import logging
 from typing import Any, Dict, List, Optional
@@ -49,6 +49,8 @@ class ApiLogResponse(BaseModel):
     status_code: Optional[int] = Field(None, description="HTTP status code returned by the service")
     response_time_ms: Optional[int] = Field(None, description="Response time in milliseconds")
     payload_summary: Optional[str] = Field(None, description="Summary or snippet of the request/response payload")
+    request_body: Optional[str] = Field(None, description="The full JSON request payload sent")
+    response_body: Optional[str] = Field(None, description="The full JSON response payload received")
     created_at: datetime = Field(..., description="Timestamp of when the log was created")
 
 
@@ -141,7 +143,7 @@ async def get_app_logs(
                 module=log["module"],
                 message=log["message"],
                 extra=extra_val if isinstance(extra_val, dict) else None,
-                created_at=log["created_at"],
+                created_at=log["created_at"].replace(tzinfo=timezone.utc) if isinstance(log["created_at"], datetime) and log["created_at"].tzinfo is None else log["created_at"],
             )
         )
     return response_logs
@@ -173,7 +175,9 @@ async def get_api_logs(
             status_code=log.get("status_code"),
             response_time_ms=log.get("response_time_ms"),
             payload_summary=log.get("payload_summary"),
-            created_at=log["created_at"],
+            request_body=log.get("request_body"),
+            response_body=log.get("response_body"),
+            created_at=log["created_at"].replace(tzinfo=timezone.utc) if isinstance(log["created_at"], datetime) and log["created_at"].tzinfo is None else log["created_at"],
         )
         for log in logs
     ]

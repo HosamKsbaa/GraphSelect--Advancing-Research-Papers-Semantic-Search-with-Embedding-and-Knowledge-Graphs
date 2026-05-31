@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+import asyncio
 from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException, status, Depends, Request
@@ -44,8 +45,15 @@ async def resolve_title(
     openalex: OpenAlexService = Depends(get_openalex_service)
 ) -> list[PaperSummary]:
     """Search for papers by title, returning a candidate list."""
-    candidates = await openalex.search_by_title(title, max_results)
-    return candidates
+    try:
+        candidates = await openalex.search_by_title(title, max_results)
+        return candidates
+    except Exception as e:
+        logger.exception("Failed to resolve title: %s", title)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OpenAlex error: {str(e)}"
+        )
 
 
 @router.post("/start", response_model=SearchResponse)
@@ -81,11 +89,29 @@ async def start_search(
         ),
     )
 
-    paper = await openalex.get_paper_by_doi(seed_doi, session_id=session_id)
-    if paper is None:
+    try:
+        paper = await openalex.get_paper_by_doi(seed_doi, session_id=session_id)
+        if paper is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Paper not found in OpenAlex: {seed_doi}",
+            )
+    except HTTPException:
+        # Re-raise 404
+        await mysql.execute(
+            "UPDATE sessions SET status = %s WHERE session_id = %s",
+            (SessionStatus.FAILED.value, session_id)
+        )
+        raise
+    except Exception as e:
+        logger.exception("Failed to get seed paper %s", seed_doi)
+        await mysql.execute(
+            "UPDATE sessions SET status = %s WHERE session_id = %s",
+            (SessionStatus.FAILED.value, session_id)
+        )
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Paper not found in OpenAlex: {seed_doi}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OpenAlex error: {str(e)}"
         )
 
     await neo4j.execute_write(
@@ -230,6 +256,12 @@ async def stream_search(
                     session_id, SessionStatus.PAUSED.value
                 )
 
+        except asyncio.CancelledError:
+            logger.info("Search stream cancelled for session %s", session_id)
+            await mysql_service.update_session_status(
+                session_id, SessionStatus.PAUSED.value
+            )
+            raise
         except Exception as e:
             logger.exception("Search failed for session %s", session_id)
             await mysql_service.update_session_status(

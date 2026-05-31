@@ -74,88 +74,117 @@ class CrawlerService:
         max_depth: int,
         progress_callback: ProgressCallback = None,
     ) -> CycleResult:
+        import asyncio
+
         errors: list[str] = []
         new_dois_set: set[str] = set()
         papers_discovered = 0
         papers_new = 0
-        total = len(queued_dois)
 
         existing_session_dois: set[str] = set(
             await self._neo4j.get_session_dois(session_id)
         )
 
-        for idx, doi in enumerate(queued_dois):
+        dois_to_process = [
+            d for d in queued_dois
+            if d not in existing_session_dois or current_depth == 1
+        ]
+        total = len(dois_to_process)
+
+        if not dois_to_process:
+            return CycleResult(
+                level=current_depth,
+                papers_discovered=0,
+                papers_new=0,
+                new_dois=[],
+            )
+
+        await self._emit(
+            progress_callback,
+            EventType.LEVEL_COMPLETE,
+            session_id,
+            10.0,
+            f'Batch fetching {total} papers for level {current_depth}...',
+        )
+
+        try:
+            papers = await self._openalex.batch_get_papers_by_dois(
+                dois_to_process, session_id=session_id
+            )
+        except Exception as e:
+            msg = f"Error fetching batch papers: {e}"
+            logger.exception(msg)
+            errors.append(msg)
+            papers = []
+        fetched_papers_map = {p.doi: p for p in papers}
+
+        for doi in dois_to_process:
+            paper = fetched_papers_map.get(doi)
+            if not paper:
+                logger.warning('Paper not found in OpenAlex: %s', doi)
+                errors.append(f'Not found in OpenAlex: {doi}')
+                continue
+            
+            await self._neo4j.create_paper(paper)
+            await self._neo4j.link_paper_to_session(
+                doi=paper.doi,
+                session_id=session_id,
+                depth=current_depth,
+            )
+            existing_session_dois.add(paper.doi)
+            papers_discovered += 1
+            papers_new += 1
+
+        await self._emit(
+            progress_callback,
+            EventType.LEVEL_COMPLETE,
+            session_id,
+            50.0,
+            f'Fetching citations/references concurrently for {papers_new} papers...',
+        )
+
+        async def _fetch_edges(p: PaperCreate) -> tuple[str, list[str], list[str]]:
             try:
-                pct = ((idx + 1) / total) * 100 if total else 0
-                await self._emit(
-                    progress_callback,
-                    EventType.LEVEL_COMPLETE,
-                    session_id,
-                    pct,
-                    f'Processing DOI {idx + 1}/{total}: {doi}',
-                    {'doi': doi, 'level': current_depth},
-                )
-
-                if doi in existing_session_dois and current_depth > 1:
-                    logger.debug('Skipping already-processed DOI: %s', doi)
-                    continue
-
                 if self._rate_limiter is not None:
                     await self._rate_limiter.acquire()
-
-                paper: PaperCreate | None = await self._openalex.get_paper_by_doi(
-                    doi, session_id=session_id,
+                citing = await self._openalex.get_citations(
+                    p.doi, session_id=session_id, openalex_id=p.openalex_id
                 )
-                if paper is None:
-                    logger.warning('Paper not found in OpenAlex: %s', doi)
-                    errors.append(f'Not found in OpenAlex: {doi}')
-                    continue
-
-                await self._neo4j.create_paper(paper)
-                await self._neo4j.link_paper_to_session(
-                    doi=paper.doi,
-                    session_id=session_id,
-                    depth=current_depth,
-                )
-                existing_session_dois.add(paper.doi)
-                papers_discovered += 1
-                papers_new += 1
-
                 if self._rate_limiter is not None:
                     await self._rate_limiter.acquire()
-                citing_dois = await self._openalex.get_citations(
-                    doi, session_id=session_id,
+                refs = await self._openalex.get_references(
+                    p.doi, session_id=session_id, openalex_id=p.openalex_id
                 )
-
-                if self._rate_limiter is not None:
-                    await self._rate_limiter.acquire()
-                referenced_dois = await self._openalex.get_references(
-                    doi, session_id=session_id,
-                )
-
-                neighbour_dois: list[str] = []
-                for cited_doi in citing_dois:
-                    await self._ensure_stub_and_cite(
-                        citing_doi=cited_doi,
-                        cited_doi=doi,
-                    )
-                    neighbour_dois.append(cited_doi)
-
-                for ref_doi in referenced_dois:
-                    await self._ensure_stub_and_cite(
-                        citing_doi=doi,
-                        cited_doi=ref_doi,
-                    )
-                    neighbour_dois.append(ref_doi)
-
-                for ndoi in neighbour_dois:
-                    if ndoi not in existing_session_dois:
-                        new_dois_set.add(ndoi)
-
-            except Exception as exc:
-                msg = f'Error processing DOI {doi}: {exc}'
+                return p.doi, citing, refs
+            except Exception as e:
+                msg = f'Error fetching edges for {p.doi}: {e}'
                 logger.exception(msg)
                 errors.append(msg)
+                return p.doi, [], []
+
+        tasks = [_fetch_edges(p) for p in papers]
+        edge_results = await asyncio.gather(*tasks)
+
+        for doi, citing_dois, referenced_dois in edge_results:
+            neighbour_dois: list[str] = []
+            
+            for cited_doi in citing_dois:
+                await self._neo4j.ensure_stub_and_cite(
+                    citing_doi=cited_doi,
+                    cited_doi=doi,
+                )
+                neighbour_dois.append(cited_doi)
+
+            for ref_doi in referenced_dois:
+                await self._neo4j.ensure_stub_and_cite(
+                    citing_doi=doi,
+                    cited_doi=ref_doi,
+                )
+                neighbour_dois.append(ref_doi)
+
+            for ndoi in neighbour_dois:
+                if ndoi not in existing_session_dois:
+                    new_dois_set.add(ndoi)
 
         if self._log_service is not None:
             await self._log_service.log(
@@ -182,18 +211,4 @@ class CrawlerService:
             errors=errors,
         )
 
-    async def _ensure_stub_and_cite(
-        self,
-        citing_doi: str,
-        cited_doi: str,
-    ) -> None:
-        for doi in (citing_doi, cited_doi):
-            if not await self._neo4j.paper_exists(doi):
-                stub = PaperCreate(
-                    doi=doi,
-                    title='[pending]',
-                    source='stub',
-                )
-                await self._neo4j.create_paper(stub)
 
-        await self._neo4j.create_citation(citing_doi, cited_doi)

@@ -103,6 +103,11 @@ class OpenAlexService:
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
 
                 if self._log_service is not None:
+                    # Truncate response_body if excessively large to avoid DB issues
+                    resp_text = response.text
+                    if len(resp_text) > 50000:
+                        resp_text = resp_text[:50000] + "...[TRUNCATED]"
+                        
                     await self._log_service.log_api_request(
                         service="OpenAlex",
                         method=method,
@@ -110,6 +115,8 @@ class OpenAlexService:
                         status_code=response.status_code,
                         response_time_ms=elapsed_ms,
                         payload_summary=f"params={list(params.keys())}",
+                        request_body=None,
+                        response_body=resp_text,
                         session_id=session_id,
                     )
 
@@ -135,6 +142,10 @@ class OpenAlexService:
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
                 status_code = getattr(getattr(exc, "response", None), "status_code", 500)
                 if self._log_service is not None:
+                    resp_text = getattr(getattr(exc, "response", None), "text", None)
+                    if resp_text and len(resp_text) > 50000:
+                        resp_text = resp_text[:50000] + "...[TRUNCATED]"
+                        
                     await self._log_service.log_api_request(
                         service="OpenAlex",
                         method=method,
@@ -142,6 +153,8 @@ class OpenAlexService:
                         status_code=status_code,
                         response_time_ms=elapsed_ms,
                         payload_summary=f"FAILED: {str(exc)}",
+                        request_body=None,
+                        response_body=resp_text,
                         session_id=session_id,
                     )
                 raise exc
@@ -175,6 +188,45 @@ class OpenAlexService:
                 return None
             raise
 
+    async def batch_get_papers_by_dois(
+        self,
+        dois: list[str],
+        session_id: str | None = None,
+    ) -> list[PaperCreate]:
+        """Fetch multiple papers by DOIs efficiently.
+
+        Chunks the requests in batches of 50 and uses the OR filter syntax.
+        """
+        if not dois:
+            return []
+
+        # Make unique and remove prefix
+        clean_dois = list(set(doi.replace("https://doi.org/", "") for doi in dois))
+        papers: list[PaperCreate] = []
+        chunk_size = 50
+
+        for i in range(0, len(clean_dois), chunk_size):
+            chunk = clean_dois[i : i + chunk_size]
+            joined_dois = "|".join(chunk)
+            filter_val = f"doi:{joined_dois}"
+            
+            data = await self._request(
+                "GET",
+                "/works",
+                params={
+                    "filter": filter_val,
+                    "per_page": len(chunk),
+                },
+                session_id=session_id,
+            )
+            
+            results = data.get("results", [])
+            for res in results:
+                if isinstance(res, dict):
+                    papers.append(self._parse_work(res))
+
+        return papers
+
     async def search_by_title(
         self,
         title: str,
@@ -201,14 +253,14 @@ class OpenAlexService:
             },
             session_id=session_id,
         )
-        results: list[dict[str, object]] = data.get("results", [])  # type: ignore[assignment]
+        results: list[dict[str, object]] = data.get("results") or []  # type: ignore[assignment]
         candidates: list[PaperSummary] = []
         for work in results:
             doi = work.get("doi")
             if doi is None:
                 continue
             doi_str = str(doi).replace("https://doi.org/", "")
-            authorships: list[dict[str, object]] = work.get("authorships", [])  # type: ignore[assignment]
+            authorships: list[dict[str, object]] = work.get("authorships") or []  # type: ignore[assignment]
             author_names: list[str] = []
             for auth in authorships:
                 author_info: dict[str, object] = auth.get("author", {})  # type: ignore[assignment]
@@ -220,7 +272,7 @@ class OpenAlexService:
                     doi=doi_str,
                     title=str(work.get("title", "")),
                     year=work.get("publication_year"),  # type: ignore[arg-type]
-                    cited_by_count=int(work.get("cited_by_count", 0)),  # type: ignore[arg-type]
+                    cited_by_count=int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
                     authors=author_names[:5],
                 )
             )
@@ -231,6 +283,7 @@ class OpenAlexService:
         doi: str,
         max_results: int = 200,
         session_id: str | None = None,
+        openalex_id: str | None = None,
     ) -> list[str]:
         """Get DOIs of papers that cite the given paper.
 
@@ -238,21 +291,27 @@ class OpenAlexService:
             doi: The DOI of the paper.
             max_results: Maximum number of citing DOIs.
             session_id: Session ID for log correlation.
+            openalex_id: The OpenAlex ID to use for robust filtering (e.g., 'W12345').
 
         Returns:
             List of citing paper DOIs.
         """
+        filter_str = f"cites:doi:{doi}"
+        if openalex_id:
+            short_id = openalex_id.replace("https://openalex.org/", "")
+            filter_str = f"cites:{short_id}"
+
         data = await self._request(
             "GET",
             "/works",
             params={
-                "filter": f"cites:doi:{doi}",
+                "filter": filter_str,
                 "per_page": min(max_results, 200),
                 "select": "doi",
             },
             session_id=session_id,
         )
-        results: list[dict[str, object]] = data.get("results", [])  # type: ignore[assignment]
+        results: list[dict[str, object]] = data.get("results") or []  # type: ignore[assignment]
         dois: list[str] = []
         for work in results:
             work_doi = work.get("doi")
@@ -265,6 +324,7 @@ class OpenAlexService:
         doi: str,
         max_results: int = 200,
         session_id: str | None = None,
+        openalex_id: str | None = None,
     ) -> list[str]:
         """Get DOIs of papers referenced by the given paper.
 
@@ -272,21 +332,27 @@ class OpenAlexService:
             doi: The DOI of the paper.
             max_results: Maximum number of referenced DOIs.
             session_id: Session ID for log correlation.
+            openalex_id: The OpenAlex ID to use for robust filtering (e.g., 'W12345').
 
         Returns:
             List of referenced paper DOIs.
         """
+        filter_str = f"cited_by:doi:{doi}"
+        if openalex_id:
+            short_id = openalex_id.replace("https://openalex.org/", "")
+            filter_str = f"cited_by:{short_id}"
+
         data = await self._request(
             "GET",
             "/works",
             params={
-                "filter": f"cited_by:doi:{doi}",
+                "filter": filter_str,
                 "per_page": min(max_results, 200),
                 "select": "doi",
             },
             session_id=session_id,
         )
-        results: list[dict[str, object]] = data.get("results", [])  # type: ignore[assignment]
+        results: list[dict[str, object]] = data.get("results") or []  # type: ignore[assignment]
         dois: list[str] = []
         for work in results:
             work_doi = work.get("doi")
@@ -336,10 +402,11 @@ class OpenAlexService:
             title=str(data.get("title", "")),
             abstract=abstract,
             year=data.get("publication_year"),  # type: ignore[arg-type]
-            cited_by_count=int(data.get("cited_by_count", 0)),  # type: ignore[arg-type]
+            cited_by_count=int(data.get("cited_by_count") or 0),  # type: ignore[arg-type]
             openalex_id=str(data.get("id", "")) if data.get("id") else None,
             publication_date=str(data.get("publication_date", ""))
             if data.get("publication_date")
             else None,
+            referenced_works=data.get("referenced_works", []),  # type: ignore[arg-type]
             source="openalex",
         )

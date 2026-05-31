@@ -130,46 +130,83 @@ class GeminiService:
         import time
         from functools import partial
 
-        start_ms = int(time.monotonic() * 1000)
         loop = asyncio.get_running_loop()
+        max_retries = 3
 
-        try:
-            func = partial(
-                self._client.models.embed_content,
-                model=self._model_name,
-                contents=text,
-                config=types.EmbedContentConfig(
-                    output_dimensionality=self._output_dimensionality,
-                ),
-            )
-            result = await loop.run_in_executor(None, func)
-            elapsed_ms = int(time.monotonic() * 1000) - start_ms
+        for attempt in range(max_retries + 1):
+            start_ms = int(time.monotonic() * 1000)
+            try:
+                func = partial(
+                    self._client.models.embed_content,
+                    model=self._model_name,
+                    contents=text,
+                    config=types.EmbedContentConfig(
+                        output_dimensionality=self._output_dimensionality,
+                    ),
+                )
+                result = await loop.run_in_executor(None, func)
+                elapsed_ms = int(time.monotonic() * 1000) - start_ms
 
-            if self._log_service is not None:
-                await self._log_service.log_api_request(
-                    service="Gemini",
-                    method="POST",
-                    url=f"models/{self._model_name}:embedContent",
-                    status_code=200,
-                    response_time_ms=elapsed_ms,
-                    payload_summary=f"purpose={purpose}, dims={self._output_dimensionality}, "
-                    f"text_len={len(text)}",
-                    session_id=session_id,
-                )
-        except Exception as exc:
-            elapsed_ms = int(time.monotonic() * 1000) - start_ms
-            status_code = getattr(exc, "code", 500)
-            if self._log_service is not None:
-                await self._log_service.log_api_request(
-                    service="Gemini",
-                    method="POST",
-                    url=f"models/{self._model_name}:embedContent",
-                    status_code=status_code,
-                    response_time_ms=elapsed_ms,
-                    payload_summary=f"FAILED: {str(exc)}",
-                    session_id=session_id,
-                )
-            raise exc
+                if self._log_service is not None:
+                    import json
+                    req_body = json.dumps({
+                        "model": self._model_name,
+                        "contents": text,
+                        "output_dimensionality": self._output_dimensionality
+                    })
+                    
+                    # Convert embeddings to dict for logging
+                    resp_dict = {"embeddings": []}
+                    if hasattr(result, "embeddings"):
+                        for emb in result.embeddings:
+                            if hasattr(emb, "values"):
+                                resp_dict["embeddings"].append(emb.values)
+                            else:
+                                resp_dict["embeddings"].append(emb)
+                    
+                    resp_body = json.dumps(resp_dict)
+                    if len(resp_body) > 50000:
+                        resp_body = resp_body[:50000] + "...[TRUNCATED]"
+
+                    await self._log_service.log_api_request(
+                        service="Gemini",
+                        method="POST",
+                        url=f"models/{self._model_name}:embedContent",
+                        status_code=200,
+                        response_time_ms=elapsed_ms,
+                        payload_summary=f"purpose={purpose}, dims={self._output_dimensionality}, "
+                        f"text_len={len(text)}",
+                        request_body=req_body,
+                        response_body=resp_body,
+                        session_id=session_id,
+                    )
+                break
+            except Exception as exc:
+                elapsed_ms = int(time.monotonic() * 1000) - start_ms
+                status_code = getattr(exc, "code", 500)
+                if status_code == 429 and attempt < max_retries:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+
+                if self._log_service is not None:
+                    import json
+                    req_body = json.dumps({
+                        "model": self._model_name,
+                        "contents": text,
+                        "output_dimensionality": self._output_dimensionality
+                    })
+                    await self._log_service.log_api_request(
+                        service="Gemini",
+                        method="POST",
+                        url=f"models/{self._model_name}:embedContent",
+                        status_code=status_code,
+                        response_time_ms=elapsed_ms,
+                        payload_summary=f"FAILED: {str(exc)}",
+                        request_body=req_body,
+                        response_body=None,
+                        session_id=session_id,
+                    )
+                raise exc
 
         # Extract embedding values
         embedding = result.embeddings[0]

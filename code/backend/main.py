@@ -1,6 +1,7 @@
 """FastAPI application entry point for ALRS v2 backend."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,6 +16,10 @@ from db.neo4j_schema import initialize_schema
 from db.mysql_service import MySQLService
 
 logger = logging.getLogger(__name__)
+
+MAX_CONNECT_RETRIES = 10
+INITIAL_BACKOFF_SECONDS = 1.0
+MAX_BACKOFF_SECONDS = 30.0
 
 # --- Application state (populated during lifespan) ---
 
@@ -35,17 +40,31 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # --- Startup ---
     logger.info("Starting ALRS v2 backend...")
 
-    # Neo4j
+    # Neo4j (with retry)
     neo4j_service = Neo4jService(
         uri=settings.neo4j_uri,
         user=settings.neo4j_user,
         password=settings.neo4j_password,
     )
-    await neo4j_service.connect()
+    backoff = INITIAL_BACKOFF_SECONDS
+    for attempt in range(1, MAX_CONNECT_RETRIES + 1):
+        try:
+            await neo4j_service.connect()
+            logger.info("Neo4j connected on attempt %d", attempt)
+            break
+        except Exception as exc:
+            if attempt == MAX_CONNECT_RETRIES:
+                logger.error("Neo4j connection failed after %d attempts, giving up", MAX_CONNECT_RETRIES)
+                raise
+            logger.warning("Neo4j not ready (attempt %d/%d): %s — retrying in %.1fs",
+                           attempt, MAX_CONNECT_RETRIES, exc, backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
+
     await initialize_schema(neo4j_service, settings.embedding_dimensions)
     app.state.neo4j_service = neo4j_service
 
-    # MySQL
+    # MySQL (with retry)
     mysql_service = MySQLService(
         host=settings.mysql_host,
         port=settings.mysql_port,
@@ -53,7 +72,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         password=settings.mysql_password,
         database=settings.mysql_database,
     )
-    await mysql_service.connect()
+    backoff = INITIAL_BACKOFF_SECONDS
+    for attempt in range(1, MAX_CONNECT_RETRIES + 1):
+        try:
+            await mysql_service.connect()
+            logger.info("MySQL connected on attempt %d", attempt)
+            break
+        except Exception as exc:
+            if attempt == MAX_CONNECT_RETRIES:
+                logger.error("MySQL connection failed after %d attempts, giving up", MAX_CONNECT_RETRIES)
+                raise
+            logger.warning("MySQL not ready (attempt %d/%d): %s — retrying in %.1fs",
+                           attempt, MAX_CONNECT_RETRIES, exc, backoff)
+            await asyncio.sleep(backoff)
+            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
+
     await mysql_service.initialize_schema()
     app.state.mysql_service = mysql_service
 

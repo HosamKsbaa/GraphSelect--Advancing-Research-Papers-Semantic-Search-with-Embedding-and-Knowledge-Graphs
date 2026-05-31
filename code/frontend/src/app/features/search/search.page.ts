@@ -48,6 +48,12 @@ export class SearchPage implements OnDestroy {
   streamStatus: 'idle' | 'running' | 'complete' | 'failed' = 'idle';
   streamMessage = '';
   private eventSource: EventSource | null = null;
+  private readonly SSE_EVENT_TYPES = [
+    'search_started', 'level_complete', 'embedding_progress',
+    'cycle_results', 'ranking_complete', 'search_complete',
+    'error_recovered', 'search_failed', 'throttled', 'progress',
+    'LEVEL_COMPLETE', 'EMBEDDING_PROGRESS'
+  ];
 
   constructor(private api: ApiService, private toast: ToastService) {}
 
@@ -127,6 +133,61 @@ export class SearchPage implements OnDestroy {
     });
   }
 
+  private handleSseEvent = (event: Event) => {
+    const msgEvent = event as MessageEvent;
+    try {
+      const data: ProgressEvent = JSON.parse(msgEvent.data);
+      this.streamProgress = data.progress_percent;
+      this.streamMessage = data.message;
+
+      this.streamEvents.push({
+        type: data.event_type,
+        message: data.message,
+        progress: data.progress_percent,
+        timestamp: new Date(),
+      });
+
+      const eventTypeLower = data.event_type.toLowerCase();
+
+      if (eventTypeLower === 'search_complete') {
+        this.streamStatus = 'complete';
+        this.closeStream();
+        this.currentStep = 4;
+      } else if (eventTypeLower === 'search_failed') {
+        this.streamStatus = 'failed';
+        this.closeStream();
+        
+        if (data.message.includes('400') || data.message.toLowerCase().includes('api key')) {
+          this.toast.error(
+            'Invalid API Key', 'The Gemini API returned a 400 error.', 10000,
+            { label: 'Go to Settings', routerLink: '/settings' }
+          );
+        } else {
+          this.toast.error('Search Failed', data.message);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse SSE event:', e);
+    }
+  };
+
+  private handleSseMessage = (event: MessageEvent) => {
+    try {
+      const data: ProgressEvent = JSON.parse(event.data);
+      this.streamProgress = data.progress_percent;
+      this.streamMessage = data.message;
+      this.streamEvents.push({ type: data.event_type, message: data.message, progress: data.progress_percent, timestamp: new Date() });
+    } catch (e) {}
+  };
+
+  private handleSseError = () => {
+    if (this.streamStatus === 'running') {
+      this.streamStatus = 'failed';
+      this.streamMessage = 'Connection to search stream lost.';
+    }
+    this.closeStream();
+  };
+
   startBfsStream(sessionId: string): void {
     this.closeStream();
     this.streamEvents = [];
@@ -135,82 +196,20 @@ export class SearchPage implements OnDestroy {
     this.streamMessage = 'Connecting to search stream...';
 
     this.eventSource = this.api.createSearchStream(sessionId);
-
-    // Listen for all event types
-    const eventTypes = [
-      'search_started', 'level_complete', 'embedding_progress',
-      'cycle_results', 'ranking_complete', 'search_complete',
-      'error_recovered', 'search_failed', 'throttled', 'progress',
-    ];
-
-    for (const eventType of eventTypes) {
-      this.eventSource.addEventListener(eventType, (event: Event) => {
-        const msgEvent = event as MessageEvent;
-        try {
-          const data: ProgressEvent = JSON.parse(msgEvent.data);
-          this.streamProgress = data.progress_percent;
-          this.streamMessage = data.message;
-
-          this.streamEvents.push({
-            type: data.event_type,
-            message: data.message,
-            progress: data.progress_percent,
-            timestamp: new Date(),
-          });
-
-          if (data.event_type === 'search_complete') {
-            this.streamStatus = 'complete';
-            this.closeStream();
-            this.currentStep = 4;
-          } else if (data.event_type === 'search_failed') {
-            this.streamStatus = 'failed';
-            this.closeStream();
-            
-            if (data.message.includes('400') || data.message.toLowerCase().includes('api key')) {
-              this.toast.error(
-                'Invalid API Key or Bad Request',
-                'The Gemini API returned a 400 error. Please check that your API key is valid in Settings.',
-                10000,
-                { label: 'Go to Settings', routerLink: '/settings' }
-              );
-            } else {
-              this.toast.error('Search Failed', data.message);
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to parse SSE event:', e);
-        }
-      });
+    for (const eventType of this.SSE_EVENT_TYPES) {
+      this.eventSource.addEventListener(eventType, this.handleSseEvent);
     }
-
-    // Handle generic message events
-    this.eventSource.onmessage = (event: MessageEvent) => {
-      try {
-        const data: ProgressEvent = JSON.parse(event.data);
-        this.streamProgress = data.progress_percent;
-        this.streamMessage = data.message;
-        this.streamEvents.push({
-          type: data.event_type,
-          message: data.message,
-          progress: data.progress_percent,
-          timestamp: new Date(),
-        });
-      } catch (e) {
-        // Ignore parse errors for keepalive pings
-      }
-    };
-
-    this.eventSource.onerror = () => {
-      if (this.streamStatus === 'running') {
-        this.streamStatus = 'failed';
-        this.streamMessage = 'Connection to search stream lost.';
-      }
-      this.closeStream();
-    };
+    this.eventSource.onmessage = this.handleSseMessage;
+    this.eventSource.onerror = this.handleSseError;
   }
 
   private closeStream(): void {
     if (this.eventSource) {
+      for (const eventType of this.SSE_EVENT_TYPES) {
+        this.eventSource.removeEventListener(eventType, this.handleSseEvent);
+      }
+      this.eventSource.onmessage = null;
+      this.eventSource.onerror = null;
       this.eventSource.close();
       this.eventSource = null;
     }

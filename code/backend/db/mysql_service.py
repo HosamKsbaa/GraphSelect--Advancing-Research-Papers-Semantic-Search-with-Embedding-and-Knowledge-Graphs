@@ -37,6 +37,8 @@ DDL_STATEMENTS: list[str] = [
         status_code INT,
         response_time_ms INT,
         payload_summary TEXT,
+        request_body MEDIUMTEXT,
+        response_body MEDIUMTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_api_logs_session (session_id),
         INDEX idx_api_logs_service (service),
@@ -141,6 +143,23 @@ class MySQLService:
                 logger.info('DDL applied: %s...', ddl[:50])
             except Exception as e:
                 logger.warning('DDL skipped: %s — %s', ddl[:50], e)
+
+        # Handle schema upgrades for existing tables
+        try:
+            # Check if request_body column exists
+            result = await self.fetch_all("SHOW COLUMNS FROM api_logs LIKE 'request_body'")
+            if not result:
+                await self.execute("ALTER TABLE api_logs ADD COLUMN request_body MEDIUMTEXT")
+                logger.info("Added request_body column to api_logs table.")
+            
+            # Check if response_body column exists
+            result = await self.fetch_all("SHOW COLUMNS FROM api_logs LIKE 'response_body'")
+            if not result:
+                await self.execute("ALTER TABLE api_logs ADD COLUMN response_body MEDIUMTEXT")
+                logger.info("Added response_body column to api_logs table.")
+        except Exception as e:
+            logger.error("Error upgrading schema for api_logs: %s", e)
+
         logger.info('MySQL schema initialization complete')
 
     async def health_check(self) -> bool:

@@ -49,6 +49,7 @@ class PaperCreate(BaseModel):
     openalex_id: str | None = None
     publication_date: str | None = None
     source: str = 'openalex'
+    referenced_works: list[str] = Field(default_factory=list)
 
 
 class PaperRead(BaseModel):

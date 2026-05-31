@@ -42,3 +42,4 @@ Thumbs.db
 # Test Screenshots
 e2e/screenshots/
 
+logs/*

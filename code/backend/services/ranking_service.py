@@ -80,7 +80,7 @@ class RankingService:
                 doi=doi,
                 title=meta.get("title", "[unknown]"),
                 year=meta.get("year"),
-                cited_by_count=meta.get("cited_by_count", 0),
+                cited_by_count=meta.get("cited_by_count") or 0,
                 similarity_score=similarity,
                 pagerank_score=pr_score,
                 hybrid_score=hybrid_score,

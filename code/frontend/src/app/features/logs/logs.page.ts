@@ -10,6 +10,8 @@ interface DisplayAppLog extends AppLog {
 
 interface DisplayApiLog extends ApiLog {
   statusClass?: string;
+  formatted_request_body?: string;
+  formatted_response_body?: string;
 }
 
 @Component({
@@ -71,7 +73,9 @@ export class LogsPage implements OnInit {
         next: (data) => {
           this.apiLogs = data.map(api => ({
             ...api,
-            statusClass: this.getApiStatusClass(api.status_code)
+            statusClass: this.getApiStatusClass(api.status_code),
+            formatted_request_body: this.formatJsonString(api.request_body),
+            formatted_response_body: this.formatJsonString(api.response_body)
           }));
           this.loading = false;
         },
@@ -101,10 +105,20 @@ export class LogsPage implements OnInit {
     return 'badge-error';
   }
 
-  copiedId: number | null = null;
-  copiedType: 'app' | 'api' = 'app';
+  private formatJsonString(str: string | null | undefined): string {
+    if (!str) return '';
+    try {
+      const parsed = JSON.parse(str);
+      return JSON.stringify(parsed, null, 2);
+    } catch (e) {
+      return str;
+    }
+  }
 
-  copyToClipboard(text: string, logId: number, type: 'app' | 'api', event: Event): void {
+  copiedId: number | null = null;
+  copiedType: 'app' | 'api' | 'api-req' | 'api-res' = 'app';
+
+  copyToClipboard(text: string, logId: number, type: 'app' | 'api' | 'api-req' | 'api-res', event: Event): void {
     event.stopPropagation();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
@@ -118,7 +132,7 @@ export class LogsPage implements OnInit {
     }
   }
 
-  private setCopiedState(logId: number, type: 'app' | 'api'): void {
+  private setCopiedState(logId: number, type: 'app' | 'api' | 'api-req' | 'api-res'): void {
     this.copiedId = logId;
     this.copiedType = type;
     setTimeout(() => {
@@ -128,7 +142,7 @@ export class LogsPage implements OnInit {
     }, 2000);
   }
 
-  private fallbackCopy(text: string, logId: number, type: 'app' | 'api'): void {
+  private fallbackCopy(text: string, logId: number, type: 'app' | 'api' | 'api-req' | 'api-res'): void {
     try {
       const textArea = document.createElement('textarea');
       textArea.value = text;

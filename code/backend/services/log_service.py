@@ -55,6 +55,8 @@ class LogService:
         status_code: int | None = None,
         response_time_ms: int | None = None,
         payload_summary: str | None = None,
+        request_body: str | None = None,
+        response_body: str | None = None,
         session_id: str | None = None,
     ) -> None:
         """Record an outgoing API request/response to MySQL."""
@@ -65,8 +67,8 @@ class LogService:
             }.get(service.lower(), service)
             await self._mysql.execute(
                 '''INSERT INTO api_logs
-                   (session_id, service, method, url, status_code, response_time_ms, payload_summary)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+                   (session_id, service, method, url, status_code, response_time_ms, payload_summary, request_body, response_body)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
                 (
                     session_id,
                     canonical_service,
@@ -75,6 +77,8 @@ class LogService:
                     status_code,
                     response_time_ms,
                     payload_summary,
+                    request_body,
+                    response_body,
                 ),
             )
         except Exception as e:
@@ -115,12 +119,8 @@ class LogService:
         conditions: list[str] = []
         args: list[object] = []
         if service:
-            canonical_service = {
-                "openalex": "OpenAlex",
-                "gemini": "Gemini",
-            }.get(service.lower(), service)
-            conditions.append('service = %s')
-            args.append(canonical_service)
+            conditions.append('LOWER(service) = %s')
+            args.append(service.lower())
         if session_id:
             conditions.append('session_id = %s')
             args.append(session_id)
@@ -129,7 +129,10 @@ class LogService:
             conditions.append('created_at >= %s')
             args.append(since_utc.strftime('%Y-%m-%d %H:%M:%S'))
         where = ' AND '.join(conditions) if conditions else '1=1'
-        query = f'SELECT * FROM api_logs WHERE {where} ORDER BY created_at DESC LIMIT %s'  # noqa: S608
+        
+        # Use ASC when 'since' is provided to prevent dropping active logs due to limit
+        order_dir = 'ASC' if since else 'DESC'
+        query = f'SELECT * FROM api_logs WHERE {where} ORDER BY created_at {order_dir} LIMIT %s'  # noqa: S608
         args.append(limit)
         return await self._mysql.fetch_all(query, tuple(args))
 
@@ -145,7 +148,7 @@ class LogService:
         conditions: list[str] = []
         args: list[object] = []
         if level:
-            conditions.append('level = %s')
+            conditions.append('UPPER(level) = %s')
             args.append(level.upper())
         if module:
             conditions.append('module = %s')
@@ -158,6 +161,9 @@ class LogService:
             conditions.append('created_at >= %s')
             args.append(since_utc.strftime('%Y-%m-%d %H:%M:%S'))
         where = ' AND '.join(conditions) if conditions else '1=1'
-        query = f'SELECT * FROM app_logs WHERE {where} ORDER BY created_at DESC LIMIT %s'  # noqa: S608
+        
+        # Use ASC when 'since' is provided to prevent dropping active logs due to limit
+        order_dir = 'ASC' if since else 'DESC'
+        query = f'SELECT * FROM app_logs WHERE {where} ORDER BY created_at {order_dir} LIMIT %s'  # noqa: S608
         args.append(limit)
         return await self._mysql.fetch_all(query, tuple(args))
