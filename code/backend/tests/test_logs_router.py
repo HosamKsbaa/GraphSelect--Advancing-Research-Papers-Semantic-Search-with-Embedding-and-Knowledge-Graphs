@@ -35,8 +35,9 @@ def test_get_app_logs_success() -> None:
     mock_mysql = AsyncMock()
     mock_mysql.fetch_all.return_value = mock_logs
 
-    with patch("main.mysql_service", mock_mysql):
-        client = TestClient(app)
+    from core.dependencies import get_mysql_service
+    app.dependency_overrides[get_mysql_service] = lambda: mock_mysql
+    client = TestClient(app)
         response = client.get(
             "/api/logs",
             params={
@@ -71,6 +72,7 @@ def test_get_app_logs_success() -> None:
         assert "session-1" in args
         assert "2026-05-30 17:00:00" in args
         assert 10 in args
+    app.dependency_overrides.clear()
 
 
 def test_get_api_logs_success() -> None:
@@ -92,8 +94,9 @@ def test_get_api_logs_success() -> None:
     mock_mysql = AsyncMock()
     mock_mysql.fetch_all.return_value = mock_api_logs
 
-    with patch("main.mysql_service", mock_mysql):
-        client = TestClient(app)
+    from core.dependencies import get_mysql_service
+    app.dependency_overrides[get_mysql_service] = lambda: mock_mysql
+    client = TestClient(app)
         response = client.get(
             "/api/logs/api-requests",
             params={
@@ -124,17 +127,17 @@ def test_get_api_logs_success() -> None:
         assert "session-1" in args
         assert "2026-05-30 17:00:00" in args
         assert 5 in args
+    app.dependency_overrides.clear()
 
 
 def test_logs_endpoints_service_unavailable() -> None:
     """Test endpoints return 503 if MySQL service is not initialized."""
-    with patch("main.mysql_service", None):
-        client = TestClient(app)
-        
-        response1 = client.get("/api/logs")
-        assert response1.status_code == 503
-        assert "MySQL service not initialized" in response1.json()["detail"]
+    client = TestClient(app)
+    
+    response1 = client.get("/api/logs")
+    assert response1.status_code == 503
+    assert "MySQL service not initialized" in response1.json()["detail"]
 
-        response2 = client.get("/api/logs/api-requests")
-        assert response2.status_code == 503
-        assert "MySQL service not initialized" in response2.json()["detail"]
+    response2 = client.get("/api/logs/api-requests")
+    assert response2.status_code == 503
+    assert "MySQL service not initialized" in response2.json()["detail"]

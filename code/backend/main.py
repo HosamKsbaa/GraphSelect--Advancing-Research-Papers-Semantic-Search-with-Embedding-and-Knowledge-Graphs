@@ -11,9 +11,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from db.neo4j_service import Neo4jService
-from db.neo4j_schema import initialize_schema
-from db.mysql_service import MySQLService
+from core.db.neo4j_service import Neo4jService
+from core.db.neo4j_schema import initialize_schema
+from core.db.mysql_service import MySQLService
 
 logger = logging.getLogger(__name__)
 
@@ -151,13 +151,13 @@ async def get_version() -> dict[str, str]:
     return {"version": _read_version()}
 
 
-# --- Register routers ---
-from routers.search import router as search_router
-from routers.sessions import router as sessions_router
-from routers.papers import router as papers_router
-from routers.logs import router as logs_router
-from routers.debug import router as debug_router
-from routers.settings import router as settings_router
+# --- Register routers (feature-based) ---
+from features.search.router import router as search_router
+from features.sessions.router import router as sessions_router
+from features.retrieval.router import router as papers_router
+from features.logs.router import router as logs_router
+from features.debug.router import router as debug_router
+from features.settings.router import router as settings_router
 
 app.include_router(search_router)
 app.include_router(sessions_router)

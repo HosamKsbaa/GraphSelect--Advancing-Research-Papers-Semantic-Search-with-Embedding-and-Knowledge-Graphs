@@ -4,7 +4,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 import pytest
 
-from db.neo4j_service import Neo4jService
+from core.db.neo4j_service import Neo4jService
 
 
 @pytest.mark.asyncio
@@ -20,7 +20,7 @@ async def test_compute_similarities_query() -> None:
     service.execute_read = AsyncMock(return_value=mock_records)
     
     # Run connect mock so driver property does not fail
-    with patch("db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
+    with patch("core.db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
         mock_driver = AsyncMock()
         mock_gdb.driver.return_value = mock_driver
         await service.connect()
@@ -31,7 +31,7 @@ async def test_compute_similarities_query() -> None:
         service.execute_read.assert_called_once()
         args, kwargs = service.execute_read.call_args
         
-        assert "vector.similarity.cosine" in args[0]
+        assert "db.index.vector.queryNodes" in args[0]
         params = args[1]
         assert "session_id" in params
         assert "threshold" in params

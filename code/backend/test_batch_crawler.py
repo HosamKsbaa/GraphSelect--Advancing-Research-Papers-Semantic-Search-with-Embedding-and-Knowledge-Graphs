@@ -3,12 +3,12 @@ import logging
 import time
 
 from config import get_settings
-from db.mysql_service import MySQLService
-from db.neo4j_service import Neo4jService
-from services.crawler_service import CrawlerService
-from services.log_service import LogService
-from services.openalex_service import OpenAlexService
-from services.rate_limiter import AdaptiveRateLimiter
+from core.db.mysql_service import MySQLService
+from core.db.neo4j_service import Neo4jService
+from features.search.crawler_service import CrawlerService
+from core.logging.log_service import LogService
+from core.clients.openalex_client import OpenAlexService
+from core.clients.rate_limiter import AdaptiveRateLimiter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

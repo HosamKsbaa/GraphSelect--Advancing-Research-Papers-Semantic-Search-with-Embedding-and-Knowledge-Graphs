@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
-from models.paper import AuthorCreate, PaperCreate, PaperRead, VenueCreate
-from models.session import SearchMode, SearchRequest, SessionStatus
+from features.retrieval.models import AuthorCreate, PaperCreate, PaperRead, VenueCreate
+from features.sessions.models import SearchMode, SearchRequest, SessionStatus
 
 
 # --- Sample Data Fixtures ---

@@ -1,12 +1,12 @@
-"""Tests for GraphSearchService hybrid ranking, grouping, and tie-breaking."""
+"""Tests for RankingService hybrid ranking, grouping, and tie-breaking."""
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 import pytest
 
-from services.graph_search_service import GraphSearchService
-from models.ranked_paper import GroupedResults
+from features.ranking.service import RankingService
+from features.ranking.models import GroupedResults
 
 
 @pytest.mark.asyncio
@@ -14,15 +14,6 @@ async def test_rank_papers_hybrid_computation_and_grouping() -> None:
     """Test hybrid scoring, question grouping, sorting, and tie-breaker sorting."""
     # Mock collaborators
     mock_neo4j = AsyncMock()
-    mock_openalex = AsyncMock()
-    mock_gemini = AsyncMock()
-    
-    # Initialize service
-    bfs = GraphSearchService(
-        neo4j=mock_neo4j,
-        openalex=mock_openalex,
-        gemini=mock_gemini,
-    )
     
     session_id = "session-999"
     
@@ -69,41 +60,46 @@ async def test_rank_papers_hybrid_computation_and_grouping() -> None:
     mock_mysql = AsyncMock()
     mock_mysql.get_session.return_value = mock_session_data
     
-    with patch("main.mysql_service", mock_mysql):
-        results = await bfs.rank_papers(session_id, similarity_weight=0.7, pagerank_weight=0.3)
-        
-        assert isinstance(results, GroupedResults)
-        assert results.session_id == session_id
-        assert results.total_papers == 4
-        
-        # Verify Groups count (Question 1, Question 2)
-        assert len(results.groups) == 2
-        
-        # Verify Group 1: Question 1
-        q1_group = results.groups[0]
-        assert q1_group.question == "Question 1"
-        assert q1_group.paper_count == 3
-        
-        # Q1 Papers: p1, p4, p3
-        # Scores check:
-        # p1: sim=0.85, pr=1.0 -> hybrid = 0.7*0.85 + 0.3*1.0 = 0.595 + 0.3 = 0.895
-        # p3: sim=0.80, pr=0.2 -> hybrid = 0.7*0.80 + 0.3*0.2 = 0.560 + 0.06 = 0.620
-        # p4: sim=0.80, pr=0.2 -> hybrid = 0.7*0.80 + 0.3*0.2 = 0.560 + 0.06 = 0.620
-        # Since p4 has 80 citations and p3 has 50 citations, p4 should sort BEFORE p3 in Q1 group
-        assert q1_group.papers[0].doi == "10.1234/p1"
-        assert q1_group.papers[0].hybrid_score == pytest.approx(0.895)
-        
-        assert q1_group.papers[1].doi == "10.1234/p4"
-        assert q1_group.papers[1].hybrid_score == pytest.approx(0.62)
-        
-        assert q1_group.papers[2].doi == "10.1234/p3"
-        assert q1_group.papers[2].hybrid_score == pytest.approx(0.62)
-        
-        # Verify Group 2: Question 2
-        q2_group = results.groups[1]
-        assert q2_group.question == "Question 2"
-        assert q2_group.paper_count == 1
-        
-        # p2: sim=0.75, pr=0.5 -> hybrid = 0.7*0.75 + 0.3*0.5 = 0.525 + 0.15 = 0.675
-        assert q2_group.papers[0].doi == "10.1234/p2"
-        assert q2_group.papers[0].hybrid_score == pytest.approx(0.675)
+    # Initialize service
+    bfs = RankingService(
+        neo4j=mock_neo4j,
+        mysql=mock_mysql,
+    )
+    
+    results = await bfs.rank_papers(session_id, similarity_weight=0.7, pagerank_weight=0.3)
+    
+    assert isinstance(results, GroupedResults)
+    assert results.session_id == session_id
+    assert results.total_papers == 4
+    
+    # Verify Groups count (Question 1, Question 2)
+    assert len(results.groups) == 2
+    
+    # Verify Group 1: Question 1
+    q1_group = results.groups[0]
+    assert q1_group.question == "Question 1"
+    assert q1_group.paper_count == 3
+    
+    # Q1 Papers: p1, p4, p3
+    # Scores check:
+    # p1: sim=0.85, pr=1.0 -> hybrid = 0.7*0.85 + 0.3*1.0 = 0.595 + 0.3 = 0.895
+    # p3: sim=0.80, pr=0.2 -> hybrid = 0.7*0.80 + 0.3*0.2 = 0.560 + 0.06 = 0.620
+    # p4: sim=0.80, pr=0.2 -> hybrid = 0.7*0.80 + 0.3*0.2 = 0.560 + 0.06 = 0.620
+    # Since p4 has 80 citations and p3 has 50 citations, p4 should sort BEFORE p3 in Q1 group
+    assert q1_group.papers[0].doi == "10.1234/p1"
+    assert q1_group.papers[0].hybrid_score == pytest.approx(0.895)
+    
+    assert q1_group.papers[1].doi == "10.1234/p4"
+    assert q1_group.papers[1].hybrid_score == pytest.approx(0.62)
+    
+    assert q1_group.papers[2].doi == "10.1234/p3"
+    assert q1_group.papers[2].hybrid_score == pytest.approx(0.62)
+    
+    # Verify Group 2: Question 2
+    q2_group = results.groups[1]
+    assert q2_group.question == "Question 2"
+    assert q2_group.paper_count == 1
+    
+    # p2: sim=0.75, pr=0.5 -> hybrid = 0.7*0.75 + 0.3*0.5 = 0.525 + 0.15 = 0.675
+    assert q2_group.papers[0].doi == "10.1234/p2"
+    assert q2_group.papers[0].hybrid_score == pytest.approx(0.675)

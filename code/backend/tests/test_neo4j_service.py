@@ -9,9 +9,9 @@ import pytest
 @pytest.mark.asyncio
 async def test_neo4j_connect_and_close() -> None:
     """Test Neo4j connection lifecycle."""
-    from db.neo4j_service import Neo4jService
+    from core.db.neo4j_service import Neo4jService
 
-    with patch("db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
+    with patch("core.db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
         mock_driver = AsyncMock()
         mock_driver.verify_connectivity = AsyncMock()
         mock_driver.close = AsyncMock()
@@ -33,7 +33,7 @@ async def test_neo4j_connect_and_close() -> None:
 @pytest.mark.asyncio
 async def test_neo4j_driver_not_initialized() -> None:
     """Test accessing driver before connect raises RuntimeError."""
-    from db.neo4j_service import Neo4jService
+    from core.db.neo4j_service import Neo4jService
 
     service = Neo4jService("bolt://localhost:7687", "neo4j", "password")
     with pytest.raises(RuntimeError, match="not initialized"):

@@ -4,7 +4,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 import pytest
 
-from db.neo4j_service import Neo4jService
+from core.db.neo4j_service import Neo4jService
 
 
 @pytest.mark.asyncio
@@ -22,7 +22,7 @@ async def test_compute_pagerank_gds_success() -> None:
         {"doi": "10.1234/p2", "score": 1.0},
     ])
     
-    with patch("db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
+    with patch("core.db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
         mock_driver = AsyncMock()
         mock_gdb.driver.return_value = mock_driver
         await service.connect()
@@ -64,7 +64,7 @@ async def test_compute_pagerank_networkx_fallback() -> None:
     mock_nx.pagerank.return_value = {"10.1234/p1": 0.8, "10.1234/p2": 0.2}
     
     with patch.dict("sys.modules", {"networkx": mock_nx}):
-        with patch("db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
+        with patch("core.db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
             mock_driver = AsyncMock()
             mock_gdb.driver.return_value = mock_driver
             await service.connect()
@@ -94,7 +94,7 @@ async def test_compute_pagerank_degree_centrality_fallback() -> None:
             {"doi": "10.1234/p2", "degree": 1},
         ])
         
-        with patch("db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
+        with patch("core.db.neo4j_service.AsyncGraphDatabase") as mock_gdb:
             mock_driver = AsyncMock()
             mock_gdb.driver.return_value = mock_driver
             await service.connect()

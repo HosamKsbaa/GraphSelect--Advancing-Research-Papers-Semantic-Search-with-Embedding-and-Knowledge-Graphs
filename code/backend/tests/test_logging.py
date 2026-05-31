@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from services.log_service import LogService
+from core.logging.log_service import LogService
 
 
 @pytest.mark.asyncio
@@ -40,7 +40,7 @@ async def test_log_service_app_log_fallback_on_error() -> None:
     log_service = LogService(mock_mysql)
 
     # Use patch to verify that logger.warning is called with custom fallback pattern
-    with patch("services.log_service.logger.warning") as mock_warn:
+    with patch("core.logging.log_service.logger.warning") as mock_warn:
         await log_service.log(
             level="ERROR",
             module="crawlers",
@@ -110,7 +110,7 @@ async def test_log_service_api_log_fallback_on_error() -> None:
     mock_mysql.execute.side_effect = Exception("MySQL connection pool exhausted")
     log_service = LogService(mock_mysql)
 
-    with patch("services.log_service.logger.warning") as mock_warn:
+    with patch("core.logging.log_service.logger.warning") as mock_warn:
         await log_service.log_api_request(
             service="Gemini",
             method="POST",
@@ -155,23 +155,23 @@ async def test_log_service_get_app_logs_timezone_conversion() -> None:
 
 @pytest.mark.asyncio
 async def test_gemini_service_exception_logging() -> None:
-    """Test that GeminiService logs to log_service even when the API throws an exception."""
-    from services.gemini_service import GeminiService
+    """Test that GeminiEmbeddingProvider logs to log_service even when the API throws an exception."""
+    from features.embedding.providers.gemini_provider import GeminiEmbeddingProvider
     
     mock_log_service = AsyncMock()
     # Mock Gemini client
-    with patch("services.gemini_service.genai.Client") as mock_client_cls:
+    with patch("features.embedding.providers.gemini_provider.genai.Client") as mock_client_cls:
         mock_client = mock_client_cls.return_value
         # Make embed_content raise an exception
         mock_client.models.embed_content.side_effect = Exception("Invalid API key")
         
-        service = GeminiService(
+        service = GeminiEmbeddingProvider(
             api_key="bad-key",
             log_service=mock_log_service,
         )
         
         with pytest.raises(Exception, match="Invalid API key"):
-            await service.embed_paper("Some paper abstract", session_id="session-456")
+            await service.embed_document("Some paper abstract", session_id="session-456")
             
         mock_log_service.log_api_request.assert_called_once()
         call_kwargs = mock_log_service.log_api_request.call_args[1]
@@ -184,7 +184,7 @@ async def test_gemini_service_exception_logging() -> None:
 @pytest.mark.asyncio
 async def test_openalex_service_exception_logging() -> None:
     """Test that OpenAlexService logs to log_service even when the HTTP request throws an exception."""
-    from services.openalex_service import OpenAlexService
+    from core.clients.openalex_client import OpenAlexService
     import httpx
     
     mock_log_service = AsyncMock()
@@ -351,7 +351,7 @@ async def test_log_service_get_api_logs_timezone_aware_since_filtering() -> None
 
 def test_openalex_abstract_reconstruction() -> None:
     """Test that OpenAlexService reconstructs plain text from abstract_inverted_index correctly."""
-    from services.openalex_service import OpenAlexService
+    from core.clients.openalex_client import OpenAlexService
 
     # 1. Valid index
     index = {
