@@ -158,6 +158,7 @@ from features.retrieval.router import router as papers_router
 from features.logs.router import router as logs_router
 from features.debug.router import router as debug_router
 from features.settings.router import router as settings_router
+from projects.router import router as projects_router
 
 app.include_router(search_router)
 app.include_router(sessions_router)
@@ -165,6 +166,7 @@ app.include_router(papers_router)
 app.include_router(logs_router, prefix="/api")
 app.include_router(debug_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(projects_router)
 
 
 # --- Configure logging ---

@@ -58,6 +58,33 @@ DDL_STATEMENTS: list[str] = [
         INDEX idx_app_logs_created (created_at),
         INDEX idx_app_logs_session_created (session_id, created_at)
     )''',
+    '''CREATE TABLE IF NOT EXISTS projects (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(200) NOT NULL,
+        description TEXT,
+        topic VARCHAR(500),
+        target_level ENUM('master', 'phd') NOT NULL DEFAULT 'master',
+        similarity_threshold FLOAT NOT NULL DEFAULT 0.6,
+        token_budget INT NOT NULL DEFAULT 500000,
+        status VARCHAR(20) NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_projects_status (status),
+        INDEX idx_projects_created (created_at)
+    )''',
+    '''CREATE TABLE IF NOT EXISTS agent_traces (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        project_id VARCHAR(36) NOT NULL,
+        agent_name VARCHAR(100) NOT NULL,
+        event_type ENUM('start', 'end', 'tool_call', 'llm_call', 'error', 'warning', 'info') NOT NULL,
+        token_count INT NOT NULL DEFAULT 0,
+        details JSON,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_agent_traces_project (project_id),
+        INDEX idx_agent_traces_agent (agent_name),
+        INDEX idx_agent_traces_created (created_at),
+        INDEX idx_agent_traces_project_agent (project_id, agent_name)
+    )''',
 ]
 
 

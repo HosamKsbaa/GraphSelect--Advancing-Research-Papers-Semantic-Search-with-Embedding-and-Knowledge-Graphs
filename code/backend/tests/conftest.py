@@ -130,3 +130,15 @@ def mock_settings() -> MagicMock:
     settings.app_host = "0.0.0.0"
     settings.app_port = 8000
     return settings
+
+
+@pytest.fixture(autouse=True)
+def clean_dependency_overrides() -> AsyncIterator[None]:
+    """Automatically clear FastAPI dependency overrides before and after each test."""
+    from main import app
+    app.dependency_overrides.clear()
+    try:
+        yield
+    finally:
+        app.dependency_overrides.clear()
+

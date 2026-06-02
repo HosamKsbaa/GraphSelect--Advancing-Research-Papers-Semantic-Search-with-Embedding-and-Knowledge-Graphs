@@ -519,3 +519,173 @@ class Neo4jService:
             else:
                 scores = {k: 1.0 for k in scores}
         return scores
+
+    # ------------------------------------------------------------------
+    # Project management (agentic workflow)
+    # ------------------------------------------------------------------
+
+    async def create_project_node(
+        self,
+        project_id: str,
+        name: str,
+        status: str = 'active',
+    ) -> dict[str, Any]:
+        """Create a Project node in the graph.
+
+        Uses MERGE for idempotency — safe to call multiple times for
+        the same project_id.
+
+        Args:
+            project_id: UUID string for the project.
+            name: Human-readable project name.
+            status: Project status (default 'active').
+
+        Returns:
+            Dict of the created/updated project properties.
+        """
+        query = """
+        MERGE (pr:Project {project_id: $project_id})
+        ON CREATE SET pr.created_at = datetime()
+        SET pr.name       = $name,
+            pr.status     = $status,
+            pr.updated_at = datetime()
+        RETURN pr.project_id AS project_id,
+               pr.name       AS name,
+               pr.status     AS status
+        """
+        records = await self.execute_write(query, {
+            'project_id': project_id,
+            'name': name,
+            'status': status,
+        })
+        return records[0]
+
+    async def create_research_question(
+        self,
+        question_id: str,
+        text: str,
+        embedding: list[float],
+        project_id: str,
+    ) -> dict[str, Any]:
+        """Create a ResearchQuestion node with a BELONGS_TO relationship to a Project.
+
+        Args:
+            question_id: UUID string for the question.
+            text: The research question text.
+            embedding: Pre-computed embedding vector.
+            project_id: The owning project's ID.
+
+        Returns:
+            Dict of the created question properties.
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})
+        MERGE (q:ResearchQuestion {question_id: $question_id})
+        ON CREATE SET q.created_at = datetime()
+        SET q.text       = $text,
+            q.embedding  = $embedding,
+            q.project_id = $project_id,
+            q.updated_at = datetime()
+        MERGE (q)-[:BELONGS_TO]->(pr)
+        RETURN q.question_id AS question_id,
+               q.text        AS text,
+               q.project_id  AS project_id
+        """
+        records = await self.execute_write(query, {
+            'question_id': question_id,
+            'text': text,
+            'embedding': embedding,
+            'project_id': project_id,
+        })
+        return records[0]
+
+    async def add_paper_to_project(
+        self,
+        project_id: str,
+        doi: str,
+    ) -> None:
+        """Create a HAS_PAPER relationship between a Project and a Paper.
+
+        Both nodes must already exist. Uses MERGE for idempotency.
+
+        Args:
+            project_id: The project's UUID.
+            doi: The paper's DOI.
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})
+        MATCH (p:Paper {doi: $doi})
+        MERGE (pr)-[:HAS_PAPER]->(p)
+        """
+        await self.execute_write(query, {
+            'project_id': project_id,
+            'doi': doi,
+        })
+
+    async def get_project_papers(
+        self,
+        project_id: str,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Get all papers associated with a project.
+
+        Args:
+            project_id: The project's UUID.
+            limit: Maximum number of papers to return.
+
+        Returns:
+            List of paper property dicts (without embeddings).
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})-[:HAS_PAPER]->(p:Paper)
+        RETURN p.doi            AS doi,
+               p.title          AS title,
+               p.abstract       AS abstract,
+               p.year           AS year,
+               p.cited_by_count AS cited_by_count,
+               p.openalex_id   AS openalex_id,
+               p.source         AS source
+        LIMIT $limit
+        """
+        return await self.execute_read(query, {
+            'project_id': project_id,
+            'limit': limit,
+        })
+
+    async def get_research_questions(
+        self,
+        project_id: str,
+    ) -> list[dict[str, Any]]:
+        """Get all research questions for a project.
+
+        Args:
+            project_id: The project's UUID.
+
+        Returns:
+            List of question property dicts (without embeddings).
+        """
+        query = """
+        MATCH (q:ResearchQuestion {project_id: $project_id})
+        RETURN q.question_id AS question_id,
+               q.text        AS text,
+               q.project_id  AS project_id
+        ORDER BY q.created_at
+        """
+        return await self.execute_read(query, {'project_id': project_id})
+
+    async def archive_project(
+        self,
+        project_id: str,
+    ) -> None:
+        """Set a project's status to 'archived' in the graph.
+
+        Args:
+            project_id: The project's UUID.
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})
+        SET pr.status     = 'archived',
+            pr.updated_at = datetime()
+        """
+        await self.execute_write(query, {'project_id': project_id})
+

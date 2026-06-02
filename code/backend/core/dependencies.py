@@ -23,9 +23,11 @@ Dependency graph (simplified)::
                             ├── GraphSearchService         (features.search)
                             └── SearchSessionService       (features.search)
 """
+from __future__ import annotations
 
 from fastapi import Request, Depends
 from config import get_settings, Settings
+
 
 # ── Core infrastructure ──────────────────────────────────────────────
 from core.db.neo4j_service import Neo4jService

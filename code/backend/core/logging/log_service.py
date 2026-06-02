@@ -167,3 +167,84 @@ class LogService:
         query = f'SELECT * FROM app_logs WHERE {where} ORDER BY created_at {order_dir} LIMIT %s'  # noqa: S608
         args.append(limit)
         return await self._mysql.fetch_all(query, tuple(args))
+
+    # ------------------------------------------------------------------
+    # Agent tracing (agentic workflow)
+    # ------------------------------------------------------------------
+
+    async def log_agent_trace(
+        self,
+        project_id: str,
+        agent_name: str,
+        event_type: str,
+        token_count: int = 0,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        """Record an agent event trace to the agent_traces MySQL table.
+
+        Args:
+            project_id: UUID of the owning project.
+            agent_name: Name of the agent (e.g. 'planner', 'search').
+            event_type: Event type (start, end, tool_call, llm_call, error, warning, info).
+            token_count: Number of tokens consumed (default 0).
+            details: Optional structured details dict.
+        """
+        try:
+            await self._mysql.execute(
+                '''INSERT INTO agent_traces (project_id, agent_name, event_type, token_count, details)
+                   VALUES (%s, %s, %s, %s, %s)''',
+                (
+                    project_id,
+                    agent_name,
+                    event_type,
+                    token_count,
+                    json.dumps(details, default=str) if details else None,
+                ),
+            )
+        except Exception as e:
+            logger.error('Failed to log agent trace: %s', e)
+            logger.warning(
+                '[FALLBACK AGENT TRACE] project_id=%s agent=%s event=%s tokens=%d',
+                project_id, agent_name, event_type, token_count,
+            )
+
+    async def get_agent_traces(
+        self,
+        project_id: str,
+        agent_name: str | None = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:  # Any: MySQL row values
+        """Query agent traces with optional filters.
+
+        Args:
+            project_id: UUID of the project (required).
+            agent_name: Optional agent name filter.
+            start_time: Optional lower time bound.
+            end_time: Optional upper time bound.
+            limit: Maximum number of results.
+
+        Returns:
+            List of agent trace dicts ordered by created_at.
+        """
+        conditions: list[str] = ['project_id = %s']
+        args: list[object] = [project_id]
+
+        if agent_name:
+            conditions.append('agent_name = %s')
+            args.append(agent_name)
+        if start_time:
+            start_utc = start_time.astimezone(timezone.utc) if start_time.tzinfo is not None else start_time
+            conditions.append('created_at >= %s')
+            args.append(start_utc.strftime('%Y-%m-%d %H:%M:%S'))
+        if end_time:
+            end_utc = end_time.astimezone(timezone.utc) if end_time.tzinfo is not None else end_time
+            conditions.append('created_at <= %s')
+            args.append(end_utc.strftime('%Y-%m-%d %H:%M:%S'))
+
+        where = ' AND '.join(conditions)
+        query = f'SELECT * FROM agent_traces WHERE {where} ORDER BY created_at ASC LIMIT %s'  # noqa: S608
+        args.append(limit)
+        return await self._mysql.fetch_all(query, tuple(args))
+
