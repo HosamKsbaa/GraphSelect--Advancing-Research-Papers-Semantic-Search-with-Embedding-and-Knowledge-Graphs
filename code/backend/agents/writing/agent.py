@@ -16,7 +16,7 @@ from google.adk.agents import LlmAgent, LoopAgent
 
 from agents.writing.drafting_agent import drafting_agent
 from agents.writing.reviewer_agent import reviewer_agent
-from agents.writing.tools.export_tools import export_bibtex, export_latex
+from agents.writing.tools.export_tools import export_bibtex, export_latex, export_citation_graph
 from config import get_settings
 
 _settings = get_settings()
@@ -54,7 +54,9 @@ The session state should contain:
    ``export_bibtex`` tool to generate a BibTeX bibliography.
 3. Call the ``export_latex`` tool to produce a LaTeX document from
    the approved Markdown drafts.
-4. Respond with a summary: number of sections written, total word
+4. Call the ``export_citation_graph`` tool to generate standard JSON
+   and GraphML citation graph exports.
+5. Respond with a summary: number of sections written, total word
    count, export file paths, and any sections that were not fully
    approved.
 
@@ -76,7 +78,7 @@ writer_agent = LlmAgent(
     ),
     instruction=WRITER_INSTRUCTION,
     sub_agents=[writer_reviewer_loop],
-    tools=[export_bibtex, export_latex],
+    tools=[export_bibtex, export_latex, export_citation_graph],
     output_key="writer_result",
 )
 

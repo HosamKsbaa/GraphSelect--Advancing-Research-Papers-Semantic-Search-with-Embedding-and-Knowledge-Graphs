@@ -54,3 +54,35 @@ backend/
     ├── conftest.py
     └── ...
 ```
+
+## Google Gemini & Vertex AI Integration
+
+The ALRS v2 backend supports both Google AI Studio (standard Gemini API) and Google Cloud Vertex AI (enterprise GCP credits).
+
+### Configuration
+
+You can configure the active platform by editing the following variables in your `.env` file:
+
+```env
+# Set to True to target Vertex AI (consumes Google Cloud Credits)
+# Set to False to target standard Google AI Studio (consumes AI Studio keys)
+USE_VERTEX_AI=True
+
+# GCP Project details (required if USE_VERTEX_AI=True)
+VERTEX_PROJECT=gen-lang-client-0542412851
+VERTEX_LOCATION=us-central1
+
+# Google AI Studio API Key (required if USE_VERTEX_AI=False)
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+### Local Authentication for Vertex AI
+
+When running under `USE_VERTEX_AI=True`, the application does not use API keys. Instead, it relies on Google Application Default Credentials (ADC). Make sure your local machine is authenticated using the Google Cloud CLI (gcloud SDK):
+
+```bash
+gcloud auth application-default login
+```
+
+Once logged in, the active environment settings will automatically propagate to the Google GenAI SDK and ADK multi-agent engines at process boot time.
+

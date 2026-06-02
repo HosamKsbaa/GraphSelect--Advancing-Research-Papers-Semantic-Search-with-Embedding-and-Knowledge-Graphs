@@ -10,6 +10,11 @@ from typing import Any
 from google.adk.agents import LlmAgent
 
 from agents.orchestrator import create_tracing_callbacks
+from agents.orchestrator.project_tools import (
+    create_new_project,
+    select_project,
+    list_projects,
+)
 from agents.planner.agent import create_planner_agent
 from agents.research.agent import create_research_agent
 from agents.writing.agent import create_writer_agent
@@ -31,6 +36,12 @@ You coordinate the overall research pipeline:
 4. Delegate outline creation to the PlannerAgent.
 5. Delegate writing and exporting to the WriterAgent.
 6. Present progress summaries and next-step recommendations.
+
+## Your Direct Tools
+You have access to direct tools for managing project lifecycles:
+1. **create_new_project** — Create and activate a new project. Use this immediately when the user asks to start a new review, investigate a new topic, or "create a project". Deduce or prompt for a short `name` and a `topic` first.
+2. **select_project** — Activate an existing project. Use when the user specifies a project ID or name to work on.
+3. **list_projects** — List all projects in the database. Use when the user asks what projects are available or wants to select one.
 
 ## Your Sub-Agents
 - **ResearchAgent** — Handles all literature review activities including
@@ -123,6 +134,7 @@ def create_orchestrator_agent(
         ),
         "instruction": ORCHESTRATOR_INSTRUCTION,
         "sub_agents": [research_agent, planner_agent, writer_agent],
+        "tools": [create_new_project, select_project, list_projects],
     }
 
     # Attach tracing callbacks with token budget enforcement

@@ -35,6 +35,8 @@ from features.logs.models import (
     ApiLogResponse,
     AppLogQueryFilters,
     ApiLogQueryFilters,
+    AgentTraceResponse,
+    AgentTraceQueryFilters,
 )
 from core.logging.log_service import LogService
 from core.dependencies import get_log_service
@@ -145,3 +147,56 @@ async def get_api_logs(
         )
         for log in logs
     ]
+
+
+@router.get("/agent-traces", response_model=List[AgentTraceResponse])
+async def get_agent_traces(
+    filters: AgentTraceQueryFilters = Depends(),
+    log_service: LogService = Depends(get_log_service),
+) -> List[AgentTraceResponse]:
+    """Retrieve multi-agent workflow execution logs and traces.
+
+    Supports mandatory project filtering, optional agent name filtering,
+    date range (``since`` and ``end_time``), and result cap (``limit``).
+
+    Args:
+        filters: Query-string filters injected via ``Depends()``.
+        log_service: Injected log service (via FastAPI DI).
+
+    Returns:
+        A list of ``AgentTraceResponse`` entries ordered oldest-first by
+        the service layer.
+    """
+    traces = await log_service.get_agent_traces(
+        project_id=filters.project_id,
+        agent_name=filters.agent_name,
+        start_time=filters.since,
+        end_time=filters.end_time,
+        limit=filters.limit,
+    )
+
+    response_traces = []
+    for trace in traces:
+        # Details context column is stored as JSON-encoded TEXT in MySQL.
+        # Deserialise it if it is a string; fall back to None on error.
+        details_val = trace.get("details")
+        if isinstance(details_val, str):
+            try:
+                details_val = json.loads(details_val)
+            except Exception:
+                details_val = None
+
+        response_traces.append(
+            AgentTraceResponse(
+                id=trace["id"],
+                project_id=trace["project_id"],
+                agent_name=trace["agent_name"],
+                event_type=trace["event_type"],
+                token_count=trace.get("token_count") or 0,
+                details=details_val if isinstance(details_val, dict) else None,
+                # Stamp naive datetimes with UTC
+                created_at=trace["created_at"].replace(tzinfo=timezone.utc) if isinstance(trace["created_at"], datetime) and trace["created_at"].tzinfo is None else trace["created_at"],
+            )
+        )
+    return response_traces
+

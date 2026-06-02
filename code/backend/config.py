@@ -16,8 +16,12 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # --- Google Gemini API ---
-    gemini_api_key: str = Field(..., description="Gemini API key for embeddings")
+    # --- Google Gemini / Vertex AI ---
+    use_vertex_ai: bool = Field(default=True, description="Whether to use Vertex AI instead of Google AI Studio")
+    vertex_project: str | None = Field(default=None, description="Google Cloud Project ID for Vertex AI")
+    vertex_location: str = Field(default="us-central1", description="Vertex AI location region")
+    gemini_api_key: str | None = Field(default=None, description="Gemini API key for Google AI Studio (optional if Vertex AI is active)")
+
 
     # --- OpenAlex API ---
     openalex_api_key: str = Field(..., description="OpenAlex API key (required)")
@@ -66,4 +70,25 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Get cached application settings singleton."""
-    return Settings()  # type: ignore[call-arg]
+    settings = Settings()  # type: ignore[call-arg]
+
+    # Propagate to standard OS environment variables so google-genai and google-adk
+    # automatically pick up the correct platform and credentials.
+    import os
+    if settings.use_vertex_ai:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
+        if settings.vertex_project:
+            os.environ["GOOGLE_CLOUD_PROJECT"] = settings.vertex_project
+        if settings.vertex_location:
+            os.environ["GOOGLE_CLOUD_LOCATION"] = settings.vertex_location
+        # Clear API key to prevent SDK confusion
+        os.environ.pop("GEMINI_API_KEY", None)
+        os.environ.pop("GOOGLE_API_KEY", None)
+    else:
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "FALSE"
+        if settings.gemini_api_key:
+            os.environ["GEMINI_API_KEY"] = settings.gemini_api_key
+            os.environ["GOOGLE_API_KEY"] = settings.gemini_api_key
+
+    return settings
+

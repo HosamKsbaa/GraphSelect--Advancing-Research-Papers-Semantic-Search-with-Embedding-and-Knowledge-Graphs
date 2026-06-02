@@ -42,12 +42,25 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None = None,
         output_dimensionality: int = 768,
         log_service: LogService | None = None,
         model_name: str = "gemini-embedding-2",
     ) -> None:
-        self._client = genai.Client(api_key=api_key)
+        from config import get_settings
+        settings = get_settings()
+
+        if settings.use_vertex_ai:
+            self._client = genai.Client(
+                vertexai=True,
+                project=settings.vertex_project,
+                location=settings.vertex_location,
+            )
+            logger.info("GeminiEmbeddingProvider initialized via Vertex AI (project=%s, location=%s)", settings.vertex_project, settings.vertex_location)
+        else:
+            self._client = genai.Client(api_key=api_key or settings.gemini_api_key)
+            logger.info("GeminiEmbeddingProvider initialized via Google AI Studio")
+
         self._output_dimensionality = output_dimensionality
         self._log_service = log_service
         self._model_name = model_name

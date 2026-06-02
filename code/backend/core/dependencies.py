@@ -25,8 +25,17 @@ Dependency graph (simplified)::
 """
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, AsyncIterator
 from fastapi import Request, Depends
 from config import get_settings, Settings
+
+if TYPE_CHECKING:
+    from features.retrieval.service import RetrievalService
+    from features.embedding.service import PaperEmbeddingService
+    from features.search.crawler_service import CrawlerService
+    from features.ranking.service import RankingService
+    from features.search.graph_search_service import GraphSearchService
+    from features.search.session_service import SearchSessionService
 
 
 # ── Core infrastructure ──────────────────────────────────────────────
@@ -51,7 +60,7 @@ def get_neo4j_service(request: Request) -> Neo4jService:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Neo4j service not initialized",
         )
-    return service
+    return service  # type: ignore[no-any-return]
 
 
 def get_mysql_service(request: Request) -> MySQLService:
@@ -63,7 +72,7 @@ def get_mysql_service(request: Request) -> MySQLService:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="MySQL service not initialized",
         )
-    return service
+    return service  # type: ignore[no-any-return]
 
 
 # ── Cross-cutting concerns ───────────────────────────────────────────
@@ -83,7 +92,7 @@ def get_rate_limiter(settings: Settings = Depends(get_settings)) -> AdaptiveRate
 async def get_openalex_service(
     settings: Settings = Depends(get_settings),
     log_service: LogService = Depends(get_log_service),
-):
+) -> AsyncIterator[OpenAlexService]:
     """Yield an OpenAlexService, ensuring the HTTP session is closed on teardown."""
     service = OpenAlexService(
         api_key=settings.openalex_api_key,
@@ -136,10 +145,9 @@ def get_paper_embedding_service(
     """Create the provider-agnostic paper embedding orchestrator."""
     from features.embedding.service import PaperEmbeddingService
     return PaperEmbeddingService(
-        provider=provider,
         neo4j=neo4j,
+        provider=provider,
         rate_limiter=rate_limiter,
-        log_service=log_service,
     )
 
 

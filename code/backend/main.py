@@ -158,6 +158,11 @@ from features.retrieval.router import router as papers_router
 from features.logs.router import router as logs_router
 from features.debug.router import router as debug_router
 from features.settings.router import router as settings_router
+from features.research.router import router as research_router
+from features.analysis.router import router as analysis_router
+from features.planning.router import router as planning_router
+from features.writing.router import router as writing_router
+from features.export.router import router as export_router
 from projects.router import router as projects_router
 
 app.include_router(search_router)
@@ -166,6 +171,11 @@ app.include_router(papers_router)
 app.include_router(logs_router, prefix="/api")
 app.include_router(debug_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(research_router)
+app.include_router(analysis_router)
+app.include_router(planning_router)
+app.include_router(writing_router)
+app.include_router(export_router)
 app.include_router(projects_router)
 
 

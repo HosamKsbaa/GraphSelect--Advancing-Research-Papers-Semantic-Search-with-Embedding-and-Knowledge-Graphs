@@ -113,3 +113,36 @@ class ApiLogQueryFilters(BaseModel):
         le=1000,
         description="Maximum number of log entries to return (default 100, max 1000)",
     )
+
+
+class AgentTraceResponse(BaseModel):
+    """Pydantic model representing an agent event trace entry.
+
+    Maps 1-to-1 with a row in the ``agent_traces`` MySQL table.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int = Field(..., description="Unique trace identifier")
+    project_id: str = Field(..., description="Associated project UUID")
+    agent_name: str = Field(..., description="Name of the agent (e.g. planner, search)")
+    event_type: str = Field(..., description="Type of trace event (e.g. start, end, tool_call, llm_call)")
+    token_count: int = Field(0, description="Token consumption for the event")
+    details: Optional[Dict[str, Any]] = Field(None, description="Optional structured details context data")
+    created_at: datetime = Field(..., description="Timestamp of when the trace was created")
+
+
+class AgentTraceQueryFilters(BaseModel):
+    """Query-string filters for the ``GET /logs/agent-traces`` endpoint."""
+
+    project_id: str = Field(..., description="Filter traces by project ID (required)")
+    agent_name: Optional[str] = Field(None, description="Filter traces by agent name")
+    since: Optional[datetime] = Field(None, description="Filter traces created on or after this ISO-8601 timestamp")
+    end_time: Optional[datetime] = Field(None, description="Filter traces created on or before this ISO-8601 timestamp")
+    limit: int = Field(
+        100,
+        ge=1,
+        le=1000,
+        description="Maximum number of trace entries to return (default 100, max 1000)",
+    )
+

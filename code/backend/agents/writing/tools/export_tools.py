@@ -6,21 +6,32 @@ and Markdown drafts into publication-ready BibTeX and LaTeX outputs.
 Tools:
     - export_bibtex: Generate a .bib file from project papers
     - export_latex: Convert Markdown drafts into a LaTeX document
+    - export_citation_graph: Export citation network as JSON + GraphML
 """
 from __future__ import annotations
 
 import logging
-import re
-from pathlib import Path
 from typing import Any
 
 from google.adk.tools.tool_context import ToolContext
 
-from agents._service_registry import registry
-from agents.writing.tex_formatter import format_to_latex, generate_bibtex
-from config import get_settings
+from agents._service_registry import ServiceRegistry
 
 logger = logging.getLogger(__name__)
+
+
+# ------------------------------------------------------------------
+# Helpers
+# ------------------------------------------------------------------
+
+def _get_project_id(tool_context: ToolContext | None) -> str | None:
+    """Extract project_id from the ADK ToolContext state."""
+    if tool_context is None:
+        return None
+    state = getattr(tool_context, "state", None)
+    if state is None:
+        return None
+    return state.get("project_id")  # type: ignore[union-attr]
 
 
 # ------------------------------------------------------------------
@@ -40,45 +51,16 @@ async def export_bibtex(
         A dict with keys: entry_count, saved_path, bibtex_preview
         (first 500 chars of the generated BibTeX).
     """
-    project_id: str = tool_context.state.get("project_id", "")
+    project_id = _get_project_id(tool_context)
     if not project_id:
         return {"error": "No project_id found in session state."}
 
-    neo4j = registry.neo4j
-    settings = get_settings()
-
-    # Fetch all project papers
-    papers = await neo4j.get_project_papers(project_id, limit=500)
-    if not papers:
-        return {"entry_count": 0, "message": "No papers in the project to export."}
-
-    # Generate BibTeX content
-    bibtex_content: str = generate_bibtex(papers)
-
-    # Save to disk
-    export_dir = Path(settings.projects_dir) / project_id / "exports"
-    export_dir.mkdir(parents=True, exist_ok=True)
-    bib_path = export_dir / "references.bib"
-    bib_path.write_text(bibtex_content, encoding="utf-8")
-
-    # Log
-    if registry.log_service:
-        await registry.log_service.log_agent_trace(
-            project_id=project_id,
-            agent_name="WriterAgent",
-            event_type="tool_call",
-            details={
-                "tool": "export_bibtex",
-                "entry_count": len(papers),
-                "path": str(bib_path),
-            },
-        )
-
-    return {
-        "entry_count": len(papers),
-        "saved_path": str(bib_path),
-        "bibtex_preview": bibtex_content[:500],
-    }
+    try:
+        service = ServiceRegistry.export_service
+        return await service.export_bibtex(project_id)
+    except Exception as exc:
+        logger.error("export_bibtex failed: %s", exc)
+        return {"error": str(exc)}
 
 
 # ------------------------------------------------------------------
@@ -107,77 +89,45 @@ async def export_latex(
     if tool_context is None:
         return {"error": "ToolContext is required."}
 
-    project_id: str = tool_context.state.get("project_id", "")
+    project_id = _get_project_id(tool_context)
     if not project_id:
         return {"error": "No project_id found in session state."}
 
-    neo4j = registry.neo4j
-    settings = get_settings()
-    project_dir = Path(settings.projects_dir) / project_id
+    try:
+        service = ServiceRegistry.export_service
+        return await service.export_latex(project_id, template=template)
+    except Exception as exc:
+        logger.error("export_latex failed: %s", exc)
+        return {"error": str(exc)}
 
-    # Read all draft files
-    drafts_dir = project_dir / "drafts"
-    if not drafts_dir.exists():
-        return {"error": "No drafts directory found. Draft sections first."}
 
-    md_files = sorted(drafts_dir.glob("*.md"))
-    if not md_files:
-        return {"error": "No Markdown draft files found in drafts/."}
+# ------------------------------------------------------------------
+# T049 – export_citation_graph
+# ------------------------------------------------------------------
 
-    # Collect all Markdown content
-    sections_md: list[str] = []
-    for md_file in md_files:
-        content = md_file.read_text(encoding="utf-8")
-        sections_md.append(content)
+async def export_citation_graph(
+    tool_context: ToolContext = None,  # type: ignore[assignment]
+) -> dict[str, Any]:
+    """Export the project's paper library citation network.
 
-    combined_markdown = "\n\n".join(sections_md)
+    Queries Neo4j for all papers in the project and their internal
+    citation relationships. Generates both a standard JSON node-link
+    representation and a GraphML XML file (compatible with Gephi), saving
+    them in the project exports directory.
 
-    # Collect all DOI citations from the Markdown
-    # Look for DOI patterns (e.g., 10.xxxx/yyyy)
-    doi_pattern = re.compile(r"10\.\d{4,9}/[^\s,)}\]]+")
-    found_dois: list[str] = list(set(doi_pattern.findall(combined_markdown)))
+    Returns:
+        A dict with keys: node_count, edge_count, json_path, graphml_path.
+    """
+    if tool_context is None:
+        return {"error": "ToolContext is required."}
 
-    # Fetch paper data for BibTeX generation
-    papers = await neo4j.get_project_papers(project_id, limit=500)
+    project_id = _get_project_id(tool_context)
+    if not project_id:
+        return {"error": "No project_id found in session state."}
 
-    # Generate BibTeX
-    bibtex_content: str = generate_bibtex(papers)
-
-    # Generate LaTeX
-    latex_content: str = format_to_latex(
-        markdown_content=combined_markdown,
-        citations=found_dois,
-        template=template,
-    )
-
-    # Save outputs
-    export_dir = project_dir / "exports"
-    export_dir.mkdir(parents=True, exist_ok=True)
-
-    tex_path = export_dir / "literature_review.tex"
-    tex_path.write_text(latex_content, encoding="utf-8")
-
-    bib_path = export_dir / "references.bib"
-    bib_path.write_text(bibtex_content, encoding="utf-8")
-
-    # Log
-    if registry.log_service:
-        await registry.log_service.log_agent_trace(
-            project_id=project_id,
-            agent_name="WriterAgent",
-            event_type="tool_call",
-            details={
-                "tool": "export_latex",
-                "template": template,
-                "section_count": len(md_files),
-                "tex_path": str(tex_path),
-            },
-        )
-
-    return {
-        "template": template,
-        "section_count": len(md_files),
-        "tex_path": str(tex_path),
-        "bib_path": str(bib_path),
-        "latex_preview": latex_content[:600],
-    }
+    try:
+        service = ServiceRegistry.export_service
+        return await service.export_citation_graph(project_id)
+    except Exception as exc:
+        logger.error("export_citation_graph failed: %s", exc)
+        return {"error": str(exc)}

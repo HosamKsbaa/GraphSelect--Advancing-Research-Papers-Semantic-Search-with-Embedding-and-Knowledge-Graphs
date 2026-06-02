@@ -13,6 +13,8 @@ from agents.research.tools.retrieval_tools import get_project_papers
 from agents.research.tools.search_tools import (
     add_research_question,
     list_research_questions,
+    get_top_authors,
+    get_top_venues,
 )
 from config import get_settings
 
@@ -30,6 +32,10 @@ guide gap analysis.
    Use to show the current scope of the research.
 3. **get_project_papers** — List papers already in the project library.
    Use to review the current state before searching.
+4. **get_top_authors** — Retrieve the top authors of papers in the project.
+   Use to analyze which researchers are most prominent in the literature collection.
+5. **get_top_venues** — Retrieve the top journals/conferences of papers in the project.
+   Use to identify which venues publish the most relevant work.
 
 ## Your Sub-Agents
 1. **ALRSAgent** — Paper discovery specialist.  Delegate to this agent when
@@ -81,6 +87,8 @@ def create_research_agent() -> LlmAgent:
             add_research_question,
             list_research_questions,
             get_project_papers,
+            get_top_authors,
+            get_top_venues,
         ],
         sub_agents=[alrs_agent, gap_finder_agent],
     )

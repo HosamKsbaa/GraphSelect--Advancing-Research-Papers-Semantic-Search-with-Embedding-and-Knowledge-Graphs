@@ -147,7 +147,69 @@ def test_logs_endpoints_service_unavailable() -> None:
         response2 = client.get("/api/logs/api-requests")
         assert response2.status_code == 503
         assert "MySQL service not initialized" in response2.json()["detail"]
+
+        response3 = client.get("/api/logs/agent-traces", params={"project_id": "project-123"})
+        assert response3.status_code == 503
+        assert "MySQL service not initialized" in response3.json()["detail"]
     finally:
         if old_mysql is not None:
             app.state.mysql_service = old_mysql
+
+
+def test_get_agent_traces_success() -> None:
+    """Test retrieving agent traces with valid query filters."""
+    mock_traces = [
+        {
+            "id": 1,
+            "project_id": "project-123",
+            "agent_name": "planner",
+            "event_type": "llm_call",
+            "token_count": 2500,
+            "details": '{"prompt": "design outline", "tokens": 2500}',
+            "created_at": datetime(2026, 5, 30, 18, 0, 0),
+        }
+    ]
+
+    mock_mysql = AsyncMock()
+    mock_mysql.fetch_all.return_value = mock_traces
+
+    from core.dependencies import get_mysql_service
+    app.dependency_overrides[get_mysql_service] = lambda: mock_mysql
+    client = TestClient(app)
+    response = client.get(
+        "/api/logs/agent-traces",
+        params={
+            "project_id": "project-123",
+            "agent_name": "planner",
+            "since": "2026-05-30T17:00:00",
+            "end_time": "2026-05-30T19:00:00",
+            "limit": 50,
+        }
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["id"] == 1
+    assert data[0]["project_id"] == "project-123"
+    assert data[0]["agent_name"] == "planner"
+    assert data[0]["token_count"] == 2500
+    assert data[0]["details"] == {"prompt": "design outline", "tokens": 2500}
+
+    # Verify that mysql_service was queried with the correct filters
+    mock_mysql.fetch_all.assert_called_once()
+    query = mock_mysql.fetch_all.call_args[0][0]
+    args = mock_mysql.fetch_all.call_args[0][1]
+    assert "project_id = %s" in query
+    assert "agent_name = %s" in query
+    assert "created_at >= %s" in query
+    assert "created_at <= %s" in query
+    assert "LIMIT %s" in query
+    assert "project-123" in args
+    assert "planner" in args
+    assert "2026-05-30 17:00:00" in args
+    assert "2026-05-30 19:00:00" in args
+    assert 50 in args
+    app.dependency_overrides.clear()
+
 

@@ -689,3 +689,127 @@ class Neo4jService:
         """
         await self.execute_write(query, {'project_id': project_id})
 
+    # ------------------------------------------------------------------
+    # Analytics queries (extracted from agent tools)
+    # ------------------------------------------------------------------
+
+    async def get_top_authors(
+        self,
+        project_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Get top authors by paper count within a project.
+
+        Args:
+            project_id: The project's UUID.
+            limit: Maximum number of authors to return.
+
+        Returns:
+            List of dicts with name, openalex_id, paper_count.
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})-[:HAS_PAPER]->(p:Paper)
+        MATCH (a:Author)-[:AUTHORED]->(p)
+        RETURN a.name AS name, a.openalex_id AS openalex_id, count(p) AS paper_count
+        ORDER BY paper_count DESC
+        LIMIT $limit
+        """
+        return await self.execute_read(query, {
+            'project_id': project_id,
+            'limit': limit,
+        })
+
+    async def get_top_venues(
+        self,
+        project_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Get top venues by paper count within a project.
+
+        Args:
+            project_id: The project's UUID.
+            limit: Maximum number of venues to return.
+
+        Returns:
+            List of dicts with name, openalex_id, paper_count.
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})-[:HAS_PAPER]->(p:Paper)-[:PUBLISHED_IN]->(v:Venue)
+        RETURN v.name AS name, v.openalex_id AS openalex_id, count(p) AS paper_count
+        ORDER BY paper_count DESC
+        LIMIT $limit
+        """
+        return await self.execute_read(query, {
+            'project_id': project_id,
+            'limit': limit,
+        })
+
+    async def get_citation_graph_nodes(
+        self,
+        project_id: str,
+    ) -> list[dict[str, Any]]:
+        """Get all papers in a project as citation graph nodes.
+
+        Args:
+            project_id: The project's UUID.
+
+        Returns:
+            List of dicts with doi, title, year, cited_by_count.
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})-[:HAS_PAPER]->(p:Paper)
+        RETURN p.doi AS doi, p.title AS title,
+               p.year AS year, p.cited_by_count AS cited_by_count
+        """
+        return await self.execute_read(query, {'project_id': project_id})
+
+    async def get_citation_graph_edges(
+        self,
+        project_id: str,
+    ) -> list[dict[str, Any]]:
+        """Get all citation edges between papers in a project.
+
+        Args:
+            project_id: The project's UUID.
+
+        Returns:
+            List of dicts with source and target DOIs.
+        """
+        query = """
+        MATCH (pr:Project {project_id: $project_id})-[:HAS_PAPER]->(p1:Paper)-[:CITES]->(p2:Paper)<-[:HAS_PAPER]-(pr)
+        RETURN p1.doi AS source, p2.doi AS target
+        """
+        return await self.execute_read(query, {'project_id': project_id})
+
+    async def get_project_gap_stats(
+        self,
+        project_id: str,
+        threshold: float = 0.6,
+    ) -> list[dict[str, Any]]:
+        """Get coverage gap statistics for research questions in a project.
+
+        Computes how many papers are above the similarity threshold
+        for each research question.
+
+        Args:
+            project_id: The project's UUID.
+            threshold: Minimum similarity score for a paper to be 'covered'.
+
+        Returns:
+            List of dicts with question, covered_count.
+        """
+        query = """
+        MATCH (q:ResearchQuestion {project_id: $project_id})
+        WHERE q.embedding IS NOT NULL
+        CALL db.index.vector.queryNodes('paper_embeddings', 50, q.embedding)
+        YIELD node AS p, score
+        MATCH (pr:Project {project_id: $project_id})-[:HAS_PAPER]->(p)
+        WHERE score >= $threshold
+        RETURN q.text AS question, count(p) AS covered_count
+        """
+        return await self.execute_read(query, {
+            'project_id': project_id,
+            'threshold': threshold,
+        })
+
+

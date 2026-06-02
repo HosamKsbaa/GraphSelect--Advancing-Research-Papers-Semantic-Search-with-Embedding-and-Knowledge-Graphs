@@ -1,0 +1,45 @@
+{
+  "sections": [
+    {
+      "title": "Historical and Regional Diversity in Ancient Bead-Making Technologies",
+      "description": "This section explores the diverse historical methods of manufacturing glass and ceramic (faience) beads across different early civilizations, including early West African glassmaking, Chinese Early Iron Age faience production, and early European techniques. It highlights how local materials and cultural contexts shaped early pyrotechnological practices.",
+      "assigned_papers": [
+        "10.1177/0021934717701915",
+        "10.1016/j.ceramint.2017.05.086",
+        "10.3998/jgs.6936"
+      ],
+      "theme": "Historical Manufacturing Methods"
+    },
+    {
+      "title": "Advanced Analytical Techniques for Structural and Compositional Characterization",
+      "description": "This section examines the modern non-destructive physical and chemical analysis techniques used to study ancient beads. It focuses on how technologies like Optical Coherence Tomography (OCT), Computed Tomography (CT), micro-XRF, and micro-Raman spectroscopy reveal internal structures, manufacturing steps, and material properties of glass and ceramic beads.",
+      "assigned_papers": [
+        "10.3788/col202018.090001",
+        "10.1016/j.microc.2020.104798",
+        "10.1016/j.ceramint.2017.05.086"
+      ],
+      "theme": "Analytical Characterization"
+    },
+    {
+      "title": "Provenance, Trade Networks, and Global Exchange",
+      "description": "This section discusses how chemical and elemental profiling of beads is utilized to trace their origins and reconstruct ancient trade routes. By analyzing compositional signatures, researchers can map long-distance exchange networks, such as those connecting West Africa to global trade partners during the medieval period.",
+      "assigned_papers": [
+        "10.1371/journal.pone.0242027",
+        "10.1177/0021934717701915"
+      ],
+      "theme": "Provenance and Trade"
+    },
+    {
+      "title": "The Industrialization and Evolution of Bead-Making Processes",
+      "description": "This section traces the transition of bead manufacturing from highly specialized, traditional artisanal methods to industrial-scale mass production. Focusing heavily on the Venetian and Muranese glass industries, it details the evolution of rounding techniques, recipe standardization, and the impact of global events on production technologies from the 15th to the 20th centuries.",
+      "assigned_papers": [
+        "10.7264/rv3ftn70",
+        "10.5399/beads/2.6075",
+        "10.7264/fsrpxs43",
+        "10.3998/jgs.6936"
+      ],
+      "theme": "Industrial Evolution"
+    }
+  ],
+  "narrative_arc": "The literature review begins by establishing the historical and regional diversity of ancient bead-making techniques across different civilizations (Section 1). It then transitions into the scientific methodologies used to decode these ancient objects, exploring advanced non-destructive physical and chemical characterization techniques (Section 2). These analytical tools lay the groundwork for understanding provenance, allowing researchers to reconstruct ancient trade routes and global exchange networks (Section 3). Finally, the review traces the historical trajectory of bead-making as it evolved from these localized, artisanal traditions into mechanized, industrial mass production, using the Venetian glass industry as a primary case study (Section 4)."
+}

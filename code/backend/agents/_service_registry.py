@@ -30,6 +30,9 @@ class ServiceRegistryMeta(type):
             "llm",
             "log_service",
             "embedding_provider",
+            "planning_service",
+            "writing_service",
+            "export_service",
         ):
             cls._ensure_initialized()
             return getattr(cls, f"_{name}")
@@ -49,6 +52,9 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
     _llm: LLMService
     _log_service: LogService
     _embedding_provider: EmbeddingProvider
+    _planning_service: Any
+    _writing_service: Any
+    _export_service: Any
 
     _initialized: bool = False
     _initializing: bool = False
@@ -85,6 +91,11 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
     def is_initialized(cls) -> bool:
         """Check whether the registry has been initialized."""
         return cls._initialized
+
+    def __getattr__(self, name: str) -> Any:
+        """Delegate instance attribute access to the class-level metaclass handler."""
+        return getattr(type(self), name)
+
 
     @classmethod
     def _ensure_initialized(cls) -> None:
@@ -194,6 +205,29 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
                 log_service=log_service,
                 embedding_provider=embedding_provider,
             )
+
+            # 8. Domain services (constructed after core services)
+            from features.planning.service import PlanningService
+            from features.writing.service import WritingService
+            from features.export.service import ExportService
+
+            cls._planning_service = PlanningService(
+                neo4j=neo4j,
+                llm=llm,
+                projects_dir=settings.projects_dir,
+            )
+            cls._writing_service = WritingService(
+                neo4j=neo4j,
+                llm=llm,
+                log_service=log_service,
+                projects_dir=settings.projects_dir,
+            )
+            cls._export_service = ExportService(
+                neo4j=neo4j,
+                log_service=log_service,
+                projects_dir=settings.projects_dir,
+            )
+
             logger.info("ServiceRegistry: on-demand initialization complete")
         except Exception as e:
             cls._initializing = False

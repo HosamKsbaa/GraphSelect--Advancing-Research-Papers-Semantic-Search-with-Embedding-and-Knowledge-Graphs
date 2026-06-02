@@ -31,7 +31,7 @@ class OpenAlexService:
         log_service: LogService | None = None,
     ) -> None:
         # Detect placeholder keys and treat them as "no key"
-        _placeholder_keys = {"", "your_openalex_api_key_here"}
+        _placeholder_keys = {"", "your_openalex_api_key_here", "dev-dummy-openalex-key"}
         self._api_key = api_key if api_key not in _placeholder_keys else ""
         self._rate_limiter = rate_limiter
         self._log_service = log_service
@@ -277,6 +277,110 @@ class OpenAlexService:
                 )
             )
         return candidates
+
+    async def search_by_author(
+        self,
+        author_name: str,
+        max_results: int = 10,
+        session_id: str | None = None,
+    ) -> list[PaperSummary]:
+        """Search for papers by a specific author name.
+
+        Args:
+            author_name: Full or partial author name (e.g. "Yoshua Bengio").
+            max_results: Maximum number of results (1-25).
+            session_id: Session ID for log correlation.
+
+        Returns:
+            List of PaperSummary models.
+        """
+        data = await self._request(
+            "GET",
+            "/works",
+            params={
+                "filter": f"authorships.author.display_name.search:{author_name}",
+                "per_page": min(max_results, 25),
+                "select": "doi,title,publication_year,cited_by_count,authorships",
+            },
+            session_id=session_id,
+        )
+        results: list[dict[str, object]] = data.get("results") or []  # type: ignore[assignment]
+        candidates: list[PaperSummary] = []
+        for work in results:
+            doi = work.get("doi")
+            if doi is None:
+                continue
+            doi_str = str(doi).replace("https://doi.org/", "")
+            authorships: list[dict[str, object]] = work.get("authorships") or []  # type: ignore[assignment]
+            author_names: list[str] = []
+            for auth in authorships:
+                author_info: dict[str, object] = auth.get("author", {})  # type: ignore[assignment]
+                name = author_info.get("display_name")
+                if name is not None:
+                    author_names.append(str(name))
+            candidates.append(
+                PaperSummary(
+                    doi=doi_str,
+                    title=str(work.get("title", "")),
+                    year=work.get("publication_year"),  # type: ignore[arg-type]
+                    cited_by_count=int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
+                    authors=author_names[:5],
+                )
+            )
+        return candidates
+
+    async def search_by_venue(
+        self,
+        venue_name: str,
+        max_results: int = 10,
+        session_id: str | None = None,
+    ) -> list[PaperSummary]:
+        """Search for papers published in a specific venue (journal/conference).
+
+        Args:
+            venue_name: Name of the venue (e.g. "NeurIPS", "Nature").
+            max_results: Maximum number of results (1-25).
+            session_id: Session ID for log correlation.
+
+        Returns:
+            List of PaperSummary models sorted by citation count descending.
+        """
+        data = await self._request(
+            "GET",
+            "/works",
+            params={
+                "filter": f"primary_location.source.display_name.search:{venue_name}",
+                "per_page": min(max_results, 25),
+                "select": "doi,title,publication_year,cited_by_count,authorships",
+                "sort": "cited_by_count:desc",
+            },
+            session_id=session_id,
+        )
+        results: list[dict[str, object]] = data.get("results") or []  # type: ignore[assignment]
+        candidates: list[PaperSummary] = []
+        for work in results:
+            doi = work.get("doi")
+            if doi is None:
+                continue
+            doi_str = str(doi).replace("https://doi.org/", "")
+            authorships: list[dict[str, object]] = work.get("authorships") or []  # type: ignore[assignment]
+            author_names: list[str] = []
+            for auth in authorships:
+                author_info: dict[str, object] = auth.get("author", {})  # type: ignore[assignment]
+                name = author_info.get("display_name")
+                if name is not None:
+                    author_names.append(str(name))
+            candidates.append(
+                PaperSummary(
+                    doi=doi_str,
+                    title=str(work.get("title", "")),
+                    year=work.get("publication_year"),  # type: ignore[arg-type]
+                    cited_by_count=int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
+                    authors=author_names[:5],
+                )
+            )
+        return candidates
+
 
     async def get_citations(
         self,
