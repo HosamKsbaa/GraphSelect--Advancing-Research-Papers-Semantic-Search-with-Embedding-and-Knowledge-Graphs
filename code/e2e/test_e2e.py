@@ -33,7 +33,7 @@ from selenium.common.exceptions import TimeoutException
 # Configuration
 # ---------------------------------------------------------------------------
 BASE_URL = os.environ.get("ALRS_BASE_URL", "http://localhost:4200")
-API_URL = os.environ.get("ALRS_API_URL", "http://localhost:8000")
+API_URL = os.environ.get("ALRS_API_URL", "http://localhost:8002")
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 WAIT_TIMEOUT = 10  # seconds
 
