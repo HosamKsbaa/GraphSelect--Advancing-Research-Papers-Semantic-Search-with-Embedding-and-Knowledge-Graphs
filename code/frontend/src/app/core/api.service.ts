@@ -54,7 +54,18 @@ export interface SessionList {
 
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  private readonly baseUrl = '/api';
+  get baseUrl(): string {
+    return localStorage.getItem('alrs_api_base_url') || '/api';
+  }
+
+  setBaseUrl(url: string): void {
+    const cleanUrl = url.trim().replace(/\/$/, '');
+    if (cleanUrl) {
+      localStorage.setItem('alrs_api_base_url', cleanUrl);
+    } else {
+      localStorage.removeItem('alrs_api_base_url');
+    }
+  }
 
   constructor(private http: HttpClient) {}
 
@@ -179,6 +190,153 @@ export class ApiService {
   updateSettings(body: SettingsUpdateRequest): Observable<SettingsUpdateResponse> {
     return this.http.put<SettingsUpdateResponse>(`${this.baseUrl}/settings`, body);
   }
+
+  // --- Projects ---
+  createProject(body: ProjectCreateRequest): Observable<Project> {
+    return this.http.post<Project>(`${this.baseUrl}/projects`, body);
+  }
+
+  listProjects(includeArchived?: boolean): Observable<Project[]> {
+    let params = '';
+    if (includeArchived !== undefined) {
+      params = `?include_archived=${includeArchived}`;
+    }
+    return this.http.get<Project[]>(`${this.baseUrl}/projects${params}`);
+  }
+
+  getProject(id: string): Observable<Project> {
+    return this.http.get<Project>(`${this.baseUrl}/projects/${id}`);
+  }
+
+  updateProject(id: string, body: ProjectUpdateRequest): Observable<Project> {
+    return this.http.put<Project>(`${this.baseUrl}/projects/${id}`, body);
+  }
+
+  archiveProject(id: string): Observable<{ message: string }> {
+    return this.http.patch<{ message: string }>(`${this.baseUrl}/projects/${id}/archive`, {});
+  }
+
+  // --- Research ---
+  addQuestion(projectId: string, body: AddQuestionRequest): Observable<AddQuestionResponse> {
+    return this.http.post<AddQuestionResponse>(`${this.baseUrl}/research/${projectId}/questions`, body);
+  }
+
+  listQuestions(projectId: string): Observable<ResearchQuestion[]> {
+    return this.http.get<ResearchQuestion[]>(`${this.baseUrl}/research/${projectId}/questions`);
+  }
+
+  deleteQuestion(projectId: string, questionId: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.baseUrl}/research/${projectId}/questions/${questionId}`);
+  }
+
+  getTopAuthors(projectId: string, limit?: number): Observable<{ authors: TopEntity[] }> {
+    let url = `${this.baseUrl}/research/${projectId}/top-authors`;
+    if (limit !== undefined) {
+      url += `?limit=${limit}`;
+    }
+    return this.http.get<{ authors: TopEntity[] }>(url);
+  }
+
+  getTopVenues(projectId: string, limit?: number): Observable<{ venues: TopEntity[] }> {
+    let url = `${this.baseUrl}/research/${projectId}/top-venues`;
+    if (limit !== undefined) {
+      url += `?limit=${limit}`;
+    }
+    return this.http.get<{ venues: TopEntity[] }>(url);
+  }
+
+  searchByAuthor(name: string): Observable<PaperSummary[]> {
+    return this.http.get<PaperSummary[]>(`${this.baseUrl}/research/search/author?name=${encodeURIComponent(name)}`);
+  }
+
+  searchByVenue(name: string): Observable<PaperSummary[]> {
+    return this.http.get<PaperSummary[]>(`${this.baseUrl}/research/search/venue?name=${encodeURIComponent(name)}`);
+  }
+
+  // --- Analysis ---
+  getPaperSimilarity(projectId: string, doi: string): Observable<QuestionSimilarity[]> {
+    return this.http.get<QuestionSimilarity[]>(`${this.baseUrl}/analysis/${projectId}/similarity/${encodeURIComponent(doi)}`);
+  }
+
+  getCitationStats(projectId: string): Observable<CitationStats> {
+    return this.http.get<CitationStats>(`${this.baseUrl}/analysis/${projectId}/citation-stats`);
+  }
+
+  getCoverage(projectId: string, threshold?: number): Observable<CoverageResponse> {
+    let url = `${this.baseUrl}/analysis/${projectId}/coverage`;
+    if (threshold !== undefined) {
+      url += `?threshold=${threshold}`;
+    }
+    return this.http.get<CoverageResponse>(url);
+  }
+
+  generateGapQueries(projectId: string, body: GapQueryRequest): Observable<GapQueryResponse> {
+    return this.http.post<GapQueryResponse>(`${this.baseUrl}/analysis/${projectId}/gap-queries`, body);
+  }
+
+  getRankedPapers(projectId: string): Observable<AnalysisRankedPaper[]> {
+    return this.http.get<AnalysisRankedPaper[]>(`${this.baseUrl}/analysis/${projectId}/ranked-papers`);
+  }
+
+  // --- Planning ---
+  getProjectSummary(projectId: string): Observable<ProjectSummary> {
+    return this.http.get<ProjectSummary>(`${this.baseUrl}/planning/${projectId}/summary`);
+  }
+
+  generateOutline(projectId: string, body: OutlineRequest): Observable<OutlineResponse> {
+    return this.http.post<OutlineResponse>(`${this.baseUrl}/planning/${projectId}/outline`, body);
+  }
+
+  // --- Writing ---
+  getAbstracts(projectId: string, body: AbstractsRequest): Observable<AbstractsResponse> {
+    return this.http.post<AbstractsResponse>(`${this.baseUrl}/writing/${projectId}/abstracts`, body);
+  }
+
+  draftSection(projectId: string, body: DraftRequest): Observable<DraftResponse> {
+    return this.http.post<DraftResponse>(`${this.baseUrl}/writing/${projectId}/draft`, body);
+  }
+
+  reviewSection(projectId: string, body: ReviewRequest): Observable<ReviewResponse> {
+    return this.http.post<ReviewResponse>(`${this.baseUrl}/writing/${projectId}/review`, body);
+  }
+
+  // --- Export ---
+  exportBibtex(projectId: string): Observable<Blob> {
+    return this.http.post(`${this.baseUrl}/export/${projectId}/bibtex`, {}, { responseType: 'blob' });
+  }
+
+  exportLatex(projectId: string, body: ExportLatexRequest): Observable<Blob> {
+    return this.http.post(`${this.baseUrl}/export/${projectId}/latex`, body, { responseType: 'blob' });
+  }
+
+  exportCitationGraph(projectId: string): Observable<Blob> {
+    return this.http.post(`${this.baseUrl}/export/${projectId}/citation-graph`, {}, { responseType: 'blob' });
+  }
+
+  // --- Papers ---
+  getPaperDetail(doi: string): Observable<PaperDetail> {
+    return this.http.get<PaperDetail>(`${this.baseUrl}/papers/${encodeURIComponent(doi)}`);
+  }
+
+  addPapersToProject(body: AddPapersToProjectRequest): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/projects/${body.project_id}/papers`, body);
+  }
+
+  // --- Logs (Agent Traces) ---
+  getAgentTraces(
+    projectId?: string,
+    agentName?: string,
+    since?: string,
+    endTime?: string,
+    limit: number = 100
+  ): Observable<AgentTraceListResponse> {
+    let params = `limit=${limit}`;
+    if (projectId) params += `&project_id=${encodeURIComponent(projectId)}`;
+    if (agentName) params += `&agent_name=${encodeURIComponent(agentName)}`;
+    if (since) params += `&since=${encodeURIComponent(since)}`;
+    if (endTime) params += `&end_time=${encodeURIComponent(endTime)}`;
+    return this.http.get<AgentTraceListResponse>(`${this.baseUrl}/logs/agent-traces?${params}`);
+  }
 }
 
 export interface ProgressEvent {
@@ -292,4 +450,232 @@ export interface SettingsUpdateResponse {
   success: boolean;
   message: string;
   restart_required: boolean;
+}
+
+// --- ALRS Project Management Interfaces ---
+export interface Project {
+  id: string;
+  name: string;
+  description: string;
+  topic: string;
+  target_level: 'master' | 'phd';
+  is_archived: boolean;
+  paper_count: number;
+  question_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectCreateRequest {
+  name: string;
+  description?: string;
+  topic?: string;
+  target_level?: 'master' | 'phd';
+}
+
+export interface ProjectUpdateRequest {
+  name?: string;
+  description?: string;
+  topic?: string;
+  target_level?: 'master' | 'phd';
+}
+
+export interface ProjectListResponse {
+  projects: Project[];
+  total: number;
+}
+
+// --- ALRS Research Interfaces ---
+export interface ResearchQuestion {
+  id: string;
+  text: string;
+  embedding_status: 'pending' | 'embedded' | 'failed';
+  coverage_score?: number;
+  created_at: string;
+}
+
+export interface AddQuestionRequest {
+  text: string;
+}
+
+export interface AddQuestionResponse {
+  question: ResearchQuestion;
+  message: string;
+}
+
+export interface PaperDetail {
+  doi: string;
+  title: string;
+  abstract: string | null;
+  year: number;
+  type: string;
+  cited_by_count: number;
+  authors: Author[];
+  venue: Venue | null;
+  keywords: string[];
+  similarity_scores: QuestionSimilarity[];
+}
+
+export interface Author {
+  name: string;
+  openalex_id: string;
+  orcid: string | null;
+  affiliations: string[];
+}
+
+export interface Venue {
+  name: string;
+  type: string;
+}
+
+export interface QuestionSimilarity {
+  question_id: string;
+  question_text: string;
+  similarity_score: number;
+}
+
+export interface TopEntity {
+  name: string;
+  count: number;
+}
+
+// --- ALRS Analysis Interfaces ---
+export interface CoverageResult {
+  question_id: string;
+  question_text: string;
+  coverage_score: number;
+  status: 'covered' | 'partial' | 'gap';
+  top_papers: string[];
+  paper_count: number;
+}
+
+export interface CoverageResponse {
+  coverages: CoverageResult[];
+  threshold: number;
+}
+
+export interface GapQueryRequest {
+  gap_question: string;
+  max_queries?: number;
+}
+
+export interface GapQueryResponse {
+  queries: string[];
+  gap_question: string;
+}
+
+export interface AnalysisRankedPaper {
+  doi: string;
+  title: string;
+  year: number;
+  hybrid_score: number;
+  similarity_score: number;
+  pagerank_score: number;
+  question_similarities: QuestionSimilarity[];
+}
+
+export interface CitationStats {
+  total_papers: number;
+  average_similarity: number;
+  network_density: number;
+  top_cited: { doi: string; title: string; cited_by_count: number }[];
+}
+
+// --- ALRS Planning Interfaces ---
+export interface ProjectSummary {
+  paper_count: number;
+  question_count: number;
+  gap_count: number;
+  has_outline: boolean;
+  has_drafts: boolean;
+}
+
+export interface OutlineSection {
+  title: string;
+  description: string;
+  paper_dois: string[];
+  order: number;
+}
+
+export interface OutlineRequest {
+  style?: string;
+  num_sections?: number;
+}
+
+export interface OutlineResponse {
+  sections: OutlineSection[];
+  style: string;
+}
+
+// --- ALRS Writing Interfaces ---
+export interface DraftRequest {
+  section_title: string;
+  section_description: string;
+  paper_dois: string[];
+  target_level: 'master' | 'phd';
+  outline_context?: string;
+}
+
+export interface DraftResponse {
+  section_title: string;
+  draft_text: string;
+  word_count: number;
+  citations_used: string[];
+}
+
+export interface ReviewRequest {
+  section_title: string;
+  draft_text: string;
+  paper_dois: string[];
+  target_level: 'master' | 'phd';
+}
+
+export interface ReviewResponse {
+  approved: boolean;
+  feedback: string[];
+  missing_citations: string[];
+}
+
+export interface AbstractsRequest {
+  dois: string[];
+}
+
+export interface AbstractsResponse {
+  abstracts: { doi: string; title: string; abstract: string | null }[];
+}
+
+// --- ALRS Export Interfaces ---
+export interface ExportLatexRequest {
+  template: 'ieee' | 'acm' | 'plain';
+}
+
+// --- ALRS Agent Trace Interfaces ---
+export interface AgentTrace {
+  id: string;
+  project_id: string;
+  agent_name: string;
+  action_summary: string;
+  tool_calls: ToolCall[];
+  llm_prompt?: string;
+  llm_response?: string;
+  decision_outcome?: string;
+  token_count: number;
+  timestamp: string;
+}
+
+export interface ToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
+  result: string;
+}
+
+export interface AgentTraceListResponse {
+  traces: AgentTrace[];
+  total: number;
+}
+
+// --- ALRS Search Results - Project Import Interfaces ---
+export interface AddPapersToProjectRequest {
+  project_id: string;
+  dois: string[];
 }

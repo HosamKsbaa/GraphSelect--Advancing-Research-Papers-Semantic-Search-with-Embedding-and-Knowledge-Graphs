@@ -2,7 +2,7 @@
   <div class="page-header">
     <h1 class="page-title">Logs & Monitoring</h1>
     <p class="text-secondary">
-      Monitor FastAPI internal execution events and scholarly crawler HTTP transactions. Relational logs are auto-purged periodically.
+      Monitor FastAPI internal execution events, scholarly crawler HTTP transactions, and agent traces.
     </p>
   </div>
 
@@ -23,6 +23,12 @@
       </svg>
       Scholarly API Requests
     </button>
+    <button class="tab-btn" [class.active]="activeTab === 'agent'" (click)="setTab('agent')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+      </svg>
+      Agent Traces
+    </button>
   </div>
 
   <!-- Filter & Action Controls -->
@@ -39,7 +45,7 @@
             <option value="ERROR">ERROR</option>
           </select>
         </div>
-      } @else {
+      } @else if (activeTab === 'api') {
         <div class="control-item">
           <label for="service-select">Scholar Service</label>
           <select id="service-select" [(ngModel)]="serviceFilter" (ngModelChange)="loadLogs()">
@@ -48,6 +54,28 @@
             <option value="OpenCitations">OpenCitations API</option>
             <option value="Gemini">Gemini Embedding API</option>
           </select>
+        </div>
+      } @else if (activeTab === 'agent') {
+        <div class="control-item">
+          <label for="project-select">Project</label>
+          <select id="project-select" [(ngModel)]="projectIdFilter" (ngModelChange)="loadLogs()">
+            <option value="">All Projects</option>
+            @for (project of projects; track project.id) {
+              <option [value]="project.id">{{ project.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="control-item">
+          <label for="agent-name">Agent Name</label>
+          <input type="text" id="agent-name" [(ngModel)]="agentNameFilter" placeholder="e.g. planner" (keyup.enter)="loadLogs()" />
+        </div>
+        <div class="control-item">
+          <label for="since-date">Since</label>
+          <input type="datetime-local" id="since-date" [(ngModel)]="sinceFilter" (change)="loadLogs()" />
+        </div>
+        <div class="control-item">
+          <label for="end-date">End</label>
+          <input type="datetime-local" id="end-date" [(ngModel)]="endTimeFilter" (change)="loadLogs()" />
         </div>
       }
 
@@ -241,6 +269,88 @@
                 }
               </tbody>
             </table>
+          </div>
+        }
+      }
+
+      <!-- Agent Traces Table -->
+      @if (activeTab === 'agent') {
+        @if (agentTraces.length === 0) {
+          <div class="empty-logs">
+            <p class="text-secondary">No agent traces found matching the filters.</p>
+          </div>
+        } @else {
+          <div class="agent-traces-list">
+            @for (trace of agentTraces; track trace.id) {
+              <div class="trace-card card glass">
+                <div class="trace-header">
+                  <div class="trace-info">
+                    <span class="badge badge-info">{{ trace.agent_name }}</span>
+                    <span class="trace-action">{{ trace.action_summary }}</span>
+                  </div>
+                  <div class="trace-meta">
+                    <span class="badge badge-accent">{{ trace.token_count }} tokens</span>
+                    <span class="mono text-muted text-xs">{{ trace.timestamp | date:'yyyy-MM-dd HH:mm:ss' }}</span>
+                  </div>
+                </div>
+
+                <div class="trace-details">
+                  @if (trace.decision_outcome) {
+                    <div class="trace-outcome">
+                      <strong>Outcome:</strong> {{ trace.decision_outcome }}
+                    </div>
+                  }
+
+                  @if (trace.tool_calls && trace.tool_calls.length > 0) {
+                    <details class="extra-details">
+                      <summary class="text-xs text-muted">View Tool Calls ({{ trace.tool_calls.length }})</summary>
+                      <div class="pre-container">
+                        <button class="copy-btn glass" (click)="copyToClipboard(formatJsonString(trace.tool_calls) || '', trace.id, 'trace-args', $event)">
+                          @if (copiedId === trace.id && copiedType === 'trace-args') {
+                            Copied!
+                          } @else {
+                            Copy Tool Calls
+                          }
+                        </button>
+                        <pre class="extra-pre mono">{{ formatJsonString(trace.tool_calls) }}</pre>
+                      </div>
+                    </details>
+                  }
+
+                  @if (trace.llm_prompt) {
+                    <details class="extra-details">
+                      <summary class="text-xs text-muted">View LLM Prompt</summary>
+                      <div class="pre-container">
+                        <button class="copy-btn glass" (click)="copyToClipboard(trace.llm_prompt, trace.id, 'trace-prompt', $event)">
+                          @if (copiedId === trace.id && copiedType === 'trace-prompt') {
+                            Copied!
+                          } @else {
+                            Copy Prompt
+                          }
+                        </button>
+                        <pre class="extra-pre mono">{{ trace.llm_prompt }}</pre>
+                      </div>
+                    </details>
+                  }
+
+                  @if (trace.llm_response) {
+                    <details class="extra-details">
+                      <summary class="text-xs text-muted">View LLM Response</summary>
+                      <div class="pre-container">
+                        <button class="copy-btn glass" (click)="copyToClipboard(trace.llm_response, trace.id, 'trace-res', $event)">
+                          @if (copiedId === trace.id && copiedType === 'trace-res') {
+                            Copied!
+                          } @else {
+                            Copy Response
+                          }
+                        </button>
+                        <pre class="extra-pre mono">{{ trace.llm_response }}</pre>
+                      </div>
+                    </details>
+                  }
+                </div>
+              </div>
+            }
           </div>
         }
       }

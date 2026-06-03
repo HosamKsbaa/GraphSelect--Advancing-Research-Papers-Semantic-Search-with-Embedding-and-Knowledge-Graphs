@@ -1,0 +1,178 @@
+<div class="project-list-layout animate-fade-in">
+  <!-- Header -->
+  <header class="page-header">
+    <div class="header-content">
+      <div class="header-titles">
+        <h1 class="text-3xl text-primary font-bold">Research Projects</h1>
+        <p class="text-secondary mt-1">Manage and organize your literature reviews</p>
+      </div>
+      <div class="header-actions">
+        <label class="toggle-switch">
+          <input type="checkbox" [checked]="showArchived" (change)="toggleArchived()">
+          <span class="slider"></span>
+          <span class="label-text text-sm text-secondary">Show Archived</span>
+        </label>
+        <button class="btn btn-primary" (click)="openCreateDialog()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          New Project
+        </button>
+      </div>
+    </div>
+
+    <!-- Search/Filter -->
+    <div class="search-bar">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" placeholder="Search projects by name, topic, or description..." [(ngModel)]="searchQuery" (input)="onSearchChange()">
+    </div>
+  </header>
+
+  <!-- Empty State -->
+  @if (!isLoading && projects.length === 0) {
+    <app-empty-state 
+      heading="No Projects Yet" 
+      description="Start by creating a new research project to organize your literature review."
+      ctaText="Create Your First Project"
+      [ctaAction]="openCreateDialog.bind(this)">
+    </app-empty-state>
+  }
+
+  <!-- Loading State -->
+  @if (isLoading) {
+    <div class="loading-state">
+      <div class="skeleton-card skeleton" *ngFor="let i of [1,2,3]"></div>
+    </div>
+  }
+
+  <!-- Projects List -->
+  @if (!isLoading && projects.length > 0) {
+    <div class="projects-container">
+      
+      <!-- Master Level Projects -->
+      @if (masterProjects.length > 0) {
+        <section class="project-group">
+          <h2 class="group-title text-secondary">Master Level <span class="badge badge-info">{{masterProjects.length}}</span></h2>
+          <div class="project-grid">
+            @for (project of masterProjects; track project.id) {
+              <a [routerLink]="['/projects', project.id]" class="project-card card glass">
+                <div class="card-header">
+                  <h3 class="project-name">{{ project.name }}</h3>
+                  <span class="project-time text-xs text-muted">{{ project.updated_at | relativeTime }}</span>
+                </div>
+                @if (project.topic) {
+                  <p class="project-topic text-sm text-accent">{{ project.topic }}</p>
+                }
+                @if (project.description) {
+                  <p class="project-desc text-sm text-secondary truncate">{{ project.description }}</p>
+                }
+                <div class="card-footer">
+                  <span class="badge badge-success">{{ project.paper_count }} Papers</span>
+                  <span class="badge badge-warning">{{ project.question_count }} Questions</span>
+                </div>
+              </a>
+            }
+          </div>
+        </section>
+      }
+
+      <!-- PhD Level Projects -->
+      @if (phdProjects.length > 0) {
+        <section class="project-group">
+          <h2 class="group-title text-secondary">PhD Level <span class="badge badge-info">{{phdProjects.length}}</span></h2>
+          <div class="project-grid">
+            @for (project of phdProjects; track project.id) {
+              <a [routerLink]="['/projects', project.id]" class="project-card card glass">
+                <div class="card-header">
+                  <h3 class="project-name">{{ project.name }}</h3>
+                  <span class="project-time text-xs text-muted">{{ project.updated_at | relativeTime }}</span>
+                </div>
+                @if (project.topic) {
+                  <p class="project-topic text-sm text-accent">{{ project.topic }}</p>
+                }
+                @if (project.description) {
+                  <p class="project-desc text-sm text-secondary truncate">{{ project.description }}</p>
+                }
+                <div class="card-footer">
+                  <span class="badge badge-success">{{ project.paper_count }} Papers</span>
+                  <span class="badge badge-warning">{{ project.question_count }} Questions</span>
+                </div>
+              </a>
+            }
+          </div>
+        </section>
+      }
+
+      <!-- Archived Projects -->
+      @if (archivedProjects.length > 0) {
+        <section class="project-group archived">
+          <h2 class="group-title text-secondary">Archived <span class="badge">{{archivedProjects.length}}</span></h2>
+          <div class="project-grid">
+            @for (project of archivedProjects; track project.id) {
+              <a [routerLink]="['/projects', project.id]" class="project-card card glass opacity-75">
+                <div class="card-header">
+                  <h3 class="project-name text-muted">{{ project.name }}</h3>
+                  <span class="project-time text-xs text-muted">{{ project.updated_at | relativeTime }}</span>
+                </div>
+                <div class="card-footer mt-2">
+                  <span class="badge">Archived</span>
+                </div>
+              </a>
+            }
+          </div>
+        </section>
+      }
+      
+      <!-- No search results -->
+      @if (projects.length > 0 && masterProjects.length === 0 && phdProjects.length === 0 && archivedProjects.length === 0) {
+        <div class="no-results text-center py-8 text-secondary">
+          No projects matching "{{searchQuery}}"
+        </div>
+      }
+    </div>
+  }
+</div>
+
+<!-- Project Creation Dialog -->
+@if (showCreateDialog) {
+  <div class="modal-backdrop animate-fade-in">
+    <div class="modal-container card glass">
+      <div class="modal-header">
+        <h2 class="text-xl font-bold">New Project</h2>
+        <button class="btn btn-ghost p-1" (click)="closeCreateDialog()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      
+      <form class="modal-body" (ngSubmit)="createProject()">
+        <div class="form-group">
+          <label for="projectName">Project Name <span class="text-error">*</span></label>
+          <input type="text" id="projectName" name="projectName" [(ngModel)]="newProject.name" required placeholder="e.g., LLM Reasoning Capabilities" autofocus>
+        </div>
+        
+        <div class="form-group">
+          <label for="projectTopic">Topic</label>
+          <input type="text" id="projectTopic" name="projectTopic" [(ngModel)]="newProject.topic" placeholder="e.g., Artificial Intelligence">
+        </div>
+
+        <div class="form-group">
+          <label for="targetLevel">Target Level</label>
+          <select id="targetLevel" name="targetLevel" [(ngModel)]="newProject.target_level">
+            <option value="master">Master Level</option>
+            <option value="phd">PhD Level</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="projectDesc">Description</label>
+          <textarea id="projectDesc" name="projectDesc" [(ngModel)]="newProject.description" rows="3" placeholder="Brief description of the research goals..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" (click)="closeCreateDialog()">Cancel</button>
+          <button type="submit" class="btn btn-primary" [disabled]="!newProject.name.trim() || isCreating">
+            {{ isCreating ? 'Creating...' : 'Create Project' }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

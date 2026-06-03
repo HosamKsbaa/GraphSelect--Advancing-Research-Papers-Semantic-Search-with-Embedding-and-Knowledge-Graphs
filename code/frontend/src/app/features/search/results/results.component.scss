@@ -328,6 +328,20 @@
     gap: var(--space-5);
     padding: var(--space-5);
     align-items: flex-start;
+
+    /* Checkbox for selection */
+    .selection-control {
+      display: flex;
+      align-items: center;
+      margin-top: 18px;
+      
+      .paper-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+        accent-color: var(--color-accent);
+      }
+    }
   }
 
   /* Circular Glowing Score ring */
@@ -568,4 +582,9 @@
     font-size: var(--text-xl);
     font-weight: 700;
   }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }

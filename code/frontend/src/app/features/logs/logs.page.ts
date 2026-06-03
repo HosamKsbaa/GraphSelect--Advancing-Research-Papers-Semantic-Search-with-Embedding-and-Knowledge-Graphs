@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService, AppLog, ApiLog } from '../../core/api.service';
+import { ApiService, AppLog, ApiLog, AgentTrace, Project } from '../../core/api.service';
 
 interface DisplayAppLog extends AppLog {
   formattedExtra?: string;
@@ -22,29 +22,50 @@ interface DisplayApiLog extends ApiLog {
   styleUrl: './logs.page.scss',
 })
 export class LogsPage implements OnInit {
-  activeTab: 'app' | 'api' = 'app';
+  activeTab: 'app' | 'api' | 'agent' = 'app';
   appLogs: DisplayAppLog[] = [];
   apiLogs: DisplayApiLog[] = [];
+  agentTraces: AgentTrace[] = [];
+  projects: Project[] = [];
   loading = false;
   error = '';
 
   // Filter params
   levelFilter = '';
   serviceFilter = '';
+  
+  // Agent Trace Filters
+  projectIdFilter = '';
+  agentNameFilter = '';
+  sinceFilter = '';
+  endTimeFilter = '';
+
   limit = 100;
 
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
+    this.loadProjects();
     this.loadLogs();
   }
 
-  setTab(tab: 'app' | 'api'): void {
+  setTab(tab: 'app' | 'api' | 'agent'): void {
     if (this.activeTab !== tab) {
       this.activeTab = tab;
       this.error = '';
       this.loadLogs();
     }
+  }
+
+  loadProjects(): void {
+    this.api.listProjects().subscribe({
+      next: (res) => {
+        this.projects = res.projects;
+      },
+      error: (err) => {
+        console.error('Failed to load projects for dropdown', err);
+      }
+    });
   }
 
   loadLogs(): void {
@@ -67,7 +88,7 @@ export class LogsPage implements OnInit {
           this.loading = false;
         },
       });
-    } else {
+    } else if (this.activeTab === 'api') {
       const service = this.serviceFilter || undefined;
       this.api.getApiLogs(service, undefined, this.limit).subscribe({
         next: (data) => {
@@ -83,6 +104,22 @@ export class LogsPage implements OnInit {
           this.error = err.error?.detail || 'Failed to retrieve API crawl logs.';
           this.loading = false;
         },
+      });
+    } else if (this.activeTab === 'agent') {
+      const pId = this.projectIdFilter || undefined;
+      const agent = this.agentNameFilter || undefined;
+      const since = this.sinceFilter || undefined;
+      const end = this.endTimeFilter || undefined;
+      
+      this.api.getAgentTraces(pId, agent, since, end, this.limit).subscribe({
+        next: (res) => {
+          this.agentTraces = res.traces;
+          this.loading = false;
+        },
+        error: (err) => {
+          this.error = err.error?.detail || 'Failed to retrieve agent traces.';
+          this.loading = false;
+        }
       });
     }
   }
@@ -105,8 +142,11 @@ export class LogsPage implements OnInit {
     return 'badge-error';
   }
 
-  private formatJsonString(str: string | null | undefined): string {
+  formatJsonString(str: any): string {
     if (!str) return '';
+    if (typeof str === 'object') {
+      return JSON.stringify(str, null, 2);
+    }
     try {
       const parsed = JSON.parse(str);
       return JSON.stringify(parsed, null, 2);
@@ -115,10 +155,10 @@ export class LogsPage implements OnInit {
     }
   }
 
-  copiedId: number | null = null;
-  copiedType: 'app' | 'api' | 'api-req' | 'api-res' = 'app';
+  copiedId: string | number | null = null;
+  copiedType: 'app' | 'api' | 'api-req' | 'api-res' | 'trace-prompt' | 'trace-res' | 'trace-args' = 'app';
 
-  copyToClipboard(text: string, logId: number, type: 'app' | 'api' | 'api-req' | 'api-res', event: Event): void {
+  copyToClipboard(text: string, logId: string | number, type: 'app' | 'api' | 'api-req' | 'api-res' | 'trace-prompt' | 'trace-res' | 'trace-args', event: Event): void {
     event.stopPropagation();
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
@@ -132,7 +172,7 @@ export class LogsPage implements OnInit {
     }
   }
 
-  private setCopiedState(logId: number, type: 'app' | 'api' | 'api-req' | 'api-res'): void {
+  private setCopiedState(logId: string | number, type: 'app' | 'api' | 'api-req' | 'api-res' | 'trace-prompt' | 'trace-res' | 'trace-args'): void {
     this.copiedId = logId;
     this.copiedType = type;
     setTimeout(() => {
@@ -142,7 +182,7 @@ export class LogsPage implements OnInit {
     }, 2000);
   }
 
-  private fallbackCopy(text: string, logId: number, type: 'app' | 'api' | 'api-req' | 'api-res'): void {
+  private fallbackCopy(text: string, logId: string | number, type: 'app' | 'api' | 'api-req' | 'api-res' | 'trace-prompt' | 'trace-res' | 'trace-args'): void {
     try {
       const textArea = document.createElement('textarea');
       textArea.value = text;

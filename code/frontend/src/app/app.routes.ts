@@ -3,13 +3,31 @@ import { Routes } from '@angular/router';
 export const routes: Routes = [
   {
     path: '',
-    redirectTo: 'dashboard',
+    redirectTo: 'projects',
     pathMatch: 'full',
   },
   {
-    path: 'dashboard',
+    path: 'system-status',
     loadComponent: () =>
-      import('./features/dashboard/dashboard.page').then(m => m.DashboardPage),
+      import('./features/system-status/system-status.page').then(m => m.SystemStatusPage),
+  },
+  {
+    path: 'projects',
+    loadComponent: () =>
+      import('./features/projects/project-list/project-list.page').then(m => m.ProjectListPage),
+  },
+  {
+    path: 'projects/:id',
+    loadComponent: () =>
+      import('./features/projects/project-workspace/project-workspace.page').then(m => m.ProjectWorkspacePage),
+    children: [
+      { path: '', redirectTo: 'research', pathMatch: 'full' },
+      { path: 'research', loadComponent: () => import('./features/projects/project-workspace/research-tab/research-tab.component').then(m => m.ResearchTabComponent) },
+      { path: 'analysis', loadComponent: () => import('./features/projects/project-workspace/analysis-tab/analysis-tab.component').then(m => m.AnalysisTabComponent) },
+      { path: 'planning', loadComponent: () => import('./features/projects/project-workspace/planning-tab/planning-tab.component').then(m => m.PlanningTabComponent) },
+      { path: 'writing', loadComponent: () => import('./features/projects/project-workspace/writing-tab/writing-tab.component').then(m => m.WritingTabComponent) },
+      { path: 'export', loadComponent: () => import('./features/projects/project-workspace/export-tab/export-tab.component').then(m => m.ExportTabComponent) },
+    ]
   },
   {
     path: 'search',

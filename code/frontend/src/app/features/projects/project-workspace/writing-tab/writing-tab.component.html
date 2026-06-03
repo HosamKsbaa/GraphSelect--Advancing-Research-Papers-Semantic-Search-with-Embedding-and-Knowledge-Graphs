@@ -1,0 +1,151 @@
+<div class="writing-tab-container">
+  <!-- Export Banner -->
+  @if (allApproved) {
+    <div class="export-banner glass">
+      <div class="banner-content">
+        <span class="icon">🎉</span>
+        <div class="banner-text">
+          <h3>Ready for Export!</h3>
+          <p>All sections have been approved. You can now generate your literature review document.</p>
+        </div>
+      </div>
+      <a routerLink="../export" class="btn btn-primary">Go to Export</a>
+    </div>
+  }
+
+  <div class="split-layout">
+    <!-- Left Panel: Section List -->
+    <div class="section-list">
+      <h2>Outline Sections</h2>
+      @if (sections.length === 0) {
+        <app-empty-state
+          heading="No Sections"
+          description="Generate an outline first in the Planning tab."
+          iconSvg="<svg viewBox='0 0 24 24'><path d='M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z'/></svg>">
+        </app-empty-state>
+      } @else {
+        <div class="section-cards">
+          @for (item of sections; track item.section.order) {
+            <div 
+              class="section-card card" 
+              [class.active]="selectedSection === item"
+              (click)="selectSection(item)">
+              <div class="card-header">
+                <h4>{{ item.section.title }}</h4>
+                <span class="badge status-{{ item.status }}">{{ item.status | titlecase }}</span>
+              </div>
+              <div class="card-meta">
+                <span class="paper-count">{{ item.section.paper_dois.length }} assigned papers</span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Right Panel: Draft Workspace -->
+    <div class="draft-workspace glass">
+      @if (!selectedSection) {
+        <div class="placeholder-state">
+          <p>Select a section from the list to start drafting.</p>
+        </div>
+      } @else {
+        <div class="workspace-header">
+          <div class="header-titles">
+            <h3>{{ selectedSection.section.title }}</h3>
+            <p class="section-desc">{{ selectedSection.section.description }}</p>
+          </div>
+          <div class="actions">
+            @if (selectedSection.status === 'not_started' && !isDrafting) {
+              <button class="btn btn-primary" (click)="draftSection()">Draft Section</button>
+            }
+            @if (selectedSection.draft_text && !isReviewing && selectedSection.status !== 'approved') {
+              <button class="btn btn-secondary" (click)="reviewSection()">Review</button>
+            }
+            @if (selectedSection.draft_text) {
+              <button class="btn btn-outline" (click)="toggleEditMode()">
+                {{ editMode ? 'Preview' : 'Edit' }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="workspace-content" [class.has-feedback]="selectedSection.review && !editMode">
+          
+          <div class="editor-area">
+            @if (isDrafting || isReviewing) {
+              <div class="loading-container">
+                <app-loading-indicator 
+                  [message]="isDrafting ? 'Generating draft...' : 'Reviewing draft...'">
+                </app-loading-indicator>
+              </div>
+            } @else {
+              @if (editMode) {
+                <textarea 
+                  class="markdown-editor" 
+                  [(ngModel)]="editedDraftText" 
+                  placeholder="Draft your section here..."></textarea>
+              } @else if (selectedSection.draft_text) {
+                <div class="preview-container">
+                  <app-markdown-preview [markdown]="selectedSection.draft_text"></app-markdown-preview>
+                </div>
+              } @else {
+                <div class="empty-draft">
+                  <p>No draft generated yet. Click 'Draft Section' to begin.</p>
+                </div>
+              }
+            }
+          </div>
+
+          <!-- Feedback Panel -->
+          @if (selectedSection.review && !editMode && !isDrafting && !isReviewing) {
+            <div class="feedback-panel card">
+              <div class="feedback-header">
+                <h4>Review Feedback</h4>
+                <span class="badge" [class.status-approved]="selectedSection.review.approved" [class.status-reviewed]="!selectedSection.review.approved">
+                  {{ selectedSection.review.approved ? 'Approved' : 'Needs Revision' }}
+                </span>
+              </div>
+              
+              @if (selectedSection.review.feedback.length > 0) {
+                <div class="feedback-section">
+                  <h5>Issues</h5>
+                  <ul class="issue-list">
+                    @for (issue of selectedSection.review.feedback; track issue) {
+                      <li>{{ issue }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+
+              @if (selectedSection.review.missing_citations.length > 0) {
+                <div class="feedback-section">
+                  <h5>Missing Citations</h5>
+                  <ul class="citation-list">
+                    @for (doi of selectedSection.review.missing_citations; track doi) {
+                      <li>{{ doi }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+
+              @if (!selectedSection.review.approved) {
+                <div class="revision-actions">
+                  <p class="revision-count" [class.text-warning]="selectedSection.revision_count >= 2">
+                    Revisions: {{ selectedSection.revision_count }} / 3
+                  </p>
+                  <button class="btn btn-primary revise-btn" (click)="reviseSection()" [disabled]="selectedSection.revision_count >= 3">
+                    Revise & Redraft
+                  </button>
+                  @if (selectedSection.revision_count >= 3) {
+                    <p class="warning-text">Max revisions reached. Please edit manually.</p>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>

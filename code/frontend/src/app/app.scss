@@ -2,6 +2,8 @@
 .app-shell {
   display: flex;
   min-height: 100vh;
+  min-width: 1024px;
+  overflow-x: auto;
   position: relative;
   z-index: 1;
 }
@@ -59,8 +61,23 @@
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-6);
   flex: 1;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.nav-group-header {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  padding: 0 var(--space-4) var(--space-2);
 }
 
 .nav-item {

@@ -1,7 +1,8 @@
 import { Component, Input, OnInit, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ApiService, GroupedResults, QuestionGroup, RankedPaper } from '../../../core/api.service';
+import { ApiService, GroupedResults, QuestionGroup, RankedPaper, Project, AddPapersToProjectRequest } from '../../../core/api.service';
+import { ToastService } from '../../../core/toast.service';
 
 @Component({
   selector: 'alrs-results',
@@ -39,12 +40,19 @@ export class ResultsComponent implements OnInit {
   // Track expanded paper drawers
   expandedPapers: Set<string> = new Set();
 
-  constructor(private api: ApiService) {}
+  // Projects state
+  projects: Project[] = [];
+  selectedProjectId: string = '';
+  selectedPaperDois: Set<string> = new Set<string>();
+  importing: boolean = false;
+
+  constructor(private api: ApiService, private toastService: ToastService) {}
 
   ngOnInit(): void {
     if (!this.results && this.sessionId) {
       this.loadResults();
     }
+    this.loadProjects();
   }
 
   loadResults(): void {
@@ -134,6 +142,52 @@ export class ResultsComponent implements OnInit {
     if (!authors || authors.length === 0) return 'Unknown Authors';
     if (authors.length <= 3) return authors.join(', ');
     return authors.slice(0, 3).join(', ') + ' et al.';
+  }
+
+  loadProjects(): void {
+    this.api.listProjects(false).subscribe({
+      next: (res) => {
+        this.projects = res.projects;
+      },
+      error: (err) => {
+        console.error('Failed to load projects', err);
+      }
+    });
+  }
+
+  togglePaperSelection(doi: string, event: Event): void {
+    event.stopPropagation();
+    if (this.selectedPaperDois.has(doi)) {
+      this.selectedPaperDois.delete(doi);
+    } else {
+      this.selectedPaperDois.add(doi);
+    }
+  }
+
+  isPaperSelected(doi: string): boolean {
+    return this.selectedPaperDois.has(doi);
+  }
+
+  importSelectedPapers(): void {
+    if (!this.selectedProjectId || this.selectedPaperDois.size === 0) return;
+
+    this.importing = true;
+    const request: AddPapersToProjectRequest = {
+      project_id: this.selectedProjectId,
+      dois: Array.from(this.selectedPaperDois)
+    };
+
+    this.api.addPapersToProject(request).subscribe({
+      next: (res) => {
+        this.toastService.success('Import Successful', `Successfully imported ${this.selectedPaperDois.size} papers to project.`);
+        this.selectedPaperDois.clear();
+        this.importing = false;
+      },
+      error: (err) => {
+        this.toastService.error('Import Failed', err.error?.detail || 'Failed to import papers to project.');
+        this.importing = false;
+      }
+    });
   }
 
   onReset(): void {

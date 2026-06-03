@@ -39,8 +39,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: alrs-api-dev
-    ports:
-      - "8000:8000"
     env_file:
       - ./backend/.env
     volumes:

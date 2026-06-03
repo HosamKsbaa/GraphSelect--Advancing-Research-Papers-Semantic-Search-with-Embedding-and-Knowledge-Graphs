@@ -1,0 +1,220 @@
+.project-list-layout {
+  padding: var(--space-6) var(--space-8);
+  max-width: var(--max-content-width);
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: var(--space-8);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+
+  input {
+    display: none;
+  }
+
+  .slider {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    background: var(--color-bg-input);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--color-border);
+    transition: var(--transition-fast);
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      background: var(--color-text-muted);
+      border-radius: 50%;
+      transition: var(--transition-fast);
+    }
+  }
+
+  input:checked + .slider {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: var(--color-accent);
+
+    &::before {
+      transform: translateX(16px);
+      background: var(--color-accent);
+    }
+  }
+}
+
+.search-bar {
+  position: relative;
+  max-width: 600px;
+  
+  .search-icon {
+    position: absolute;
+    left: var(--space-4);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-muted);
+  }
+
+  input {
+    padding-left: calc(var(--space-8) + var(--space-2));
+    background: var(--color-bg-card);
+  }
+}
+
+.loading-state {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-6);
+
+  .skeleton-card {
+    height: 140px;
+  }
+}
+
+.project-group {
+  margin-bottom: var(--space-10);
+
+  .group-title {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    margin-bottom: var(--space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-6);
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-5);
+  cursor: pointer;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+  
+  &:hover {
+    border-left-color: var(--color-accent);
+    transform: translateY(-2px);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-2);
+  }
+
+  .project-name {
+    font-weight: 600;
+    font-size: var(--text-base);
+    color: var(--color-text-primary);
+  }
+
+  .project-topic {
+    font-weight: 500;
+    margin-bottom: var(--space-2);
+  }
+
+  .project-desc {
+    margin-bottom: var(--space-4);
+    flex-grow: 1;
+  }
+
+  .card-footer {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: auto;
+  }
+}
+
+.opacity-75 {
+  opacity: 0.75;
+}
+
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 14, 26, 0.8);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.modal-container {
+  width: 100%;
+  max-width: 500px;
+  background: var(--color-bg-tertiary);
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-4);
+}
+
+.form-group {
+  margin-bottom: var(--space-4);
+
+  label {
+    display: block;
+    margin-bottom: var(--space-2);
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+  }
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.p-1 { padding: var(--space-1); }
+.mt-1 { margin-top: var(--space-1); }
+.mt-2 { margin-top: var(--space-2); }
+.py-8 { padding-top: var(--space-8); padding-bottom: var(--space-8); }
+.text-center { text-align: center; }
+.font-bold { font-weight: 700; }

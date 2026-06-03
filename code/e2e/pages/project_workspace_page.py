@@ -19,8 +19,11 @@ class ProjectWorkspacePage(BasePage):
         tabs = self.get_tabs()
         for tab in tabs:
             if tab_name.lower() in tab.text.lower():
-                tab.click()
+                self.driver.execute_script("arguments[0].click();", tab)
                 self.wait_for_angular()
+                from selenium.webdriver.support.ui import WebDriverWait
+                from selenium.webdriver.support import expected_conditions as EC
+                WebDriverWait(self.driver, 5).until(EC.url_contains(tab_name.lower()))
                 return
         raise ValueError(f"Tab '{tab_name}' not found")
 

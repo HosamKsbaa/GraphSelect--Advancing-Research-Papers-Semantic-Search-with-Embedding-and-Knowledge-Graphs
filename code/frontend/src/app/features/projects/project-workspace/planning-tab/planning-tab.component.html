@@ -1,0 +1,133 @@
+<div class="planning-container">
+  @if (isLoadingSummary) {
+    <app-loading-indicator message="Loading project readiness..."></app-loading-indicator>
+  } @else if (summary) {
+    <!-- Readiness Summary -->
+    <div class="readiness-summary card glass">
+      <h2>Project Readiness</h2>
+      <div class="summary-stats">
+        <div class="stat-item">
+          <span class="label">Papers</span>
+          <span class="value">{{ summary.paper_count }}</span>
+          <span class="status">
+            @if (summary.paper_count > 0) { <span class="icon success">✓</span> }
+            @else { <span class="icon error">✗</span> }
+          </span>
+        </div>
+        <div class="stat-item">
+          <span class="label">Questions</span>
+          <span class="value">{{ summary.question_count }}</span>
+          <span class="status">
+            @if (summary.question_count > 0) { <span class="icon success">✓</span> }
+            @else { <span class="icon error">✗</span> }
+          </span>
+        </div>
+        <div class="stat-item">
+          <span class="label">Gaps</span>
+          <span class="value">{{ summary.gap_count }}</span>
+        </div>
+        <div class="stat-item">
+          <span class="label">Outline</span>
+          <span class="status">
+            @if (summary.has_outline) { <span class="icon success">✓</span> }
+            @else { <span class="icon error">✗</span> }
+          </span>
+        </div>
+        <div class="stat-item">
+          <span class="label">Drafts</span>
+          <span class="status">
+            @if (summary.has_drafts) { <span class="icon success">✓</span> }
+            @else { <span class="icon error">✗</span> }
+          </span>
+        </div>
+      </div>
+      
+      <div class="actions">
+        <button 
+          class="btn primary" 
+          [disabled]="summary.paper_count === 0 || summary.question_count === 0"
+          [title]="(summary.paper_count === 0 || summary.question_count === 0) ? 'Requires at least 1 paper and 1 question to generate outline' : ''"
+          (click)="openConfigDialog()">
+          Generate Outline
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- Outline Generation Loading -->
+  @if (isGeneratingOutline) {
+    <app-loading-indicator message="Generating structured outline..."></app-loading-indicator>
+  }
+
+  <!-- Outline Sections -->
+  @if (outlineSections.length > 0) {
+    <div class="outline-list">
+      <h3>Generated Outline</h3>
+      @for (section of outlineSections; track section.order) {
+        <div class="section-card card glass">
+          <div class="section-header">
+            <span class="section-order">Section {{ section.order }}</span>
+            <h4>{{ section.title }}</h4>
+          </div>
+          <div class="section-body">
+            <p class="description">{{ section.description }}</p>
+            
+            <div class="assigned-papers">
+              <strong>Assigned Papers:</strong>
+              @if (section.paper_dois.length > 0) {
+                <ul>
+                  @for (doi of section.paper_dois; track doi) {
+                    <li>
+                      <a [href]="'https://doi.org/' + doi" target="_blank" rel="noopener noreferrer">{{ doi }}</a>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <span class="empty-papers">None</span>
+              }
+            </div>
+            
+            <div class="section-actions">
+              <button class="btn secondary" (click)="regenerateSection(section)">Regenerate</button>
+              <button class="btn primary" (click)="approveSection(section)">Approve</button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  } @else if (summary && !isGeneratingOutline && !summary.has_outline) {
+    <app-empty-state 
+      icon="document" 
+      heading="No Outline Yet" 
+      description="Generate an outline to start structuring your literature review.">
+    </app-empty-state>
+  }
+
+  <!-- Configuration Dialog -->
+  @if (showConfigDialog) {
+    <div class="dialog-backdrop">
+      <div class="dialog-content card">
+        <h3>Outline Configuration</h3>
+        
+        <div class="form-group">
+          <label for="style">Writing Style</label>
+          <select id="style" [(ngModel)]="configStyle" class="form-control">
+            <option value="academic">Academic / Formal</option>
+            <option value="narrative">Narrative</option>
+            <option value="concise">Concise / Analytical</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label for="numSections">Number of Sections</label>
+          <input id="numSections" type="number" min="1" max="15" [(ngModel)]="configNumSections" class="form-control">
+        </div>
+        
+        <div class="dialog-actions">
+          <button class="btn secondary" (click)="closeConfigDialog()">Cancel</button>
+          <button class="btn primary" (click)="generateOutline()">Generate</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

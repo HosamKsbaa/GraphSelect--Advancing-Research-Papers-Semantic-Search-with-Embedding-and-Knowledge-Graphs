@@ -1,0 +1,65 @@
+.workspace-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-warning);
+  color: var(--color-text-primary);
+  font-size: var(--text-sm);
+  
+  &.warning {
+    background: rgba(234, 179, 8, 0.2);
+    border-bottom: 1px solid rgba(234, 179, 8, 0.4);
+    color: #eab308;
+    
+    a {
+      color: inherit;
+      text-decoration: underline;
+      font-weight: 600;
+    }
+  }
+}
+
+.workspace-nav {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-6);
+  background: var(--color-surface);
+  
+  .nav-links {
+    display: flex;
+    gap: var(--space-6);
+  }
+  
+  .tab-link {
+    padding: var(--space-4) 0;
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: var(--text-sm);
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition-fast);
+    
+    &:hover {
+      color: var(--color-text-primary);
+    }
+    
+    &.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+  }
+}
+
+.workspace-content {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}

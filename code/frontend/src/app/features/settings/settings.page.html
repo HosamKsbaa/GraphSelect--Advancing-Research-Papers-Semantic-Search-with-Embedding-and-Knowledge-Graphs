@@ -15,6 +15,44 @@
   }
 
   @if (!loading) {
+    <!-- ─── Backend Connection Section ─── -->
+    <div class="settings-section card glass">
+      <div class="section-header">
+        <div class="section-icon section-icon-server">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/>
+            <line x1="6" y1="18" x2="6.01" y2="18"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="section-title">Backend Connection</h2>
+          <p class="section-subtitle text-muted">Configure where the frontend connects to the ALRS backend</p>
+        </div>
+      </div>
+
+      <div class="section-body">
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">API Base URL</div>
+            <div class="setting-description text-muted">
+              The full URL to the backend API server.
+            </div>
+          </div>
+          <div class="setting-input">
+            <input
+              id="api-base-url"
+              type="url"
+              placeholder="http://localhost:8002"
+              [(ngModel)]="apiBaseUrl"
+              autocomplete="url"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── API Keys Section ─── -->
     <div class="settings-section card glass">
       <div class="section-header">

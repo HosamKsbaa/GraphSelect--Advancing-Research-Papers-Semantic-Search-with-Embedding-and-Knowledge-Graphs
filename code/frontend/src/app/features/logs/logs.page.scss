@@ -314,3 +314,70 @@
   background: rgba(139, 92, 246, 0.15);
   color: #a78bfa;
 }
+
+/* --- Agent Traces --- */
+.agent-traces-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+
+  .trace-card {
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+
+    .trace-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: var(--space-3);
+      flex-wrap: wrap;
+      gap: var(--space-3);
+
+      .trace-info {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+
+        .trace-action {
+          font-weight: 500;
+          color: var(--color-text-primary);
+        }
+      }
+
+      .trace-meta {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+      }
+    }
+
+    .trace-details {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+
+      .trace-outcome {
+        padding: var(--space-3);
+        background: rgba(16, 185, 129, 0.05);
+        border-left: 3px solid var(--color-success);
+        border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+        font-size: var(--text-sm);
+        color: var(--color-text-secondary);
+      }
+
+      .extra-details {
+        summary {
+          cursor: pointer;
+          user-select: none;
+          display: inline-block;
+          
+          &:hover {
+            color: var(--color-accent-hover);
+          }
+        }
+      }
+    }
+  }
+}

@@ -20,6 +20,7 @@ export class SettingsPage implements OnInit {
   settings: SettingsResponse | null = null;
 
   // Form fields (empty = keep current)
+  apiBaseUrl = '';
   geminiApiKey = '';
   openalexApiKey = '';
   openalexEmail = '';
@@ -34,6 +35,7 @@ export class SettingsPage implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.apiBaseUrl = this.api.baseUrl;
     this.loadSettings();
   }
 
@@ -57,6 +59,11 @@ export class SettingsPage implements OnInit {
 
   saveSettings(): void {
     this.saving = true;
+
+    // Save frontend-only settings immediately
+    if (this.apiBaseUrl.trim()) {
+      this.api.setBaseUrl(this.apiBaseUrl);
+    }
 
     const body: Record<string, string> = {};
 

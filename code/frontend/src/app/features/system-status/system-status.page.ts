@@ -4,13 +4,13 @@ import { RouterLink } from '@angular/router';
 import { ApiService, HealthResponse, Session, SessionList } from '../../core/api.service';
 
 @Component({
-  selector: 'alrs-dashboard',
+  selector: 'alrs-system-status',
   standalone: true,
   imports: [CommonModule, RouterLink],
-  templateUrl: './dashboard.page.html',
-  styleUrl: './dashboard.page.scss',
+  templateUrl: './system-status.page.html',
+  styleUrl: './system-status.page.scss',
 })
-export class DashboardPage implements OnInit {
+export class SystemStatusPage implements OnInit {
   health: HealthResponse | null = null;
   version = '';
   sessions: Session[] = [];
@@ -20,10 +20,10 @@ export class DashboardPage implements OnInit {
   constructor(private api: ApiService) {}
 
   ngOnInit(): void {
-    this.loadDashboard();
+    this.loadSystemStatus();
   }
 
-  loadDashboard(): void {
+  loadSystemStatus(): void {
     this.loading = true;
     this.error = '';
 
@@ -43,7 +43,7 @@ export class DashboardPage implements OnInit {
         this.loading = false;
       },
       error: (err) => {
-        this.error = 'Cannot connect to backend. Is the API running on localhost:8000?';
+        this.error = 'Cannot connect to backend. Is the API running on localhost:8002?';
         this.loading = false;
       },
     });

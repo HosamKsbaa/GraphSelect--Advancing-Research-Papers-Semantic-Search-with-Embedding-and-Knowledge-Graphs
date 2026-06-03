@@ -1,0 +1,200 @@
+<div class="research-workspace">
+  <!-- LEFT SIDEBAR: Research Questions -->
+  <aside class="sidebar left-sidebar">
+    <div class="panel-header">
+      <h2>Research Questions</h2>
+    </div>
+    
+    <div class="question-input">
+      <input 
+        type="text" 
+        [ngModel]="newQuestionText()" 
+        (ngModelChange)="newQuestionText.set($event)"
+        placeholder="Add new research question..."
+        (keyup.enter)="addQuestion()"
+      />
+      <button (click)="addQuestion()" [disabled]="!newQuestionText().trim()">Add</button>
+    </div>
+
+    <ul class="question-list">
+      @if (questions().length === 0) {
+        <app-empty-state 
+          heading="No Questions" 
+          description="Add questions to start exploring."
+          iconSvg="<svg viewBox='0 0 24 24'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z'/></svg>">
+        </app-empty-state>
+      }
+      <li *ngFor="let q of questions()" class="question-item">
+        <div class="question-header">
+          <span class="status-icon" [title]="'Status: ' + q.status">
+            {{ getQuestionStatusIcon(q.status) }}
+          </span>
+          <span class="question-text" [title]="q.text">{{ q.text }}</span>
+          <button class="delete-btn" (click)="confirmDeleteQuestion(q.id)" title="Delete Question">&times;</button>
+        </div>
+        <div class="coverage-badge">
+          Coverage: {{ q.coverage | percent }}
+        </div>
+      </li>
+    </ul>
+  </aside>
+
+  <!-- CENTER: Main Paper Library -->
+  <main class="main-content">
+    
+    <!-- Paper Search Section -->
+    <section class="search-section">
+      <div class="search-bar">
+        <button class="toggle-mode-btn" (click)="toggleSearchMode()">
+          Searching: {{ searchMode() }}
+        </button>
+        <input 
+          type="text" 
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQuery.set($event)"
+          [placeholder]="'Search by ' + searchMode() + '...'"
+          (keyup.enter)="searchPapers()"
+        />
+        <button class="search-btn" (click)="searchPapers()">Search Web</button>
+      </div>
+    </section>
+
+    <!-- Library Table -->
+    <section class="library-section">
+      <div class="library-header">
+        <h2>Paper Library</h2>
+        <input 
+          type="text" 
+          [ngModel]="libraryFilter()"
+          (ngModelChange)="libraryFilter.set($event)"
+          placeholder="Filter library..."
+          class="filter-input"
+        />
+      </div>
+
+      <div class="table-container">
+        <table class="paper-table">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Authors</th>
+              <th>Year</th>
+              <th>Venue</th>
+              <th>Similarity</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (paginatedPapers.length === 0) {
+              <tr>
+                <td colspan="5" class="empty-cell">
+                  <app-empty-state
+                    heading="Library Empty"
+                    description="Search for papers to populate your library."
+                    iconSvg="<svg viewBox='0 0 24 24'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z'/></svg>">
+                  </app-empty-state>
+                </td>
+              </tr>
+            }
+            <ng-container *ngFor="let paper of paginatedPapers">
+              <tr 
+                class="paper-row" 
+                [class.expanded]="expandedPaperId() === paper.id"
+                (click)="togglePaperDetail(paper.id)">
+                <td class="title-cell">{{ paper.title }}</td>
+                <td class="authors-cell">{{ formatAuthors(paper.authors) }}</td>
+                <td>{{ paper.year }}</td>
+                <td>{{ paper.venue }}</td>
+                <td>
+                  <div class="similarity-bar-container">
+                    <div class="similarity-bar" [style.width.%]="paper.similarityScore * 100"></div>
+                    <span>{{ paper.similarityScore | percent }}</span>
+                  </div>
+                </td>
+              </tr>
+              <!-- Expanded Detail Row -->
+              <tr class="detail-row" *ngIf="expandedPaperId() === paper.id">
+                <td colspan="5">
+                  <div class="paper-detail">
+                    <div class="detail-header">
+                      <h3>{{ paper.title }}</h3>
+                      <div class="meta-tags">
+                        <span class="tag">{{ paper.type || 'Paper' }}</span>
+                        <a *ngIf="paper.doi" [href]="'https://doi.org/' + paper.doi" target="_blank" class="doi-link" (click)="$event.stopPropagation()">{{ paper.doi }}</a>
+                      </div>
+                    </div>
+                    
+                    <p class="abstract">{{ paper.abstract }}</p>
+                    
+                    <div class="authors-list">
+                      <strong>Authors:</strong>
+                      <ul>
+                        <li *ngFor="let author of paper.authors">
+                          {{ author.name }} <span class="affiliation" *ngIf="author.affiliation">({{ author.affiliation }})</span>
+                        </li>
+                      </ul>
+                    </div>
+                    
+                    <div class="question-scores" *ngIf="paper.perQuestionScores">
+                      <strong>Relevance to Questions:</strong>
+                      <div class="score-item" *ngFor="let q of questions()">
+                        <span class="q-text">{{ q.text }}</span>
+                        <div class="score-bar-wrapper">
+                          <div class="score-fill" [style.width.%]="(paper.perQuestionScores[q.id] || 0) * 100"></div>
+                        </div>
+                        <span class="score-value">{{ (paper.perQuestionScores[q.id] || 0) | percent }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Controls -->
+      <div class="pagination">
+        <button [disabled]="currentPage() === 1" (click)="prevPage()">Previous</button>
+        <span>Page {{ currentPage() }} of {{ totalPages || 1 }}</span>
+        <button [disabled]="currentPage() >= totalPages" (click)="nextPage()">Next</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- RIGHT SIDEBAR: Top Authors & Venues -->
+  <aside class="sidebar right-sidebar">
+    <div class="widget">
+      <h3>Top Authors</h3>
+      <ul class="ranked-list">
+        <li *ngFor="let a of topAuthors(); let i = index">
+          <span class="rank">#{{ i + 1 }}</span>
+          <span class="name">{{ a.name }}</span>
+          <span class="count">{{ a.paperCount }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="widget">
+      <h3>Top Venues</h3>
+      <ul class="ranked-list">
+        <li *ngFor="let v of topVenues(); let i = index">
+          <span class="rank">#{{ i + 1 }}</span>
+          <span class="name">{{ v.name }}</span>
+          <span class="count">{{ v.paperCount }}</span>
+        </li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- Confirm Dialog Mockup -->
+  <div class="modal-overlay" *ngIf="showConfirmDialog().isOpen">
+    <div class="modal-content glass-panel">
+      <h3>Delete Research Question?</h3>
+      <p>Warning: This may impact downstream analysis and currently embedded papers.</p>
+      <div class="modal-actions">
+        <button class="btn-cancel" (click)="cancelDelete()">Cancel</button>
+        <button class="btn-danger" (click)="proceedDeleteQuestion()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>

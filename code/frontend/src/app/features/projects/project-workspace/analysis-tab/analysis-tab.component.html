@@ -1,0 +1,130 @@
+<div class="analysis-container">
+  @if (isLoading) {
+    <app-loading-indicator message="Loading analysis data..."></app-loading-indicator>
+  } @else if (coverages.length === 0 && rankedPapers.length === 0) {
+    <app-empty-state
+      heading="No Data for Analysis"
+      description="Add papers via Research tab before running analysis."
+      iconSvg="<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'/></svg>">
+    </app-empty-state>
+  } @else {
+    <div class="analysis-layout">
+      <!-- Left Column: Coverage Cards -->
+      <div class="coverage-column">
+        <h3 class="section-title">Research Question Coverage</h3>
+        <div class="coverage-cards">
+          @for (coverage of coverages; track coverage.question_id) {
+            <div class="card glass coverage-card">
+              <div class="coverage-header">
+                <div class="question-text">{{ coverage.question_text }}</div>
+                <div class="badge status-badge" [ngClass]="{
+                  'badge-success': coverage.status === 'covered',
+                  'badge-warning': coverage.status === 'partial',
+                  'badge-error': coverage.status === 'gap'
+                }">
+                  {{ coverage.status | titlecase }}
+                </div>
+              </div>
+              
+              <div class="coverage-body">
+                <div class="progress-container">
+                  <div class="progress-bar" [ngClass]="{
+                    'progress-good': coverage.coverage_score >= 0.7,
+                    'progress-ok': coverage.coverage_score >= 0.3 && coverage.coverage_score < 0.7,
+                    'progress-bad': coverage.coverage_score < 0.3
+                  }" [style.width]="(coverage.coverage_score * 100) + '%'"></div>
+                </div>
+                <div class="coverage-stats">
+                  <span>Score: {{ (coverage.coverage_score * 100) | number:'1.0-0' }}%</span>
+                  <span>{{ coverage.paper_count }} paper(s)</span>
+                </div>
+              </div>
+
+              @if (coverage.status === 'gap' || coverage.status === 'partial') {
+                <div class="gap-actions">
+                  @if (!generatedQueries[coverage.question_id]) {
+                    <button class="btn btn-outline-primary btn-sm" 
+                            (click)="suggestQueries(coverage.question_id, coverage.question_text)"
+                            [disabled]="isGeneratingQueries">
+                      Suggest Queries
+                    </button>
+                  } @else {
+                    <div class="suggested-queries">
+                      <div class="queries-title">Suggested Gap-Filling Queries:</div>
+                      <ul class="query-list">
+                        @for (query of generatedQueries[coverage.question_id]; track query) {
+                          <li class="query-item">
+                            <span class="query-text">{{ query }}</span>
+                            <button class="btn btn-icon btn-sm" (click)="copyToClipboard(query)" title="Copy to clipboard">
+                              <svg xmlns="http://www.w3.org/2000/svg" height="16" viewBox="0 -960 960 960" width="16" fill="currentColor"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg>
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Right Column: Ranked Papers & Stats -->
+      <div class="insights-column">
+        @if (isGeneratingQueries) {
+          <app-loading-indicator message="Generating queries using LLM..."></app-loading-indicator>
+        }
+
+        <!-- Citation Stats Panel -->
+        @if (citationStats) {
+          <div class="card glass stats-panel">
+            <h3 class="section-title">Network Statistics</h3>
+            <div class="stats-grid">
+              <div class="stat-item">
+                <div class="stat-value">{{ citationStats.total_papers }}</div>
+                <div class="stat-label">Total Papers</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">{{ citationStats.average_similarity | number:'1.2-2' }}</div>
+                <div class="stat-label">Avg Similarity</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-value">{{ citationStats.network_density | number:'1.2-2' }}</div>
+                <div class="stat-label">Network Density</div>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- Ranked Papers Panel -->
+        <div class="card glass ranked-papers-panel">
+          <h3 class="section-title">Ranked Literature</h3>
+          <div class="paper-list">
+            @for (paper of rankedPapers; track paper.doi) {
+              <div class="paper-row">
+                <div class="paper-info">
+                  <div class="paper-title">{{ paper.title }} <span class="paper-year" *ngIf="paper.year">({{ paper.year }})</span></div>
+                  <div class="paper-scores">
+                    <span class="score badge" title="Hybrid Score">Hybrid: {{ paper.hybrid_score | number:'1.2-2' }}</span>
+                    <span class="score-detail" title="Similarity Component">Sim: {{ paper.similarity_score | number:'1.2-2' }}</span>
+                    <span class="score-detail" title="PageRank Component">PR: {{ paper.pagerank_score | number:'1.2-2' }}</span>
+                  </div>
+                </div>
+                
+                <!-- Tooltip / Expandable row simulation for per-question similarities -->
+                <div class="similarity-breakdown">
+                  @for (qs of paper.question_similarities; track qs.question_id) {
+                    <div class="qs-bar-container" [title]="qs.question_text + ' : ' + (qs.similarity_score | number:'1.2-2')">
+                      <div class="qs-bar" [style.width]="(qs.similarity_score * 100) + '%'"></div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

@@ -7,9 +7,9 @@ from pages.base_page import BasePage
 class NavigationPage(BasePage):
     """Page object for the global sidebar navigation."""
     
-    SIDEBAR_LINKS = (By.CSS_SELECTOR, "nav.sidebar a")
+    SIDEBAR_LINKS = (By.CSS_SELECTOR, ".sidebar-nav a")
     LOGO = (By.CSS_SELECTOR, ".logo-text, .logo")
-    VERSION_BADGE = (By.CSS_SELECTOR, ".version-badge")
+    VERSION_BADGE = (By.CSS_SELECTOR, ".logo-version")
 
     def get_sidebar_links(self) -> List[WebElement]:
         self.wait_for_angular()

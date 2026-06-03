@@ -1,0 +1,148 @@
+<div class="export-tab-container">
+  @if (isLoading) {
+    <app-loading-indicator message="Loading export options..."></app-loading-indicator>
+  } @else {
+    <div class="export-cards-grid">
+      
+      <!-- LaTeX Export Card -->
+      <div class="card export-card" [class.disabled]="!hasApprovedDrafts">
+        <div class="card-icon">
+          <!-- Document icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
+          </svg>
+        </div>
+        <div class="card-content">
+          <h3>LaTeX Document</h3>
+          <p>Export the fully generated literature review as a comprehensive LaTeX project including .tex source and references.</p>
+        </div>
+        
+        <div class="card-actions">
+          @if (!hasApprovedDrafts) {
+            <div class="disabled-message" title="Complete section drafts to enable LaTeX export">
+              Requires completed section drafts
+            </div>
+          }
+          <button class="btn btn-primary" 
+                  [disabled]="!hasApprovedDrafts || isExportingLatex"
+                  (click)="openLatexDialog()">
+            @if (isExportingLatex) {
+              <span class="spinner"></span> Exporting...
+            } @else {
+              Export LaTeX
+            }
+          </button>
+        </div>
+      </div>
+
+      <!-- BibTeX Export Card -->
+      <div class="card export-card" [class.disabled]="!hasPapers">
+        <div class="card-icon">
+          <!-- List/Book icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
+          </svg>
+        </div>
+        <div class="card-content">
+          <h3>BibTeX References</h3>
+          <p>Download a master .bib file containing properly formatted citations for all papers currently in your library.</p>
+        </div>
+        
+        <div class="card-actions">
+          @if (!hasPapers) {
+            <div class="disabled-message" title="Add papers to library to enable BibTeX export">
+              Requires papers in library
+            </div>
+          }
+          <button class="btn btn-secondary" 
+                  [disabled]="!hasPapers || isExportingBibtex"
+                  (click)="exportBibtex()">
+            @if (isExportingBibtex) {
+              <span class="spinner"></span> Exporting...
+            } @else {
+              Export BibTeX
+            }
+          </button>
+        </div>
+      </div>
+
+      <!-- Citation Graph Export Card -->
+      <div class="card export-card" [class.disabled]="!hasPapers">
+        <div class="card-icon">
+          <!-- Network/Graph icon -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+        </div>
+        <div class="card-content">
+          <h3>Citation Graph</h3>
+          <p>Export the citation network as JSON data for further analysis in external visualization tools.</p>
+        </div>
+        
+        <div class="card-actions">
+          @if (!hasPapers) {
+            <div class="disabled-message" title="Add papers to library to enable Citation Graph export">
+              Requires papers in library
+            </div>
+          }
+          <button class="btn btn-secondary" 
+                  [disabled]="!hasPapers || isExportingGraph"
+                  (click)="exportCitationGraph()">
+            @if (isExportingGraph) {
+              <span class="spinner"></span> Exporting...
+            } @else {
+              Export Graph
+            }
+          </button>
+        </div>
+      </div>
+      
+    </div>
+  }
+</div>
+
+<!-- LaTeX Template Selection Dialog (Modal) -->
+@if (showLatexDialog) {
+  <div class="modal-backdrop">
+    <div class="modal-dialog card glass">
+      <div class="modal-header">
+        <h2>Export LaTeX</h2>
+        <button class="btn-close" (click)="closeLatexDialog()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Select a formatting template for your literature review:</p>
+        
+        <div class="form-group">
+          <label>
+            <input type="radio" name="template" value="ieee" [(ngModel)]="latexTemplate">
+            IEEE Conference Format
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="radio" name="template" value="acm" [(ngModel)]="latexTemplate">
+            ACM SIG Format
+          </label>
+        </div>
+        <div class="form-group">
+          <label>
+            <input type="radio" name="template" value="plain" [(ngModel)]="latexTemplate">
+            Plain Article
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" (click)="closeLatexDialog()">Cancel</button>
+        <button class="btn btn-primary" (click)="exportLatex()">Confirm Export</button>
+      </div>
+    </div>
+  </div>
+}

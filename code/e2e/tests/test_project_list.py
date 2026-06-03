@@ -49,13 +49,12 @@ def test_create_project_success(driver, base_url):
     
     page.submit_create_project()
     
-    toasts = page.get_toast_messages()
-    assert len(toasts) > 0, "Expected a success toast message"
-    
-    # Wait for new card to appear
-    page.wait_for_angular()
-    new_cards = len(page.get_project_cards())
-    assert new_cards > initial_cards or new_cards > 0, "Expected project count to increase or be > 0"
+    # Wait for navigation to the project workspace
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    WebDriverWait(driver, 10).until(EC.url_contains("/projects/"))
+    assert "/projects/" in driver.current_url, "Expected navigation to project workspace"
+    assert driver.current_url.rstrip("/").split("/")[-1] != "projects", "Should not be on projects list"
 
 def test_search_filter_projects(driver, base_url):
     page = ProjectListPage(driver, base_url)
@@ -74,18 +73,38 @@ def test_search_filter_projects(driver, base_url):
 def test_click_project_navigates(driver, base_url):
     page = ProjectListPage(driver, base_url)
     page.navigate("/projects")
-    
+
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    try:
+        WebDriverWait(driver, 5).until(lambda d: len(d.find_elements(*page.PROJECT_CARDS)) > 0)
+    except Exception:
+        pass
+
     cards = page.get_project_cards()
     if not cards:
         # If no projects exist, create one so we can click it
         page.click_new_project()
         page.fill_create_project_form("Click Test", "Topic", "MSc", "Desc")
         page.submit_create_project()
-        page.wait_for_angular()
+        WebDriverWait(driver, 10).until(EC.url_contains("/projects/"))
+        page.navigate("/projects")
+        try:
+            WebDriverWait(driver, 5).until(lambda d: len(d.find_elements(*page.PROJECT_CARDS)) > 0)
+        except Exception:
+            pass
         cards = page.get_project_cards()
-        
+        if not cards:
+            print("CARDS EMPTY! Printing page source:")
+            print(driver.page_source)
+            print("Browser logs:")
+            print(driver.get_log("browser"))
+
     assert len(cards) > 0, "No projects available to click"
-    cards[0].click()
-    page.wait_for_angular()
+    # We need to JS click in case it's intercepted
+    driver.execute_script("arguments[0].click();", cards[0])
+    WebDriverWait(driver, 10).until(EC.url_contains("/projects/"))
     
     assert "/projects/" in driver.current_url
+    assert driver.current_url.rstrip("/").split("/")[-1] != "projects"

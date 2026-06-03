@@ -102,7 +102,42 @@
           </div>
         </div>
 
-        <button class="btn-primary reset-btn" (click)="onReset()" style="margin-top: var(--space-6); width: 100%;">
+        <hr class="divider" />
+
+        <div class="import-section">
+          <h3>Import to Project</h3>
+          <div class="control-group" style="margin-bottom: var(--space-3);">
+            <select
+              id="project-selector"
+              class="form-select"
+              [(ngModel)]="selectedProjectId"
+              [disabled]="projects.length === 0"
+              style="width: 100%; padding: 8px; border-radius: var(--radius-sm); border: 1px solid var(--color-border); background: var(--color-bg-elevated); color: var(--color-text-primary);"
+            >
+              <option value="" disabled selected>Select a project...</option>
+              @for (project of projects; track project.id) {
+                <option [value]="project.id">{{ project.name }}</option>
+              }
+            </select>
+          </div>
+          <button
+            class="btn-primary import-btn"
+            style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;"
+            [disabled]="!selectedProjectId || selectedPaperDois.size === 0 || importing"
+            (click)="importSelectedPapers()"
+          >
+            @if (importing) {
+              <div class="spinner-small" style="width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite;"></div> Importing...
+            } @else {
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+              </svg>
+              Import Selected ({{ selectedPaperDois.size }})
+            }
+          </button>
+        </div>
+
+        <button class="btn-secondary reset-btn" (click)="onReset()" style="margin-top: var(--space-6); width: 100%;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
@@ -164,6 +199,16 @@
                   >
                     <!-- Card Header / Always visible -->
                     <div class="paper-card-header">
+                      <!-- Selection Checkbox -->
+                      <div class="selection-control" (click)="$event.stopPropagation()">
+                        <input
+                          type="checkbox"
+                          class="paper-checkbox"
+                          [checked]="isPaperSelected(paper.doi)"
+                          (change)="togglePaperSelection(paper.doi, $event)"
+                        />
+                      </div>
+
                       <!-- Rank & Score Circle -->
                       <div class="score-display">
                         <div class="score-ring">
