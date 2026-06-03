@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 export interface HealthResponse {
   status: string;
@@ -220,13 +221,19 @@ export class ApiService {
     return this.http.post<Project>(`${this.baseUrl}/projects/${id}/touch`, {});
   }
 
+  openProjectFolder(id: string): Observable<{ message: string, path: string }> {
+    return this.http.post<{ message: string, path: string }>(`${this.baseUrl}/projects/${id}/open-folder`, {});
+  }
+
   // --- Research ---
   addQuestion(projectId: string, body: AddQuestionRequest): Observable<AddQuestionResponse> {
     return this.http.post<AddQuestionResponse>(`${this.baseUrl}/research/${projectId}/questions`, body);
   }
 
   listQuestions(projectId: string): Observable<ResearchQuestion[]> {
-    return this.http.get<ResearchQuestion[]>(`${this.baseUrl}/research/${projectId}/questions`);
+    return this.http.get<{questions: ResearchQuestion[]}>(`${this.baseUrl}/research/${projectId}/questions`).pipe(
+      map(res => res.questions || [])
+    );
   }
 
   deleteQuestion(projectId: string, questionId: string): Observable<{ message: string }> {
@@ -271,7 +278,35 @@ export class ApiService {
     if (threshold !== undefined) {
       url += `?threshold=${threshold}`;
     }
-    return this.http.get<CoverageResponse>(url);
+    return this.http.get<any>(url).pipe(
+      map(res => {
+        const coverages: CoverageResult[] = [];
+        if (res.gap_questions) {
+          coverages.push(...res.gap_questions.map((q: any) => ({
+            question_id: q.question_id || '',
+            question_text: q.question,
+            coverage_score: q.best_score || 0,
+            status: 'gap' as const,
+            top_papers: [],
+            paper_count: q.paper_count || 0
+          })));
+        }
+        if (res.covered_questions) {
+          coverages.push(...res.covered_questions.map((q: any) => ({
+            question_id: q.question_id || '',
+            question_text: q.question,
+            coverage_score: q.best_score || 0,
+            status: 'covered' as const,
+            top_papers: [],
+            paper_count: q.paper_count || 0
+          })));
+        }
+        return {
+          coverages,
+          threshold: threshold || 0.6
+        };
+      })
+    );
   }
 
   generateGapQueries(projectId: string, body: GapQueryRequest): Observable<GapQueryResponse> {
@@ -279,7 +314,9 @@ export class ApiService {
   }
 
   getRankedPapers(projectId: string): Observable<AnalysisRankedPaper[]> {
-    return this.http.get<AnalysisRankedPaper[]>(`${this.baseUrl}/analysis/${projectId}/ranked-papers`);
+    return this.http.get<{ranked_papers: AnalysisRankedPaper[]}>(`${this.baseUrl}/analysis/${projectId}/ranked-papers`).pipe(
+      map(res => res.ranked_papers || [])
+    );
   }
 
   // --- Planning ---

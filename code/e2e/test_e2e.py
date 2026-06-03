@@ -24,6 +24,8 @@ from typing import Generator
 import pytest
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -52,7 +54,8 @@ def driver() -> Generator[webdriver.Chrome, None, None]:
     options.add_argument("--window-size=1920,1080")
     options.set_capability("goog:loggingPrefs", {"browser": "ALL"})
 
-    drv = webdriver.Chrome(options=options)
+    service = Service(ChromeDriverManager().install())
+    drv = webdriver.Chrome(service=service, options=options)
     drv.implicitly_wait(5)
 
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
@@ -169,14 +172,14 @@ class TestDashboardPage:
     """Verify the Dashboard page renders correctly with live data."""
 
     def test_page_loads(self, driver: webdriver.Chrome) -> None:
-        """Dashboard page loads without errors."""
-        driver.get(f"{BASE_URL}/dashboard")
+        """Projects page loads without errors."""
+        driver.get(f"{BASE_URL}/projects")
         time.sleep(2)
         assert "ALRS" in driver.title or "alrs" in driver.page_source.lower()
 
     def test_no_console_errors(self, driver: webdriver.Chrome) -> None:
         """No SEVERE-level errors in the browser console."""
-        driver.get(f"{BASE_URL}/dashboard")
+        driver.get(f"{BASE_URL}/projects")
         time.sleep(3)
         logs = driver.get_log("browser")
         severe = [log for log in logs if log["level"] == "SEVERE"]
@@ -186,12 +189,12 @@ class TestDashboardPage:
         assert len(severe) == 0, f"Found {len(severe)} SEVERE console errors"
 
     def test_sidebar_present(self, driver: webdriver.Chrome) -> None:
-        """Sidebar navigation renders with all 4 nav items."""
-        driver.get(f"{BASE_URL}/dashboard")
+        """Sidebar navigation renders with nav items."""
+        driver.get(f"{BASE_URL}/projects")
         time.sleep(2)
         nav_items = driver.find_elements(By.CSS_SELECTOR, ".nav-item")
         labels = [item.text.strip() for item in nav_items]
-        assert "Dashboard" in labels
+        assert "Projects" in labels
         assert "New Search" in labels
         assert "Sessions" in labels
         assert "API Logs" in labels
@@ -202,7 +205,7 @@ class TestDashboardPage:
         # Navigate away first to ensure a clean reload
         driver.get("about:blank")
         time.sleep(0.5)
-        driver.get(f"{BASE_URL}/dashboard")
+        driver.get(f"{BASE_URL}/projects")
         time.sleep(3)  # Wait for async API calls to complete
         grid = driver.find_elements(By.CSS_SELECTOR, ".status-grid")
         grid_text = grid[0].text if grid else ""
@@ -211,12 +214,39 @@ class TestDashboardPage:
 
     def test_version_displayed(self, driver: webdriver.Chrome) -> None:
         """Version card shows a version string (not 'unknown')."""
-        driver.get(f"{BASE_URL}/dashboard")
+        driver.get(f"{BASE_URL}/projects")
         time.sleep(3)
         body_text = driver.find_element(By.TAG_NAME, "body").text
         assert "unknown" not in body_text.lower() or "3.0.0" in body_text
         _save_screenshot(driver, "dashboard_version")
 
+class TestProjectWorkspaceTabs:
+    """Verify the Research and Analysis tabs load correctly."""
+    
+    def test_research_tab_loads(self, driver: webdriver.Chrome) -> None:
+        """Research tab loads without SEVERE console errors."""
+        # Using the actual Project ID from our mock data
+        project_id = "bf4f1d61-eabb-4f96-92a0-37a288fe644f"
+        driver.get(f"{BASE_URL}/projects/{project_id}/research")
+        time.sleep(3)
+        body = driver.find_element(By.TAG_NAME, "body").text
+        assert "Research Questions" in body or "Paper Library" in body
+        
+        logs = driver.get_log("browser")
+        severe = [log for log in logs if log["level"] == "SEVERE"]
+        assert len(severe) == 0, f"Found {len(severe)} SEVERE console errors"
+
+    def test_analysis_tab_loads(self, driver: webdriver.Chrome) -> None:
+        """Analysis tab loads without SEVERE console errors."""
+        project_id = "bf4f1d61-eabb-4f96-92a0-37a288fe644f"
+        driver.get(f"{BASE_URL}/projects/{project_id}/analysis")
+        time.sleep(3)
+        body = driver.find_element(By.TAG_NAME, "body").text
+        assert "Coverage" in body or "Library Coverage" in body
+        
+        logs = driver.get_log("browser")
+        severe = [log for log in logs if log["level"] == "SEVERE"]
+        assert len(severe) == 0, f"Found {len(severe)} SEVERE console errors"
 
 class TestSearchPage:
     """Verify the Search page renders and the search form works."""

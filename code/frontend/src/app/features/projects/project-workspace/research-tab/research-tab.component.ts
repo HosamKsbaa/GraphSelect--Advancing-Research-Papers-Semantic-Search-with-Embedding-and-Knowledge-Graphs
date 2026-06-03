@@ -1,31 +1,10 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, signal, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-
-export interface ResearchQuestion {
-  id: string;
-  text: string;
-  status: 'embedded' | 'pending' | 'failed';
-  coverage: number;
-}
-
-export interface Author {
-  name: string;
-  affiliation?: string;
-}
-
-export interface Paper {
-  id: string;
-  title: string;
-  authors: Author[];
-  year: number;
-  venue: string;
-  doi?: string;
-  type?: string;
-  abstract?: string;
-  similarityScore: number;
-  perQuestionScores?: Record<string, number>;
-}
+import { ActivatedRoute } from '@angular/router';
+import { ApiService, ResearchQuestion, AnalysisRankedPaper } from '../../../../core/api.service';
+import { ToastService } from '../../../../core/toast.service';
+import { EmptyStateComponent } from '../../../../shared/empty-state/empty-state.component';
 
 export interface TopAuthor {
   id: string;
@@ -39,27 +18,12 @@ export interface TopVenue {
   paperCount: number;
 }
 
-// Mock service for UI dev since ApiService is not fully wired
-class MockApiService {
-  listQuestions() { return Promise.resolve([{id: '1', text: 'How do LLMs reason?', status: 'embedded', coverage: 0.85} as ResearchQuestion]); }
-  addQuestion(q: string) { return Promise.resolve({id: Math.random().toString(), text: q, status: 'pending', coverage: 0} as ResearchQuestion); }
-  deleteQuestion(id: string) { return Promise.resolve(true); }
-  searchByAuthor(a: string) { return Promise.resolve([]); }
-  searchByVenue(v: string) { return Promise.resolve([]); }
-  getPaperDetail(id: string) { return Promise.resolve({} as Paper); }
-  getTopAuthors() { return Promise.resolve([{id: '1', name: 'John Doe', paperCount: 15} as TopAuthor]); }
-  getTopVenues() { return Promise.resolve([{id: '1', name: 'Nature', paperCount: 20} as TopVenue]); }
-}
-
-import { EmptyStateComponent } from '../../../../shared/empty-state/empty-state.component';
-
 @Component({
   selector: 'app-research-tab',
   standalone: true,
   imports: [CommonModule, FormsModule, EmptyStateComponent],
   templateUrl: './research-tab.component.html',
-  styleUrls: ['./research-tab.component.scss'],
-  providers: [MockApiService] // To be replaced with real ApiService
+  styleUrls: ['./research-tab.component.scss']
 })
 export class ResearchTabComponent implements OnInit {
   // Questions Panel
@@ -72,32 +36,7 @@ export class ResearchTabComponent implements OnInit {
   libraryFilter = signal('');
   
   // Papers state
-  papers = signal<Paper[]>([
-    {
-      id: 'p1',
-      title: 'A Survey on Large Language Models',
-      authors: [{name: 'Zhao et al.', affiliation: 'University of AI'}],
-      year: 2023,
-      venue: 'ArXiv',
-      doi: '10.48550/arXiv.2303.18223',
-      similarityScore: 0.92,
-      abstract: 'Large Language Models (LLMs) have shown remarkable capabilities in natural language processing. This paper provides a comprehensive review of the recent advances in LLMs, discussing their architecture, training strategies, and evaluation metrics. We also highlight the challenges and future directions in this rapidly evolving field.',
-      type: 'Journal Article',
-      perQuestionScores: {'1': 0.95}
-    },
-    {
-      id: 'p2',
-      title: 'Attention Is All You Need',
-      authors: [{name: 'Vaswani et al.', affiliation: 'Google'}],
-      year: 2017,
-      venue: 'NeurIPS',
-      doi: '10.5555/3295222.3295349',
-      similarityScore: 0.88,
-      abstract: 'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.',
-      type: 'Conference Paper',
-      perQuestionScores: {'1': 0.88}
-    }
-  ]);
+  papers = signal<AnalysisRankedPaper[]>([]);
   
   // Pagination
   currentPage = signal(1);
@@ -112,33 +51,53 @@ export class ResearchTabComponent implements OnInit {
   
   showConfirmDialog = signal<{isOpen: boolean, questionId?: string}>({isOpen: false});
 
-  constructor(private apiService: MockApiService) {}
+  private apiService = inject(ApiService);
+  private route = inject(ActivatedRoute);
+  private toastService = inject(ToastService);
+  projectId: string | null = null;
 
   ngOnInit() {
-    this.loadInitialData();
+    this.route.parent?.paramMap.subscribe(params => {
+      this.projectId = params.get('id');
+      if (this.projectId) {
+        this.loadInitialData();
+      }
+    });
   }
 
-  async loadInitialData() {
-    const [qs, authors, venues] = await Promise.all([
-      this.apiService.listQuestions(),
-      this.apiService.getTopAuthors(),
-      this.apiService.getTopVenues()
-    ]);
-    this.questions.set(qs);
-    this.topAuthors.set(authors);
-    this.topVenues.set(venues);
+  loadInitialData() {
+    if (!this.projectId) return;
+    this.apiService.listQuestions(this.projectId).subscribe({
+      next: qs => this.questions.set(qs),
+      error: err => console.error(err)
+    });
+    this.apiService.getRankedPapers(this.projectId).subscribe({
+      next: ps => this.papers.set(ps),
+      error: err => console.error(err)
+    });
+    
+    // Fallback for authors and venues until fully supported
+    this.topAuthors.set([]);
+    this.topVenues.set([]);
   }
 
-  async addQuestion() {
+  addQuestion() {
     const text = this.newQuestionText().trim();
-    if (!text) return;
-    const newQ = await this.apiService.addQuestion(text);
-    this.questions.update(qs => [...qs, newQ]);
-    this.newQuestionText.set('');
+    if (!text || !this.projectId) return;
+    this.apiService.addQuestion(this.projectId, { text }).subscribe({
+      next: res => {
+        this.questions.update(qs => [...qs, res.question]);
+        this.newQuestionText.set('');
+        this.toastService.success('Success', 'Research question added');
+        this.loadInitialData(); // reload papers to trigger similarity calculations
+      },
+      error: err => this.toastService.error('Error', 'Failed to add question')
+    });
   }
 
   confirmDeleteQuestion(id: string) {
-    this.showConfirmDialog.set({isOpen: true, questionId: id});
+    this.toastService.info('Not Implemented', 'Deleting questions is not supported by the backend yet.');
+    // this.showConfirmDialog.set({isOpen: true, questionId: id});
   }
 
   cancelDelete() {
@@ -147,9 +106,11 @@ export class ResearchTabComponent implements OnInit {
 
   async proceedDeleteQuestion() {
     const id = this.showConfirmDialog().questionId;
-    if (id) {
-      await this.apiService.deleteQuestion(id);
-      this.questions.update(qs => qs.filter(q => q.id !== id));
+    if (id && this.projectId) {
+      this.apiService.deleteQuestion(this.projectId, id).subscribe({
+        next: () => this.questions.update(qs => qs.filter(q => q.id !== id)),
+        error: () => this.toastService.error('Error', 'Failed to delete question')
+      });
     }
     this.showConfirmDialog.set({isOpen: false});
   }
@@ -167,23 +128,27 @@ export class ResearchTabComponent implements OnInit {
     this.searchMode.update(m => m === 'Author' ? 'Venue' : 'Author');
   }
 
-  async searchPapers() {
+  searchPapers() {
     const q = this.searchQuery().trim();
     if (!q) return;
-    let results: Paper[];
     if (this.searchMode() === 'Author') {
-      results = await this.apiService.searchByAuthor(q);
+      this.apiService.searchByAuthor(q).subscribe({
+        next: res => console.log('Author results', res),
+        error: err => console.error(err)
+      });
     } else {
-      results = await this.apiService.searchByVenue(q);
+      this.apiService.searchByVenue(q).subscribe({
+        next: res => console.log('Venue results', res),
+        error: err => console.error(err)
+      });
     }
-    console.log('Search results', results);
   }
 
   get filteredPapers() {
     const filter = this.libraryFilter().toLowerCase();
     let papers = this.papers();
     if (filter) {
-      papers = papers.filter(p => p.title.toLowerCase().includes(filter) || p.venue.toLowerCase().includes(filter));
+      papers = papers.filter(p => p.title.toLowerCase().includes(filter));
     }
     return papers;
   }
@@ -217,7 +182,8 @@ export class ResearchTabComponent implements OnInit {
     }
   }
   
-  formatAuthors(authors: Author[]): string {
-    return authors.map(a => a.name).join(', ');
+  getQuestionScore(paper: AnalysisRankedPaper, qId: string): number {
+    const qs = paper.question_similarities?.find(s => s.question_id === qId);
+    return qs ? qs.similarity_score : 0;
   }
 }

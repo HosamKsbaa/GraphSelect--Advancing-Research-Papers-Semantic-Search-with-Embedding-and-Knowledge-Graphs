@@ -26,14 +26,14 @@
       }
       <li *ngFor="let q of questions()" class="question-item">
         <div class="question-header">
-          <span class="status-icon" [title]="'Status: ' + q.status">
-            {{ getQuestionStatusIcon(q.status) }}
+          <span class="status-icon" [title]="'Status: ' + q.embedding_status">
+            {{ getQuestionStatusIcon(q.embedding_status) }}
           </span>
           <span class="question-text" [title]="q.text">{{ q.text }}</span>
           <button class="delete-btn" (click)="confirmDeleteQuestion(q.id)" title="Delete Question">&times;</button>
         </div>
         <div class="coverage-badge">
-          Coverage: {{ q.coverage | percent }}
+          Coverage: {{ q.coverage_score | percent }}
         </div>
       </li>
     </ul>
@@ -98,50 +98,48 @@
             <ng-container *ngFor="let paper of paginatedPapers">
               <tr 
                 class="paper-row" 
-                [class.expanded]="expandedPaperId() === paper.id"
-                (click)="togglePaperDetail(paper.id)">
+                [class.expanded]="expandedPaperId() === paper.doi"
+                (click)="togglePaperDetail(paper.doi)">
                 <td class="title-cell">{{ paper.title }}</td>
-                <td class="authors-cell">{{ formatAuthors(paper.authors) }}</td>
+                <td class="authors-cell">N/A</td>
                 <td>{{ paper.year }}</td>
-                <td>{{ paper.venue }}</td>
+                <td>N/A</td>
                 <td>
                   <div class="similarity-bar-container">
-                    <div class="similarity-bar" [style.width.%]="paper.similarityScore * 100"></div>
-                    <span>{{ paper.similarityScore | percent }}</span>
+                    <div class="similarity-bar" [style.width.%]="paper.similarity_score * 100"></div>
+                    <span>{{ paper.similarity_score | percent }}</span>
                   </div>
                 </td>
               </tr>
               <!-- Expanded Detail Row -->
-              <tr class="detail-row" *ngIf="expandedPaperId() === paper.id">
+              <tr class="detail-row" *ngIf="expandedPaperId() === paper.doi">
                 <td colspan="5">
                   <div class="paper-detail">
                     <div class="detail-header">
                       <h3>{{ paper.title }}</h3>
                       <div class="meta-tags">
-                        <span class="tag">{{ paper.type || 'Paper' }}</span>
+                        <span class="tag">Paper</span>
                         <a *ngIf="paper.doi" [href]="'https://doi.org/' + paper.doi" target="_blank" class="doi-link" (click)="$event.stopPropagation()">{{ paper.doi }}</a>
                       </div>
                     </div>
                     
-                    <p class="abstract">{{ paper.abstract }}</p>
+                    <p class="abstract">Abstract not available in this view.</p>
                     
                     <div class="authors-list">
                       <strong>Authors:</strong>
                       <ul>
-                        <li *ngFor="let author of paper.authors">
-                          {{ author.name }} <span class="affiliation" *ngIf="author.affiliation">({{ author.affiliation }})</span>
-                        </li>
+                        <li>Authors not available in this view</li>
                       </ul>
                     </div>
                     
-                    <div class="question-scores" *ngIf="paper.perQuestionScores">
+                    <div class="question-scores" *ngIf="paper.question_similarities">
                       <strong>Relevance to Questions:</strong>
                       <div class="score-item" *ngFor="let q of questions()">
                         <span class="q-text">{{ q.text }}</span>
                         <div class="score-bar-wrapper">
-                          <div class="score-fill" [style.width.%]="(paper.perQuestionScores[q.id] || 0) * 100"></div>
+                          <div class="score-fill" [style.width.%]="getQuestionScore(paper, q.id) * 100"></div>
                         </div>
-                        <span class="score-value">{{ (paper.perQuestionScores[q.id] || 0) | percent }}</span>
+                        <span class="score-value">{{ getQuestionScore(paper, q.id) | percent }}</span>
                       </div>
                     </div>
                   </div>

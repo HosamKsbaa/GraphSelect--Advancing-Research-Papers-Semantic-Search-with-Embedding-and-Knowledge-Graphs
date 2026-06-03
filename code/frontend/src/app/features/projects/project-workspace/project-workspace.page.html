@@ -20,6 +20,39 @@
       <a [routerLink]="['/projects', projectId, 'writing']" routerLinkActive="active" class="tab-link">Writing</a>
       <a [routerLink]="['/projects', projectId, 'export']" routerLinkActive="active" class="tab-link">Export</a>
     </div>
+    <div class="nav-actions" style="margin-left: auto; padding-right: 1.5rem; position: relative;">
+      <button class="btn-secondary" (click)="toggleFolderPopover()" title="Get Project Folder Path">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.5rem; vertical-align: middle;">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+        </svg>
+        Open Folder
+      </button>
+
+      <!-- Glassmorphic Path Popover -->
+      <div *ngIf="showFolderPopover" class="folder-popover glass animate-fade-in">
+        <div class="popover-header">
+          <span class="popover-title">Project Folder Path</span>
+          <button class="btn-close" (click)="showFolderPopover = false" title="Close">✕</button>
+        </div>
+        <div class="popover-body">
+          <div *ngIf="loadingPath" class="loading-container">
+            <span class="loading-text">Fetching path...</span>
+          </div>
+          <div *ngIf="!loadingPath" class="path-input-group">
+            <input type="text" readonly [value]="projectPath" class="path-input" #pathInput />
+            <button class="btn-copy" (click)="copyToClipboard(projectPath)" [disabled]="!projectPath" title="Copy to clipboard">
+              <svg *ngIf="!copied" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <svg *ngIf="copied" class="copied-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </nav>
 
   <div class="workspace-content">

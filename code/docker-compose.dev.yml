@@ -43,6 +43,7 @@ services:
       - ./backend/.env
     volumes:
       - ./backend:/app            # Bind-mount entire backend for live editing
+      - ~/.alrs/projects:/root/.alrs/projects # Bind-mount project data to host OS
     environment:
       - HTTP_PROXY=http://mitmproxy:8080
       - HTTPS_PROXY=http://mitmproxy:8080
@@ -114,8 +115,8 @@ services:
     container_name: alrs-mitmproxy
     command: mitmweb --web-host 0.0.0.0 --web-port 8081 --no-web-open-browser --set web_password=admin
     ports:
-      - "8081:8081"   # Beautiful live dashboard web UI
-      - "8080:8080"   # HTTP/HTTPS proxy listening port
+      - "8083:8081"   # Beautiful live dashboard web UI (mapped to 8083 to avoid conflicts)
+      - "8082:8080"   # HTTP/HTTPS proxy listening port (mapped to 8082 to avoid conflicts)
     restart: unless-stopped
 
 volumes:

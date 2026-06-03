@@ -46,3 +46,30 @@ def test_api_key_warning_shown(driver, base_url):
     is_displayed = page.is_api_key_warning_displayed()
     # We cannot strictly assert it must be true, because the test env may have a key.
     assert isinstance(is_displayed, bool)
+
+def test_open_folder_popover_and_copy(driver, base_url):
+    page = ProjectWorkspacePage(driver, base_url)
+    page.navigate("/projects/1")
+    
+    # Ensure popover is not shown initially
+    assert not page.is_folder_popover_displayed(), "Popover should not be displayed initially"
+    
+    # Click Open Folder to show the popover
+    page.click_open_folder()
+    
+    # Wait and verify popover is displayed
+    from selenium.webdriver.support.ui import WebDriverWait
+    WebDriverWait(driver, 5).until(lambda d: page.is_folder_popover_displayed())
+    
+    # Verify the path is fetched and displayed
+    # The path should contain the project ID (e.g. "1")
+    path_val = page.get_project_path_value()
+    assert "1" in path_val, f"Expected project ID '1' in path, got: {path_val}"
+    
+    # Click copy path (should not crash)
+    page.click_copy_path()
+    
+    # Close popover
+    page.click_close_popover()
+    assert not page.is_folder_popover_displayed(), "Popover should be hidden after closing"
+

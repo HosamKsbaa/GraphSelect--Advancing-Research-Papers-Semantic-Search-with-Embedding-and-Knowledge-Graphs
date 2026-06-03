@@ -265,8 +265,6 @@ async def touch_project(
         "UPDATE projects SET last_accessed_at = %s WHERE id = %s",
         (now, project_id),
     )
-    if affected == 0:
-        return None
     return await get_project(project_id, mysql)
 
 

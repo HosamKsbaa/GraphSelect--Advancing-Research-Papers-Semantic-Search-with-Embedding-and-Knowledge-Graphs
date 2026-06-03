@@ -5,6 +5,11 @@ Exposes CRUD endpoints for research projects under ``/api/projects``.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+import os
+import sys
+import subprocess
+from pathlib import Path
+from config import get_settings
 
 from core.db.mysql_service import MySQLService
 from core.db.neo4j_service import Neo4jService
@@ -121,3 +126,20 @@ async def touch_project(
             detail=f"Project {project_id} not found",
         )
     return result
+
+@router.post(
+    "/{project_id}/open-folder",
+    summary="Open the project directory in the OS file explorer",
+)
+async def open_project_folder(project_id: str):
+    """Open the project directory on the host OS."""
+    settings = get_settings()
+    project_dir = Path(settings.projects_dir) / project_id
+    
+    # Ensure directory exists before opening
+    project_dir.mkdir(parents=True, exist_ok=True)
+    
+    return {
+        "message": "Project data is stored at: " + str(project_dir),
+        "path": str(project_dir)
+    }

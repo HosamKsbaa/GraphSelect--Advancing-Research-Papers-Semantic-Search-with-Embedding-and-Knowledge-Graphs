@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -53,7 +54,7 @@ class Settings(BaseSettings):
     token_budget_warn_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Warn at this fraction of budget")
     max_research_questions: int = Field(default=6, ge=1, le=20, description="Max questions per project")
     similarity_threshold_default: float = Field(default=0.6, ge=0.0, le=1.0, description="Default relevance threshold")
-    projects_dir: str = Field(default="projects", description="Directory for per-project artifacts")
+    projects_dir: str = Field(default_factory=lambda: str(Path.home() / ".alrs" / "projects"), description="Directory for per-project artifacts")
 
     @field_validator("embedding_dimensions")
     @classmethod

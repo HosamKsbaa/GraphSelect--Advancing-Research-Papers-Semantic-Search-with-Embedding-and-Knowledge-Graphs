@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../../core/api.service';
+import { ToastService } from '../../../core/toast.service';
 
 @Component({
   selector: 'app-project-workspace',
@@ -13,6 +14,7 @@ import { ApiService } from '../../../core/api.service';
 export class ProjectWorkspacePage implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
+  private toastService = inject(ToastService);
 
   projectId: string = '';
   hasApiKey = true;
@@ -33,5 +35,50 @@ export class ProjectWorkspacePage implements OnInit {
         error: (err) => console.error('Failed to update last accessed time:', err)
       });
     }
+  }
+
+  showFolderPopover = false;
+  projectPath = '';
+  loadingPath = false;
+  copied = false;
+
+  toggleFolderPopover() {
+    this.showFolderPopover = !this.showFolderPopover;
+    if (this.showFolderPopover && !this.projectPath) {
+      this.fetchProjectPath();
+    }
+  }
+
+  fetchProjectPath() {
+    if (!this.projectId) return;
+    this.loadingPath = true;
+    this.api.openProjectFolder(this.projectId).subscribe({
+      next: (res) => {
+        this.projectPath = res.path;
+        this.loadingPath = false;
+        // Auto-copy on first fetch for convenience
+        this.copyToClipboard(res.path, false);
+      },
+      error: (err) => {
+        this.loadingPath = false;
+        this.toastService.error('Error', err.error?.detail || 'Failed to fetch project folder path');
+      }
+    });
+  }
+
+  copyToClipboard(text: string, showToast = true) {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      this.copied = true;
+      if (showToast) {
+        this.toastService.success('Copied', 'Folder path copied to clipboard');
+      }
+      setTimeout(() => {
+        this.copied = false;
+      }, 2000);
+    }).catch((err) => {
+      console.error('Failed to copy to clipboard:', err);
+      this.toastService.error('Copy Failed', 'Failed to copy path to clipboard');
+    });
   }
 }
