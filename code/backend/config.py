@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     max_research_questions: int = Field(default=6, ge=1, le=20, description="Max questions per project")
     similarity_threshold_default: float = Field(default=0.6, ge=0.0, le=1.0, description="Default relevance threshold")
     projects_dir: str = Field(default_factory=lambda: str(Path.home() / ".alrs" / "projects"), description="Directory for per-project artifacts")
+    host_projects_dir: str | None = Field(default=None, description="Directory for per-project artifacts on the host OS")
 
     @field_validator("embedding_dimensions")
     @classmethod

@@ -139,7 +139,11 @@ async def open_project_folder(project_id: str):
     # Ensure directory exists before opening
     project_dir.mkdir(parents=True, exist_ok=True)
     
+    display_path = str(project_dir)
+    if settings.host_projects_dir:
+        display_path = str(Path(settings.host_projects_dir) / project_id)
+    
     return {
-        "message": "Project data is stored at: " + str(project_dir),
-        "path": str(project_dir)
+        "message": "Project data is stored at: " + display_path,
+        "path": display_path
     }
