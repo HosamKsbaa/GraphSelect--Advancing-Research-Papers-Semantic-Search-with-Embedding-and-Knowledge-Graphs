@@ -43,6 +43,8 @@ class ProjectUpdate(BaseModel):
     target_level: Literal["master", "phd"] | None = None
     similarity_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
     token_budget: int | None = Field(default=None, ge=1000)
+    status: Literal["active", "archived"] | None = None
+    last_accessed_at: datetime | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -58,3 +60,6 @@ class ProjectResponse(BaseModel):
     status: str = "active"
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    last_accessed_at: datetime | None = None
+    paper_count: int = 0
+    question_count: int = 0

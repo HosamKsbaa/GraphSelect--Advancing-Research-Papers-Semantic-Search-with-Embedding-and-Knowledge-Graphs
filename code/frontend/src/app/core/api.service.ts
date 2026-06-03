@@ -216,6 +216,10 @@ export class ApiService {
     return this.http.patch<{ message: string }>(`${this.baseUrl}/projects/${id}/archive`, {});
   }
 
+  touchProject(id: string): Observable<Project> {
+    return this.http.post<Project>(`${this.baseUrl}/projects/${id}/touch`, {});
+  }
+
   // --- Research ---
   addQuestion(projectId: string, body: AddQuestionRequest): Observable<AddQuestionResponse> {
     return this.http.post<AddQuestionResponse>(`${this.baseUrl}/research/${projectId}/questions`, body);
@@ -456,14 +460,20 @@ export interface SettingsUpdateResponse {
 export interface Project {
   id: string;
   name: string;
-  description: string;
-  topic: string;
-  target_level: 'master' | 'phd';
-  is_archived: boolean;
-  paper_count: number;
-  question_count: number;
+  description: string | null;
+  topic: string | null;
+  target_level: string;
+  similarity_threshold: number;
+  token_budget: number;
+  status: string;
   created_at: string;
   updated_at: string;
+  last_accessed_at: string | null;
+  paper_count: number;
+  question_count: number;
+
+  // Frontend-only computed properties
+  is_archived?: boolean;
 }
 
 export interface ProjectCreateRequest {

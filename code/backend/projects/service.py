@@ -106,12 +106,14 @@ async def get_project(
 
 async def get_projects(
     mysql: MySQLService,
+    neo4j: Neo4jService | None = None,
     include_archived: bool = False,
 ) -> list[ProjectResponse]:
     """List all projects, optionally including archived ones.
 
     Args:
         mysql: MySQL service instance.
+        neo4j: Optional Neo4j service instance to fetch paper/question counts.
         include_archived: If True, include archived projects.
 
     Returns:
@@ -125,7 +127,40 @@ async def get_projects(
         rows = await mysql.fetch_all(
             "SELECT * FROM projects WHERE status != 'archived' ORDER BY created_at DESC",
         )
-    return [_row_to_response(row) for row in rows]
+    
+    responses = [_row_to_response(row) for row in rows]
+    
+    if not responses or not neo4j:
+        return responses
+        
+    # Batch query Neo4j for counts
+    project_ids = [r.id for r in responses]
+    stats_query = """
+    MATCH (pr:Project)
+    WHERE pr.project_id IN $project_ids
+    OPTIONAL MATCH (pr)-[:HAS_PAPER]->(p:Paper)
+    OPTIONAL MATCH (q:ResearchQuestion {project_id: pr.project_id})
+    RETURN pr.project_id AS project_id,
+           count(DISTINCT p) AS paper_count,
+           count(DISTINCT q) AS question_count
+    """
+    try:
+        stats_results = await neo4j.execute_read(stats_query, {"project_ids": project_ids})
+        stats_map = {
+            record["project_id"]: {
+                "paper_count": record["paper_count"],
+                "question_count": record["question_count"]
+            }
+            for record in stats_results
+        }
+        for resp in responses:
+            if resp.id in stats_map:
+                resp.paper_count = stats_map[resp.id]["paper_count"]
+                resp.question_count = stats_map[resp.id]["question_count"]
+    except Exception as e:
+        logger.warning('Failed to fetch project stats from Neo4j: %s', e)
+        
+    return responses
 
 
 async def update_project(
@@ -212,6 +247,29 @@ async def archive_project(
     return await get_project(project_id, mysql)
 
 
+async def touch_project(
+    project_id: str,
+    mysql: MySQLService,
+) -> ProjectResponse | None:
+    """Update the last_accessed_at timestamp of a project.
+
+    Args:
+        project_id: UUID of the project.
+        mysql: MySQL service instance.
+
+    Returns:
+        Updated ProjectResponse or None if not found.
+    """
+    now = datetime.now(tz=timezone.utc)
+    affected = await mysql.execute(
+        "UPDATE projects SET last_accessed_at = %s WHERE id = %s",
+        (now, project_id),
+    )
+    if affected == 0:
+        return None
+    return await get_project(project_id, mysql)
+
+
 def _row_to_response(row: dict[str, Any]) -> ProjectResponse:
     """Map a MySQL row dict to a ProjectResponse model.
 
@@ -232,4 +290,5 @@ def _row_to_response(row: dict[str, Any]) -> ProjectResponse:
         status=str(row.get('status', 'active')),
         created_at=row.get('created_at'),  # type: ignore[arg-type]
         updated_at=row.get('updated_at'),  # type: ignore[arg-type]
+        last_accessed_at=row.get('last_accessed_at'),  # type: ignore[arg-type]
     )

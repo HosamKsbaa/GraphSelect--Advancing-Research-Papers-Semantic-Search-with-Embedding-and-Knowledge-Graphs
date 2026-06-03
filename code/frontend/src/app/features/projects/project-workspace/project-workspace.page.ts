@@ -27,5 +27,11 @@ export class ProjectWorkspacePage implements OnInit {
         this.hasApiKey = false;
       }
     });
+
+    if (this.projectId) {
+      this.api.touchProject(this.projectId).subscribe({
+        error: (err) => console.error('Failed to update last accessed time:', err)
+      });
+    }
   }
 }

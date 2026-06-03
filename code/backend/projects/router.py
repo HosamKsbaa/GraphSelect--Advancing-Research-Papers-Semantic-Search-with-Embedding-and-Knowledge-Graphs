@@ -38,9 +38,10 @@ async def create_project(
 async def list_projects(
     include_archived: bool = Query(default=False, description="Include archived projects"),
     mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> list[ProjectResponse]:
     """List all research projects, optionally including archived ones."""
-    return await project_service.get_projects(mysql, include_archived=include_archived)
+    return await project_service.get_projects(mysql, neo4j, include_archived=include_archived)
 
 
 @router.get(
@@ -95,6 +96,25 @@ async def archive_project(
 ) -> ProjectResponse:
     """Soft-delete a project by setting its status to 'archived'."""
     result = await project_service.archive_project(project_id, mysql, neo4j)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Project {project_id} not found",
+        )
+    return result
+
+
+@router.post(
+    "/{project_id}/touch",
+    response_model=ProjectResponse,
+    summary="Update the last accessed time for a project",
+)
+async def touch_project(
+    project_id: str,
+    mysql: MySQLService = Depends(get_mysql_service),
+) -> ProjectResponse:
+    """Update the last_accessed_at timestamp to the current time."""
+    result = await project_service.touch_project(project_id, mysql)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

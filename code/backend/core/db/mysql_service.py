@@ -69,6 +69,7 @@ DDL_STATEMENTS: list[str] = [
         status VARCHAR(20) NOT NULL DEFAULT 'active',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_projects_status (status),
         INDEX idx_projects_created (created_at)
     )''',
@@ -178,6 +179,13 @@ class MySQLService:
                 logger.info('DDL applied: %s...', ddl[:50])
             except Exception as e:
                 logger.warning('DDL skipped: %s — %s', ddl[:50], e)
+
+        # Ensure last_accessed_at exists on older schemas
+        try:
+            await self.execute('ALTER TABLE projects ADD COLUMN last_accessed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+            logger.info('Added last_accessed_at column to projects table')
+        except Exception as e:
+            logger.debug('ALTER TABLE for last_accessed_at failed (normal if column exists): %s', e)
 
         # Handle schema upgrades for existing tables
         try:

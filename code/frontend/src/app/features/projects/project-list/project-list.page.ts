@@ -67,11 +67,11 @@ export class ProjectListPage implements OnInit {
     }
 
     if (!this.showArchived) {
-      filtered = filtered.filter(p => !p.is_archived);
+      filtered = filtered.filter(p => p.status !== 'archived');
       this.archivedProjects = [];
     } else {
-      this.archivedProjects = filtered.filter(p => p.is_archived);
-      filtered = filtered.filter(p => !p.is_archived);
+      this.archivedProjects = filtered.filter(p => p.status === 'archived');
+      filtered = filtered.filter(p => p.status !== 'archived');
     }
 
     this.masterProjects = filtered.filter(p => p.target_level === 'master');
@@ -116,5 +116,22 @@ export class ProjectListPage implements OnInit {
         this.isCreating = false;
       }
     });
+  }
+
+  archiveProject(event: Event, projectId: string) {
+    event.preventDefault(); // Prevent navigating to project
+    event.stopPropagation();
+    
+    if (confirm('Are you sure you want to archive this project?')) {
+      this.apiService.archiveProject(projectId).subscribe({
+        next: () => {
+          this.loadProjects(); // Reload to refresh lists
+        },
+        error: (err) => {
+          console.error('Failed to archive project', err);
+          alert('Failed to archive project. Please try again.');
+        }
+      });
+    }
   }
 }

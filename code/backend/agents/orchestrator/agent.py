@@ -88,6 +88,7 @@ warning, prioritize completing the current phase and present results.
 - When presenting papers, include DOI, title, year, and relevance scores.
 - Track and report progress: questions defined, papers found, gaps identified.
 - **IMPORTANT**: If any tool returns an "error", you MUST explicitly inform the user about the error and not hide it.
+- **IMPORTANT**: When listing projects, NEVER summarize or truncate the list. You MUST output EVERY single project returned by the tool, no matter how many there are.
 
 ## State Variables
 - `project_id` — The current project UUID (from session state).
