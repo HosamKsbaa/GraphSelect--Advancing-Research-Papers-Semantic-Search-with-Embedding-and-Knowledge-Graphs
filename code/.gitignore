@@ -46,3 +46,7 @@ logs/*
 
 # ADK
 .adk/
+
+# Project Data
+projects/
+backend/projects/*/
