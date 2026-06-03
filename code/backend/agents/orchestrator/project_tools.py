@@ -145,4 +145,4 @@ async def list_projects(
         }
     except Exception as exc:
         logger.error("list_projects failed: %s", exc)
-        return {"error": str(exc), "projects": [], "total": 0}
+        return {"error": f"Failed to list projects due to internal error: {str(exc)}"}

@@ -87,6 +87,7 @@ warning, prioritize completing the current phase and present results.
 - Always indicate what the user can do next.
 - When presenting papers, include DOI, title, year, and relevance scores.
 - Track and report progress: questions defined, papers found, gaps identified.
+- **IMPORTANT**: If any tool returns an "error", you MUST explicitly inform the user about the error and not hide it.
 
 ## State Variables
 - `project_id` — The current project UUID (from session state).

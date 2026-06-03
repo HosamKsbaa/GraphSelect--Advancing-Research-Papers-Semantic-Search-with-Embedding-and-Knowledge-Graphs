@@ -135,9 +135,15 @@ class MySQLService:
             raise RuntimeError('MySQL pool not initialized. Call connect() first.')
         return self._pool
 
+    async def _ensure_connected(self) -> None:
+        """Ensure the pool is initialized before executing queries."""
+        if self._pool is None:
+            await self.connect()
+
     async def execute(self, query: str, args: tuple[object, ...] | None = None) -> int:
         """Execute a query and return the number of affected rows."""
-        async with self.pool.acquire() as conn:
+        await self._ensure_connected()
+        async with self._pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(query, args)
                 return int(cur.rowcount)
@@ -146,7 +152,8 @@ class MySQLService:
         self, query: str, args: tuple[object, ...] | None = None
     ) -> dict[str, Any] | None:  # Any: MySQL column values are dynamically typed
         """Fetch a single row as a dict, or None if no result."""
-        async with self.pool.acquire() as conn:
+        await self._ensure_connected()
+        async with self._pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, args)
                 row = await cur.fetchone()
@@ -156,7 +163,8 @@ class MySQLService:
         self, query: str, args: tuple[object, ...] | None = None
     ) -> list[dict[str, Any]]:  # Any: MySQL column values are dynamically typed
         """Fetch all rows as a list of dicts."""
-        async with self.pool.acquire() as conn:
+        await self._ensure_connected()
+        async with self._pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(query, args)
                 rows = await cur.fetchall()

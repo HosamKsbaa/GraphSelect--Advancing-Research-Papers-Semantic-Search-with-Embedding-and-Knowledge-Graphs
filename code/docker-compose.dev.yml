@@ -47,6 +47,9 @@ services:
       - HTTP_PROXY=http://mitmproxy:8080
       - HTTPS_PROXY=http://mitmproxy:8080
       - NO_PROXY=localhost,127.0.0.1,neo4j,mysql,generativelanguage.googleapis.com,googleapis.com
+      - NEO4J_URI=bolt://neo4j:7687
+      - MYSQL_HOST=mysql
+      - APP_PORT=8000
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       neo4j:

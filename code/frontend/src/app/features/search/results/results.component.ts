@@ -145,9 +145,9 @@ export class ResultsComponent implements OnInit {
   }
 
   loadProjects(): void {
-    this.api.listProjects(false).subscribe({
+    this.api.listProjects().subscribe({
       next: (res) => {
-        this.projects = res.projects;
+        this.projects = res;
       },
       error: (err) => {
         console.error('Failed to load projects', err);

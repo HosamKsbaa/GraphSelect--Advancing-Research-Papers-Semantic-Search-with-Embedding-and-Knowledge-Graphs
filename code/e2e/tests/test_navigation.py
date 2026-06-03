@@ -54,30 +54,45 @@ def test_navigate_to_search(driver, base_url):
     nav = NavigationPage(driver, base_url)
     nav.navigate("/")
     nav.click_link_by_text("Search")
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    WebDriverWait(driver, 5).until(EC.url_contains("/search"))
     assert "/search" in driver.current_url
 
 def test_navigate_to_sessions(driver, base_url):
     nav = NavigationPage(driver, base_url)
     nav.navigate("/")
     nav.click_link_by_text("Sessions")
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    WebDriverWait(driver, 5).until(EC.url_contains("/sessions"))
     assert "/sessions" in driver.current_url
 
 def test_navigate_to_logs(driver, base_url):
     nav = NavigationPage(driver, base_url)
     nav.navigate("/")
     nav.click_link_by_text("Logs")
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    WebDriverWait(driver, 5).until(EC.url_contains("/logs"))
     assert "/logs" in driver.current_url
 
 def test_navigate_to_debug(driver, base_url):
     nav = NavigationPage(driver, base_url)
     nav.navigate("/")
     nav.click_link_by_text("Debug")
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    WebDriverWait(driver, 5).until(EC.url_contains("/debug"))
     assert "/debug" in driver.current_url
 
 def test_navigate_to_settings(driver, base_url):
     nav = NavigationPage(driver, base_url)
     nav.navigate("/")
     nav.click_link_by_text("Settings")
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    WebDriverWait(driver, 5).until(EC.url_contains("/settings"))
     assert "/settings" in driver.current_url
 
 def test_logo_and_version(driver, base_url):

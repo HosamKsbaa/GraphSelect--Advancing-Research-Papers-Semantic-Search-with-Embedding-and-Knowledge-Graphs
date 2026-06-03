@@ -43,3 +43,6 @@ Thumbs.db
 e2e/screenshots/
 
 logs/*
+
+# ADK
+.adk/
