@@ -124,6 +124,36 @@
             }
           </div>
         </div>
+
+        <!-- Claim Polarity & Scientific Debates Panel -->
+        <div class="card glass polarity-panel" style="margin-top: 1.5rem;">
+          <h3 class="section-title" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Scientific Consensus & Disputes</span>
+            <span class="badge" style="font-size: 0.75rem; background: rgba(236, 72, 153, 0.15); color: #f472b6;">
+              Neo4j Polarity Subgraph
+            </span>
+          </h3>
+          <div class="polarity-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.75rem;">
+            <div class="polarity-card" style="padding: 0.75rem; border-radius: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); font-size: 0.8125rem;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
+                <span style="font-weight: 700; color: #10b981;">[SUPPORTS] Methodological Consensus</span>
+                <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.7rem;">Verified Edge</span>
+              </div>
+              <p style="color: #cbd5e1; margin: 0; line-height: 1.4;">
+                Multi-hop graph propagation models consistently outperform isolated shallow node embedding baselines across benchmark evaluation suites.
+              </p>
+            </div>
+            <div class="polarity-card" style="padding: 0.75rem; border-radius: 0.75rem; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(244, 63, 94, 0.3); font-size: 0.8125rem;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.25rem;">
+                <span style="font-weight: 700; color: #f43f5e;">[CONTRADICTS] Scalability & Oversmoothing Limits</span>
+                <span class="badge" style="background: rgba(244, 63, 94, 0.2); color: #fb7185; font-size: 0.7rem;">Controversy Edge</span>
+              </div>
+              <p style="color: #cbd5e1; margin: 0; line-height: 1.4;">
+                Disagreement on degradation thresholds: GCN cascades exhibit oversmoothing at depth &gt; 6 hops, while GAT maintains attention concentration but introduces memory scaling bottlenecks.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   }

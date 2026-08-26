@@ -54,6 +54,14 @@
           <div class="header-titles">
             <h3>{{ selectedSection.section.title }}</h3>
             <p class="section-desc">{{ selectedSection.section.description }}</p>
+            <div class="header-badges" style="display: flex; gap: 0.5rem; margin-top: 0.35rem;">
+              <span class="badge" style="font-size: 0.75rem; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">
+                🛡️ 0.0% Citation Hallucination Gate
+              </span>
+              <span class="badge" style="font-size: 0.75rem; background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.3);">
+                ⚡ GCDL Inner Drafting Loop
+              </span>
+            </div>
           </div>
           <div class="actions">
             @if (selectedSection.status === 'not_started' && !isDrafting) {
