@@ -304,6 +304,8 @@ _TEMPLATES: dict[str, dict[str, str]] = {
     "acm": {
         "documentclass": "\\documentclass[sigconf]{acmart}",
         "packages": (
+            "\\usepackage[T1]{fontenc}\n"
+            "\\usepackage{lmodern}\n"
             "\\usepackage{amsmath}\n"
             "\\usepackage{graphicx}\n"
             "\\usepackage{hyperref}\n"

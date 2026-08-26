@@ -141,3 +141,77 @@ def test_export_citation_graph_success(tmp_path: Path) -> None:
         assert "<graphml" in graphml_file.read_text(encoding="utf-8")
     finally:
         settings.projects_dir = old_dir
+
+
+def test_export_pdf_json_and_download(tmp_path: Path) -> None:
+    """Test exporting project to PDF format successfully (both JSON and binary FileResponse)."""
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_project_papers.return_value = [
+        {
+            "doi": "10.1234/test",
+            "title": "A GNN Paper",
+            "year": 2022,
+            "cited_by_count": 10,
+            "source": "openalex",
+            "authors": ["Alice Smith"],
+            "venue": "Nature",
+        }
+    ]
+    app.state.neo4j_service = mock_neo4j
+
+    project_dir = tmp_path / "project-pdf-1"
+    drafts_dir = project_dir / "drafts"
+    drafts_dir.mkdir(parents=True)
+    (drafts_dir / "section_1.md").write_text("# Overview\n\nThis is a sample review section citing 10.1234/test.")
+
+    from config import get_settings
+    settings = get_settings()
+    old_dir = settings.projects_dir
+    settings.projects_dir = str(tmp_path)
+
+    try:
+        client = TestClient(app)
+
+        # 1. JSON metadata response
+        res = client.post(
+            "/api/export/project-pdf-1/pdf",
+            json={"template": "plain", "download": False},
+        )
+        assert res.status_code == status.HTTP_200_OK
+        data = res.json()
+        assert data["status"] == "success"
+        assert data["template"] == "plain"
+        assert Path(data["pdf_path"]).exists()
+        assert data["size_bytes"] > 0
+
+        # 2. Binary download response
+        res_dl = client.post(
+            "/api/export/project-pdf-1/pdf",
+            json={"template": "plain", "download": True},
+        )
+        assert res_dl.status_code == status.HTTP_200_OK
+        assert res_dl.headers["content-type"] == "application/pdf"
+        assert len(res_dl.content) > 0
+        assert res_dl.content.startswith(b"%PDF")
+    finally:
+        settings.projects_dir = old_dir
+
+
+def test_export_pdf_missing_drafts_fails(tmp_path: Path) -> None:
+    """Test exporting PDF fails gracefully when no drafts exist."""
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_project_papers.return_value = []
+    app.state.neo4j_service = mock_neo4j
+
+    from config import get_settings
+    settings = get_settings()
+    old_dir = settings.projects_dir
+    settings.projects_dir = str(tmp_path)
+
+    try:
+        client = TestClient(app)
+        res = client.post("/api/export/nonexistent-project/pdf")
+        assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    finally:
+        settings.projects_dir = old_dir
+

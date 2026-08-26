@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*
+!.env.example
+
+# Testing & Coverage
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+.mypy_cache/
+.ruff_cache/
+
+# Node / Frontend
+node_modules/
+.angular/
+npm-debug.log*
+yarn-debug.log*
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs and Runtime Data
+logs/
+*.log
+e2e/screenshots/
+code/backend/projects/*/
+projects/
+.adk/
+
+# LaTeX intermediate files
+*.aux
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz

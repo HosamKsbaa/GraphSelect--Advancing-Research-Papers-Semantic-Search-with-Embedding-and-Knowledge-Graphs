@@ -39,6 +39,15 @@ class AddQuestionBody(BaseModel):
     question_text: str = Field(..., min_length=5, description="The research question text.")
 
 
+class DecomposeQueryRequest(BaseModel):
+    """Body for the autonomous query decomposition endpoint."""
+
+    topic: str = Field(..., min_length=3, description="High-level research topic or prompt string.")
+    num_questions: int = Field(default=4, ge=3, le=5, description="Target number of sub-questions (3-5).")
+    auto_save: bool = Field(default=False, description="Automatically persist questions to project.")
+
+
+
 # ── Endpoints ────────────────────────────────────────────────────────
 
 
@@ -81,6 +90,52 @@ async def add_research_question_endpoint(
         )
     except Exception as exc:
         logger.exception("add_research_question_endpoint failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
+@router.post("/{project_id}/decompose-query")
+async def decompose_query_endpoint(
+    project_id: str,
+    body: DecomposeQueryRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Decompose a high-level research prompt/topic into domain-specific sub-questions."""
+    from core.db.neo4j_service import Neo4jService
+    from core.llm.service import LLMService
+    from features.embedding.providers.gemini_provider import GeminiEmbeddingProvider
+    from config import get_settings
+    from core.logging.log_service import LogService
+    from core.db.mysql_service import MySQLService
+
+    settings = get_settings()
+    neo4j: Neo4jService | None = getattr(request.app.state, "neo4j_service", None)
+    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
+    log_service = LogService(mysql) if mysql else None
+
+    llm = LLMService(
+        api_key=settings.gemini_api_key,
+        model_name=settings.adk_model_name,
+        log_service=log_service,
+    )
+    embedding_provider = GeminiEmbeddingProvider(
+        api_key=settings.gemini_api_key,
+        output_dimensionality=settings.embedding_dimensions,
+        log_service=log_service,
+        model_name=settings.embedding_model,
+    )
+
+    try:
+        return await research_svc.decompose_query(
+            project_id=project_id,
+            topic=body.topic,
+            num_questions=body.num_questions,
+            auto_save=body.auto_save,
+            llm=llm,
+            neo4j=neo4j,
+            embedding_provider=embedding_provider,
+        )
+    except Exception as exc:
+        logger.exception("decompose_query_endpoint failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 

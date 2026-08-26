@@ -9,6 +9,7 @@ Covers:
 """
 from __future__ import annotations
 
+from pathlib import Path
 import pytest
 
 from agents.writing.tex_formatter import (
@@ -221,3 +222,46 @@ def test_format_to_latex_fallback_to_ieee():
     latex = format_to_latex(md, citations=[], template="custom_unsupported")
 
     assert r"\documentclass[conference]{IEEEtran}" in latex
+
+
+def test_pdflatex_compilation_all_templates(tmp_path: Path):
+    """Test that generated LaTeX documents for plain, ieee, and acm compile to valid PDFs with pdflatex."""
+    import shutil
+    import subprocess
+
+    pdflatex_bin = shutil.which("pdflatex")
+    if not pdflatex_bin:
+        pytest.skip("pdflatex is not installed on system")
+
+    backend_root = Path(__file__).resolve().parent.parent
+    templates_dir = backend_root / "templates" / "latex"
+
+    for tmpl in ["plain", "ieee", "acm"]:
+        md = f"# Section One\n\nThis is testing the {tmpl} template compilation."
+        latex_code = format_to_latex(md, citations=[], template=tmpl)
+
+        work_dir = tmp_path / f"compile_{tmpl}"
+        work_dir.mkdir(parents=True)
+
+        tex_file = work_dir / "doc.tex"
+        tex_file.write_text(latex_code, encoding="utf-8")
+        (work_dir / "references.bib").write_text("", encoding="utf-8")
+
+        # Copy class files
+        if templates_dir.exists():
+            for item in templates_dir.glob("*"):
+                if item.is_file():
+                    shutil.copy(item, work_dir)
+
+        proc = subprocess.run(
+            [pdflatex_bin, "-interaction=nonstopmode", "-file-line-error", "doc.tex"],
+            cwd=str(work_dir),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        pdf_out = work_dir / "doc.pdf"
+        assert pdf_out.exists(), f"pdflatex failed for {tmpl}:\n{proc.stdout[-500:]}"
+        assert pdf_out.stat().st_size > 0
+

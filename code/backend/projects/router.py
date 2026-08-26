@@ -136,8 +136,11 @@ async def open_project_folder(project_id: str):
     settings = get_settings()
     project_dir = Path(settings.projects_dir) / project_id
     
-    # Ensure directory exists before opening
-    project_dir.mkdir(parents=True, exist_ok=True)
+    # Ensure directory exists before opening (safely handle permission limits)
+    try:
+        project_dir.mkdir(parents=True, exist_ok=True)
+    except (PermissionError, OSError):
+        pass
     
     display_path = str(project_dir)
     if settings.host_projects_dir:

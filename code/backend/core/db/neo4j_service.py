@@ -509,7 +509,7 @@ class Neo4jService:
         RETURN p.doi AS doi, count(other) AS degree
         """
         records = await self.execute_read(query, {"session_id": session_id})
-        scores = {str(r["doi"]): float(r["degree"]) for r in records if r.get("doi")}
+        scores = {str(r["doi"]): float(r.get("degree", 0.0)) for r in records if r.get("doi")}
         if scores:
             min_s = min(scores.values())
             max_s = max(scores.values())

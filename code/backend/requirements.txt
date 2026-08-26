@@ -28,3 +28,9 @@ pytest-httpx>=0.30.0
 
 # Type checking
 mypy>=1.10.0
+
+# Graph & Data Science
+networkx>=3.0.0
+numpy>=1.26.0
+pandas>=2.0.0
+scipy>=1.10.0

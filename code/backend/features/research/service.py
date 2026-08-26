@@ -7,6 +7,7 @@ Functions in this module are the single source of truth for:
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -14,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.clients.openalex_client import OpenAlexService
     from core.db.neo4j_service import Neo4jService
+    from core.llm.service import LLMService
     from features.embedding.providers.base import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
@@ -68,6 +70,114 @@ async def list_research_questions(
             {"question_id": q.get("question_id"), "text": q.get("text")}
             for q in questions
         ],
+        "total": len(questions),
+    }
+
+
+async def decompose_query(
+    project_id: str,
+    topic: str,
+    num_questions: int = 4,
+    auto_save: bool = False,
+    llm: LLMService | None = None,
+    neo4j: Neo4jService | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
+) -> dict[str, Any]:
+    """Decompose a high-level research topic into 3-5 domain-specific sub-questions.
+
+    Uses Gemini LLM to generate granular, researchable questions covering methodologies,
+    comparative benchmarks, architectures, and limitations.
+
+    Args:
+        project_id: Project UUID.
+        topic: High-level research question or topic prompt.
+        num_questions: Target number of sub-questions (3-5).
+        auto_save: If True, automatically embeds and saves the questions to the project.
+        llm: Injected LLMService instance.
+        neo4j: Injected Neo4jService instance.
+        embedding_provider: Injected EmbeddingProvider for auto-saving.
+
+    Returns:
+        Dict with keys: ``project_id``, ``topic``, ``sub_questions``, ``saved_questions``, ``total``.
+    """
+    from agents._service_registry import ServiceRegistry
+    actual_llm = llm or ServiceRegistry.llm
+    actual_neo4j = neo4j or ServiceRegistry.neo4j
+    actual_emb = embedding_provider or ServiceRegistry.embedding_provider
+
+    target_count = max(3, min(5, num_questions))
+    prompt = f"""You are an expert academic research advisor. Decompose the following high-level research topic into {target_count} distinct, precise, and domain-specific academic sub-questions suitable for a comprehensive literature review.
+
+High-Level Research Topic:
+"{topic}"
+
+Requirements for each sub-question:
+1. Focus on specific technical facets (e.g., algorithmic architectures, comparative empirical performance, benchmark datasets, limitations/trade-offs).
+2. Phrased clearly as an academic research question ending with a question mark.
+3. Mutually non-redundant and collectively comprehensive.
+
+Return a JSON object matching this exact schema:
+{{
+  "sub_questions": [
+    "Sub-question 1?",
+    "Sub-question 2?",
+    "Sub-question 3?",
+    "Sub-question 4?"
+  ]
+}}
+"""
+    questions: list[str] = []
+    if actual_llm:
+        try:
+            from core.llm.models import CompletionRequest
+            req = CompletionRequest(
+                prompt=prompt,
+                system_instruction="You are an expert academic research advisor. Return valid JSON only.",
+                temperature=0.3,
+                max_tokens=1024,
+                response_format="application/json",
+            )
+            resp = await actual_llm.complete(req)
+            raw = (resp.text or "").strip()
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                raw = "\n".join(lines).strip()
+            data = json.loads(raw)
+            if isinstance(data, dict) and "sub_questions" in data:
+                questions = [str(q).strip() for q in data["sub_questions"] if str(q).strip()]
+            elif isinstance(data, list):
+                questions = [str(q).strip() for q in data if str(q).strip()]
+        except Exception as exc:
+            logger.warning("LLM query decomposition failed (%s); using heuristic questions", exc)
+
+    if not questions:
+        clean_topic = topic.rstrip(".?")
+        questions = [
+            f"What state-of-the-art methodologies and architectures are used for {clean_topic}?",
+            f"How do comparative empirical benchmarks evaluate performance in {clean_topic}?",
+            f"What are the primary computational trade-offs and limitations of current approaches to {clean_topic}?",
+            f"What emerging research directions and unresolved challenges exist in {clean_topic}?",
+        ][:target_count]
+
+    saved_questions: list[dict[str, Any]] = []
+    if auto_save and actual_neo4j and actual_emb:
+        for q_text in questions:
+            saved = await add_research_question(
+                project_id=project_id,
+                question_text=q_text,
+                neo4j=actual_neo4j,
+                embedding_provider=actual_emb,
+            )
+            saved_questions.append(saved)
+
+    return {
+        "project_id": project_id,
+        "topic": topic,
+        "sub_questions": questions,
+        "saved_questions": saved_questions,
         "total": len(questions),
     }
 

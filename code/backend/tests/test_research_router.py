@@ -190,3 +190,75 @@ def test_search_by_venue_success() -> None:
 
         mock_openalex_instance._request.assert_called_once()
         mock_openalex_instance.close.assert_called_once()
+
+
+def test_decompose_query_endpoint_success() -> None:
+    """Test decomposing a high-level research topic into sub-questions."""
+    mock_neo4j = AsyncMock()
+    app.state.neo4j_service = mock_neo4j
+
+    mock_llm_instance = AsyncMock()
+    from core.llm.models import CompletionResponse, TokenUsage
+    mock_llm_instance.complete.return_value = CompletionResponse(
+        text='{"sub_questions": ["What GNN architectures scale to large graphs?", "How do GNNs compare to Graph Transformers?", "What are the expressive power limits of message passing?", "What benchmarks evaluate graph embeddings?"]}',
+        token_usage=TokenUsage(input_tokens=50, output_tokens=80, total_tokens=130),
+    )
+
+    with patch("core.llm.service.LLMService", return_value=mock_llm_instance):
+        client = TestClient(app)
+        response = client.post(
+            "/api/research/project-123/decompose-query",
+            json={
+                "topic": "Graph Neural Networks and Graph Transformers",
+                "num_questions": 4,
+                "auto_save": False,
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["project_id"] == "project-123"
+        assert data["topic"] == "Graph Neural Networks and Graph Transformers"
+        assert data["total"] == 4
+        assert len(data["sub_questions"]) == 4
+        assert "What GNN architectures scale to large graphs?" in data["sub_questions"]
+
+
+def test_decompose_query_endpoint_auto_save() -> None:
+    """Test decomposing a research topic and auto-saving sub-questions."""
+    mock_neo4j = AsyncMock()
+    mock_neo4j.create_research_question.side_effect = [
+        {"question_id": f"q-{i}", "text": f"Sub-Q {i}?"} for i in range(1, 5)
+    ]
+    app.state.neo4j_service = mock_neo4j
+
+    mock_llm_instance = AsyncMock()
+    from core.llm.models import CompletionResponse, TokenUsage
+    mock_llm_instance.complete.return_value = CompletionResponse(
+        text='{"sub_questions": ["Sub-Q 1?", "Sub-Q 2?", "Sub-Q 3?", "Sub-Q 4?"]}',
+        token_usage=TokenUsage(input_tokens=50, output_tokens=80, total_tokens=130),
+    )
+
+    mock_provider = AsyncMock()
+    mock_provider.embed_query.return_value = [0.05] * 768
+
+    with patch("core.llm.service.LLMService", return_value=mock_llm_instance), patch(
+        "features.embedding.providers.gemini_provider.GeminiEmbeddingProvider",
+        return_value=mock_provider,
+    ):
+        client = TestClient(app)
+        response = client.post(
+            "/api/research/project-123/decompose-query",
+            json={
+                "topic": "Alzheimers Disease Multimodal Deep Learning",
+                "num_questions": 4,
+                "auto_save": True,
+            },
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["total"] == 4
+        assert len(data["saved_questions"]) == 4
+        assert mock_neo4j.create_research_question.call_count == 4
+

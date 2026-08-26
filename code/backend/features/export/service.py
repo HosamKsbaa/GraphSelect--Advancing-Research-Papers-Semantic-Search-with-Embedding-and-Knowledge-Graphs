@@ -11,9 +11,12 @@ Functions:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, TYPE_CHECKING
 
@@ -315,3 +318,131 @@ class ExportService:
         except Exception as exc:
             logger.error("export_citation_graph failed: %s", exc)
             return {"error": str(exc), "node_count": 0, "edge_count": 0}
+
+    # ------------------------------------------------------------------
+    # Automated PDF Compilation – compile_pdf
+    # ------------------------------------------------------------------
+
+    async def compile_pdf(
+        self,
+        project_id: str,
+        template: str = "plain",
+        timeout_sec: int = 30,
+    ) -> Path:
+        """Compile project LaTeX drafts and citations into a publication-ready PDF.
+
+        1. Generates LaTeX document and BibTeX bibliography via ``export_latex``.
+        2. Copies custom template class files (IEEEtran.cls, acmart.cls) into the compilation environment.
+        3. Executes pdflatex safely with timeout enforcement.
+        4. Validates output PDF existence and non-zero size.
+        5. Saves final PDF artifact to ``{projects_dir}/{project_id}/exports/literature_review.pdf``.
+
+        Args:
+            project_id: The project UUID.
+            template: LaTeX template ('plain', 'ieee', 'acm'). Defaults to 'plain'.
+            timeout_sec: Maximum compilation execution timeout in seconds. Defaults to 30.
+
+        Returns:
+            Path to the compiled PDF artifact.
+
+        Raises:
+            RuntimeError: If pdflatex is missing, compilation fails, or output PDF is not generated.
+        """
+        export_res = await self.export_latex(project_id=project_id, template=template)
+        if "error" in export_res:
+            raise RuntimeError(f"LaTeX generation failed: {export_res['error']}")
+
+        tex_path = Path(export_res["tex_path"])
+        bib_path = Path(export_res["bib_path"])
+
+        pdflatex_bin = shutil.which("pdflatex")
+        if not pdflatex_bin:
+            raise RuntimeError("pdflatex executable not found in system PATH")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_tex = Path(tmpdir) / "literature_review.tex"
+            tmp_bib = Path(tmpdir) / "references.bib"
+
+            tmp_tex.write_text(tex_path.read_text(encoding="utf-8"), encoding="utf-8")
+            tmp_bib.write_text(bib_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+            # Copy bundled LaTeX classes if available
+            templates_dir = Path(__file__).resolve().parent.parent.parent / "templates" / "latex"
+            if templates_dir.exists():
+                for item in templates_dir.glob("*"):
+                    if item.is_file():
+                        shutil.copy(item, tmpdir)
+
+            cmd = [pdflatex_bin, "-interaction=nonstopmode", "-file-line-error", "literature_review.tex"]
+
+            # Pass 1: pdflatex
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=tmpdir,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_sec)
+            except asyncio.TimeoutError:
+                proc.kill()
+                raise RuntimeError(f"pdflatex compilation timed out after {timeout_sec}s")
+
+            # Optional BibTeX and Pass 2
+            bibtex_bin = shutil.which("bibtex")
+            if bibtex_bin and tmp_bib.exists() and tmp_bib.stat().st_size > 0:
+                try:
+                    bib_proc = await asyncio.create_subprocess_exec(
+                        bibtex_bin,
+                        "literature_review",
+                        cwd=tmpdir,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    await asyncio.wait_for(bib_proc.communicate(), timeout=timeout_sec)
+
+                    p2 = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        cwd=tmpdir,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    await asyncio.wait_for(p2.communicate(), timeout=timeout_sec)
+                except Exception as exc:
+                    logger.debug("BibTeX or second pass non-fatal error: %s", exc)
+
+            tmp_pdf = Path(tmpdir) / "literature_review.pdf"
+            if not tmp_pdf.exists() or tmp_pdf.stat().st_size == 0:
+                stdout_str = stdout_b.decode("utf-8", errors="replace")
+                stderr_str = stderr_b.decode("utf-8", errors="replace")
+                errors = [
+                    line for line in stdout_str.splitlines()
+                    if line.startswith("!") or "Fatal error" in line
+                ]
+                err_msg = "\n".join(errors[:5]) if errors else (stderr_str or stdout_str[-500:])
+                raise RuntimeError(f"pdflatex compilation failed (exit code {proc.returncode}): {err_msg}")
+
+            export_dir = Path(self._projects_dir) / project_id / "exports"
+            export_dir.mkdir(parents=True, exist_ok=True)
+
+            target_pdf = export_dir / f"literature_review_{template}.pdf"
+            shutil.copy(tmp_pdf, target_pdf)
+
+            default_pdf = export_dir / "literature_review.pdf"
+            shutil.copy(tmp_pdf, default_pdf)
+
+            if self._log_service:
+                await self._log_service.log_agent_trace(
+                    project_id=project_id,
+                    agent_name="WriterAgent",
+                    event_type="tool_call",
+                    details={
+                        "tool": "compile_pdf",
+                        "template": template,
+                        "pdf_path": str(target_pdf),
+                        "size_bytes": target_pdf.stat().st_size,
+                    },
+                )
+
+            return target_pdf
+
