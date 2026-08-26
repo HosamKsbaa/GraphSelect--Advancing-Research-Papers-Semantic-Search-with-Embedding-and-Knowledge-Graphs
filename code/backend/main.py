@@ -90,6 +90,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await mysql_service.initialize_schema()
     app.state.mysql_service = mysql_service
 
+    from core.logging.progress_service import ProgressService
+    app.state.progress_service = ProgressService()
+
     logger.info("ALRS v2 backend started successfully")
 
     yield

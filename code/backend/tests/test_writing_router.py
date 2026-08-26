@@ -126,3 +126,105 @@ def test_review_section_success() -> None:
     assert data["scores"]["coherence"] == 5
     assert data["feedback"] == ["Great work!"]
     assert data["missing_citations"] == []
+
+
+def test_verify_citations_endpoint_grounded_success() -> None:
+    """Test verify_citations endpoint when all citations are grounded and assigned."""
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_paper_by_doi.return_value = {
+        "doi": "10.1234/grounded",
+        "title": "Grounded Paper",
+        "year": 2022,
+    }
+    app.state.neo4j_service = mock_neo4j
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/writing/project-123/verify-citations",
+        json={
+            "draft_text": "We build upon (10.1234/grounded) for our literature review.",
+            "assigned_dois": ["10.1234/grounded"],
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["is_grounded"] is True
+    assert data["passed"] is True
+    assert data["verified_dois"] == ["10.1234/grounded"]
+    assert data["hallucinated_dois"] == []
+    assert data["missing_assigned_dois"] == []
+    assert data["hallucination_rate"] == 0.0
+    assert data["coverage_rate"] == 1.0
+
+
+def test_verify_citations_endpoint_detects_hallucinations() -> None:
+    """Test verify_citations endpoint flags ungrounded / hallucinated citations."""
+    mock_neo4j = AsyncMock()
+
+    async def mock_get_paper(doi: str):
+        if doi == "10.1234/valid":
+            return {"doi": "10.1234/valid", "title": "Valid Paper"}
+        return None
+
+    mock_neo4j.get_paper_by_doi.side_effect = mock_get_paper
+    app.state.neo4j_service = mock_neo4j
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/writing/project-123/verify-citations",
+        json={
+            "draft_text": "We cite valid paper (10.1234/valid) and fake paper (10.1234/hallucinated).",
+            "assigned_dois": ["10.1234/valid"],
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["is_grounded"] is False
+    assert data["passed"] is False
+    assert "10.1234/hallucinated" in data["hallucinated_dois"]
+    assert "10.1234/valid" in data["verified_dois"]
+    assert data["hallucination_rate"] == 0.5
+
+
+def test_verify_citations_endpoint_detects_missing_assigned() -> None:
+    """Test verify_citations endpoint identifies assigned papers omitted from draft."""
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_paper_by_doi.return_value = {
+        "doi": "10.1234/paper1",
+        "title": "Paper 1",
+    }
+    app.state.neo4j_service = mock_neo4j
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/writing/project-123/verify-citations",
+        json={
+            "draft_text": "We only cite (10.1234/paper1) here.",
+            "assigned_dois": ["10.1234/paper1", "10.1234/paper2"],
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["is_grounded"] is True
+    assert data["passed"] is False
+    assert data["missing_assigned_dois"] == ["10.1234/paper2"]
+    assert data["coverage_rate"] == 0.5
+
+
+def test_verify_citations_endpoint_service_unavailable() -> None:
+    """Test verify_citations endpoint returns 503 when Neo4j is unavailable."""
+    old_neo4j = getattr(app.state, "neo4j_service", None)
+    app.state.neo4j_service = None
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/writing/project-123/verify-citations",
+            json={"draft_text": "Some draft (10.1234/test)."},
+        )
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    finally:
+        app.state.neo4j_service = old_neo4j
+

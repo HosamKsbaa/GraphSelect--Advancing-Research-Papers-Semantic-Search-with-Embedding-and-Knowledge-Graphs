@@ -8,30 +8,25 @@ Endpoints:
     GET   /{project_id}/coverage          → analyze_coverage
     POST  /{project_id}/gap-queries       → suggest_gap_queries
     GET   /{project_id}/ranked-papers     → rank_papers
+    POST  /{project_id}/synthesize        → synthesize_evidence_endpoint
 """
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Body, HTTPException, Query, Request, status
 
 from features.analysis import service as analysis_svc
+from features.analysis.models import (
+    GapQueriesBody,
+    SynthesisRequest,
+    SynthesisResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
-
-
-# ── Request models ───────────────────────────────────────────────────
-
-
-class GapQueriesBody(BaseModel):
-    """Body for the suggest-gap-queries endpoint."""
-
-    gap_question: str = Field(..., min_length=5, description="The research question text that lacks coverage.")
-    max_queries: int = Field(default=5, ge=1, le=10, description="Number of queries to generate.")
 
 
 # ── Helper ───────────────────────────────────────────────────────────
@@ -150,4 +145,44 @@ async def rank_papers_endpoint(
         )
     except Exception as exc:
         logger.exception("rank_papers_endpoint failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
+@router.post("/{project_id}/synthesize", response_model=SynthesisResponse)
+async def synthesize_evidence_endpoint(
+    project_id: str,
+    request: Request,
+    body: SynthesisRequest | None = None,
+) -> Any:
+    """Synthesize cross-paper literature findings, comparison dimensions, and structured narrative."""
+    neo4j = _get_neo4j(request)
+
+    from config import get_settings
+    from core.llm.service import LLMService
+    from core.logging.log_service import LogService
+    from core.db.mysql_service import MySQLService
+
+    settings = get_settings()
+    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
+    log_service = LogService(mysql) if mysql else None
+    llm = getattr(request.app.state, "llm_service", None)
+    if llm is None:
+        llm = LLMService(
+            api_key=settings.gemini_api_key,
+            model_name=settings.adk_model_name,
+            log_service=log_service,
+        )
+
+    try:
+        dois = body.dois if body and body.dois else None
+        rqs = body.research_questions if body and body.research_questions else None
+        return await analysis_svc.synthesize_evidence(
+            project_id=project_id,
+            dois=dois,
+            research_questions=rqs,
+            neo4j=neo4j,
+            llm=llm,
+        )
+    except Exception as exc:
+        logger.exception("synthesize_evidence_endpoint failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))

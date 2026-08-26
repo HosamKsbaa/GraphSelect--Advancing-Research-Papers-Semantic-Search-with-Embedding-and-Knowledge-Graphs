@@ -7,6 +7,9 @@ are used by the export tools, not as ADK tools directly.
 Functions:
     - format_to_latex: Markdown → LaTeX with template wrapping
     - generate_bibtex: Paper dicts → .bib file content
+    - _make_cite_key: Deterministic cite-key generator
+    - _escape_bibtex: Strict escaping of LaTeX special characters
+    - _md_to_latex_body: Markdown to LaTeX body converter
 """
 from __future__ import annotations
 
@@ -19,49 +22,68 @@ from typing import Any
 # ------------------------------------------------------------------
 
 def _make_cite_key(paper: dict[str, Any]) -> str:
-    """Generate a BibTeX cite key from a paper dict.
+    """Generate a deterministic BibTeX cite key from a paper dict.
 
-    Uses the first word of the title + year, falling back to a
-    DOI-based slug if title is missing.
+    Uses the first word of the title (or first author surname if title is missing),
+    followed by the 4-digit publication year.
 
     Args:
-        paper: Dict with at least 'doi' and optionally 'title', 'year'.
+        paper: Dict with at least 'doi' and optionally 'title', 'year', 'authors'.
 
     Returns:
-        A string suitable for use as a BibTeX cite key.
+        A lowercase alphanumeric string suitable for use as a BibTeX cite key
+        (e.g., 'attention2017', 'vaswani2017').
     """
-    title: str = paper.get("title") or ""
+    title: str = str(paper.get("title") or "").strip()
     year: int | None = paper.get("year")
-    doi: str = paper.get("doi", "unknown")
+    doi: str = str(paper.get("doi", "unknown")).strip()
+    authors = paper.get("authors") or paper.get("author")
 
     if title:
-        first_word = re.sub(r"[^a-zA-Z]", "", title.split()[0]) if title.split() else "unknown"
+        words = title.split()
+        first_word = re.sub(r"[^a-zA-Z0-9]", "", words[0]) if words else "paper"
+    elif authors:
+        if isinstance(authors, list) and authors:
+            first_author = str(authors[0])
+        else:
+            first_author = str(authors)
+        # Extract surname (last token or first word)
+        surname = first_author.split()[-1] if first_author.split() else "author"
+        first_word = re.sub(r"[^a-zA-Z0-9]", "", surname)
     else:
         # Use DOI suffix as fallback
         first_word = re.sub(r"[^a-zA-Z0-9]", "", doi.split("/")[-1])[:12]
+
+    if not first_word:
+        first_word = "paper"
 
     year_str = str(year) if year else "XXXX"
     return f"{first_word.lower()}{year_str}"
 
 
 def _escape_bibtex(text: str) -> str:
-    """Escape special LaTeX/BibTeX characters in a string.
+    """Strictly escape special LaTeX/BibTeX characters in a string.
+
+    Escapes: &, %, _, #, $ while preventing double-escaping.
 
     Args:
         text: Raw text to escape.
 
     Returns:
-        Escaped text safe for BibTeX field values.
+        Escaped text safe for BibTeX field values and LaTeX bodies.
     """
+    if not text:
+        return ""
+
     replacements = [
-        ("&", r"\&"),
-        ("%", r"\%"),
-        ("_", r"\_"),
-        ("#", r"\#"),
-        ("$", r"\$"),
+        (r"(?<!\\)&", r"\&"),
+        (r"(?<!\\)%", r"\%"),
+        (r"(?<!\\)_", r"\_"),
+        (r"(?<!\\)#", r"\#"),
+        (r"(?<!\\)\$", r"\$"),
     ]
-    for old, new in replacements:
-        text = text.replace(old, new)
+    for pattern, repl in replacements:
+        text = re.sub(pattern, repl, text)
     return text
 
 
@@ -73,7 +95,10 @@ def generate_bibtex(papers: list[dict[str, Any]]) -> str:
     """Generate BibTeX file content from a list of paper dicts.
 
     Each paper dict should contain at minimum ``doi`` and ``title``.
-    Optional fields: ``year``, ``abstract``, ``source``, ``authors``.
+    Optional fields: ``year``, ``abstract``, ``source``, ``authors`` / ``author``.
+
+    Ensures collision-free unique cite keys using sequential suffixes
+    (e.g., 'graph2021', 'graph2021b', 'graph2021c').
 
     Args:
         papers: List of paper metadata dicts (as returned by
@@ -86,30 +111,32 @@ def generate_bibtex(papers: list[dict[str, Any]]) -> str:
     seen_keys: set[str] = set()
 
     for paper in papers:
-        doi: str = paper.get("doi", "")
+        doi: str = str(paper.get("doi", "")).strip()
         if not doi:
             continue
 
         cite_key = _make_cite_key(paper)
-        # Ensure unique cite keys
+        # Collision-free deterministic deduplication: key, keyb, keyc, ...
         base_key = cite_key
         counter = 2
         while cite_key in seen_keys:
-            cite_key = f"{base_key}{chr(96 + counter)}"  # a, b, c, ...
+            cite_key = f"{base_key}{chr(96 + counter)}"  # 'b', 'c', 'd', ...
             counter += 1
         seen_keys.add(cite_key)
 
-        title: str = _escape_bibtex(paper.get("title") or "Unknown Title")
+        title: str = _escape_bibtex(str(paper.get("title") or "Unknown Title"))
         year: str = str(paper.get("year") or "")
-        source: str = _escape_bibtex(paper.get("source") or "")
+        source: str = _escape_bibtex(str(paper.get("source") or paper.get("journal") or ""))
         abstract: str = _escape_bibtex(
-            (paper.get("abstract") or "")[:500]
+            str(paper.get("abstract") or "")[:500]
         )
 
         # Build author string if available
-        authors_raw = paper.get("authors")
+        authors_raw = paper.get("authors") or paper.get("author")
         if isinstance(authors_raw, list) and authors_raw:
             author_str = " and ".join(str(a) for a in authors_raw)
+        elif isinstance(authors_raw, str) and authors_raw.strip():
+            author_str = authors_raw.strip()
         else:
             author_str = "Unknown Author"
 
@@ -139,9 +166,8 @@ def generate_bibtex(papers: list[dict[str, Any]]) -> str:
 def _md_to_latex_body(markdown: str) -> str:
     """Convert Markdown body text to basic LaTeX.
 
-    Handles headings (##, ###), bold, italic, inline code, and
-    basic list items.  Not a full Markdown parser — handles the
-    subset produced by our drafting agent.
+    Handles headings (####, ###, ##, #), bold (**), italic (*),
+    inline code (`), code blocks, blockquotes, and lists.
 
     Args:
         markdown: Markdown text content.
@@ -149,12 +175,83 @@ def _md_to_latex_body(markdown: str) -> str:
     Returns:
         LaTeX body content string.
     """
+    if not markdown:
+        return ""
+
     lines: list[str] = []
+    in_code_block = False
+    in_itemize = False
+    in_enumerate = False
 
     for line in markdown.split("\n"):
         stripped = line.strip()
 
+        # Handle code blocks
+        if stripped.startswith("```"):
+            if in_code_block:
+                lines.append(r"\end{verbatim}")
+                in_code_block = False
+            else:
+                lines.append(r"\begin{verbatim}")
+                in_code_block = True
+            continue
+
+        if in_code_block:
+            lines.append(line)
+            continue
+
+        # Handle list boundaries
+        is_bullet = stripped.startswith("- ") or stripped.startswith("* ")
+        is_enum = bool(re.match(r"^\d+\.\s+", stripped))
+
+        if is_bullet:
+            if not in_itemize:
+                if in_enumerate:
+                    lines.append(r"\end{enumerate}")
+                    in_enumerate = False
+                lines.append(r"\begin{itemize}")
+                in_itemize = True
+            content = stripped[2:].strip()
+            # Format text inside list item
+            content = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", content)
+            content = re.sub(r"\*(.+?)\*", r"\\textit{\1}", content)
+            content = re.sub(r"`(.+?)`", r"\\texttt{\1}", content)
+            lines.append(f"\\item {content}")
+            continue
+        elif in_itemize:
+            lines.append(r"\end{itemize}")
+            in_itemize = False
+
+        if is_enum:
+            if not in_enumerate:
+                if in_itemize:
+                    lines.append(r"\end{itemize}")
+                    in_itemize = False
+                lines.append(r"\begin{enumerate}")
+                in_enumerate = True
+            content = re.sub(r"^\d+\.\s+", "", stripped).strip()
+            content = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", content)
+            content = re.sub(r"\*(.+?)\*", r"\\textit{\1}", content)
+            content = re.sub(r"`(.+?)`", r"\\texttt{\1}", content)
+            lines.append(f"\\item {content}")
+            continue
+        elif in_enumerate:
+            lines.append(r"\end{enumerate}")
+            in_enumerate = False
+
+        # Blockquotes
+        if stripped.startswith("> "):
+            quote_text = stripped[2:].strip()
+            quote_text = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", quote_text)
+            quote_text = re.sub(r"\*(.+?)\*", r"\\textit{\1}", quote_text)
+            lines.append(f"\\begin{{quote}}\n{quote_text}\n\\end{{quote}}")
+            continue
+
         # Headings
+        if stripped.startswith("#### "):
+            heading = stripped[5:]
+            lines.append(f"\\paragraph{{{_escape_bibtex(heading)}}}")
+            continue
         if stripped.startswith("### "):
             heading = stripped[4:]
             lines.append(f"\\subsubsection{{{_escape_bibtex(heading)}}}")
@@ -168,18 +265,23 @@ def _md_to_latex_body(markdown: str) -> str:
             lines.append(f"\\section{{{_escape_bibtex(heading)}}}")
             continue
 
+        # Text formatting
         # Bold  **text**  →  \textbf{text}
-        stripped = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", stripped)
+        formatted = re.sub(r"\*\*(.+?)\*\*", r"\\textbf{\1}", stripped)
         # Italic  *text*  →  \textit{text}
-        stripped = re.sub(r"\*(.+?)\*", r"\\textit{\1}", stripped)
+        formatted = re.sub(r"\*(.+?)\*", r"\\textit{\1}", formatted)
         # Inline code  `text`  →  \texttt{text}
-        stripped = re.sub(r"`(.+?)`", r"\\texttt{\1}", stripped)
+        formatted = re.sub(r"`(.+?)`", r"\\texttt{\1}", formatted)
 
-        # Bullet lists
-        if stripped.startswith("- "):
-            stripped = f"\\item {stripped[2:]}"
+        lines.append(formatted)
 
-        lines.append(stripped)
+    # Close any open list environments
+    if in_itemize:
+        lines.append(r"\end{itemize}")
+    if in_enumerate:
+        lines.append(r"\end{enumerate}")
+    if in_code_block:
+        lines.append(r"\end{verbatim}")
 
     return "\n".join(lines)
 
@@ -231,17 +333,17 @@ def format_to_latex(
     citations: list[str],
     template: str = "ieee",
 ) -> str:
-    """Convert Markdown content into a complete LaTeX document.
+    """Convert Markdown content into a complete, compilable LaTeX document.
 
     Wraps the converted body with the appropriate document class,
-    packages, and bibliography commands.
+    packages, metadata headers, and bibliography commands.
 
     Args:
         markdown_content: Combined Markdown text of all sections.
         citations: List of DOI strings found in the content (for
                    informational comments — actual citations use
                    \\cite{} references in the body).
-        template: Template style — 'ieee', 'acm', or 'plain'.
+        template: Template style — 'ieee', 'acm', or 'plain'. Defaults to 'ieee'.
 
     Returns:
         A complete LaTeX document as a string.

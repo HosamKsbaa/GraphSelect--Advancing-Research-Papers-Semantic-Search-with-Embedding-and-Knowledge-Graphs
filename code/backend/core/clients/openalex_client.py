@@ -476,7 +476,7 @@ class OpenAlexService:
                 if isinstance(positions, list):
                     for pos in positions:
                         if isinstance(pos, int):
-                            word_positions.append((pos, word))
+                            word_positions.append((pos, str(word)))
 
             if not word_positions:
                 return None
@@ -486,6 +486,9 @@ class OpenAlexService:
         except Exception as e:
             logger.warning("Failed to reconstruct abstract from inverted index: %s", e)
             return None
+
+    reconstruct_abstract = _reconstruct_abstract
+
 
     @staticmethod
     def _parse_work(data: dict[str, object]) -> PaperCreate:

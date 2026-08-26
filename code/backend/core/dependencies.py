@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 from core.db.neo4j_service import Neo4jService
 from core.db.mysql_service import MySQLService
 from core.logging.log_service import LogService
+from core.logging.progress_service import ProgressService
 from core.clients.openalex_client import OpenAlexService
 from core.clients.rate_limiter import AdaptiveRateLimiter
 
@@ -72,6 +73,15 @@ def get_mysql_service(request: Request) -> MySQLService:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="MySQL service not initialized",
         )
+    return service  # type: ignore[no-any-return]
+
+
+def get_progress_service(request: Request) -> ProgressService:
+    """Retrieve or construct the ProgressService singleton from application state."""
+    service = getattr(request.app.state, "progress_service", None)
+    if service is None:
+        service = ProgressService()
+        request.app.state.progress_service = service
     return service  # type: ignore[no-any-return]
 
 

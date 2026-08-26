@@ -28,7 +28,8 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sse_starlette.sse import EventSourceResponse
 
 from features.logs.models import (
     AppLogResponse,
@@ -39,7 +40,8 @@ from features.logs.models import (
     AgentTraceQueryFilters,
 )
 from core.logging.log_service import LogService
-from core.dependencies import get_log_service
+from core.logging.progress_service import ProgressEvent, ProgressService
+from core.dependencies import get_log_service, get_progress_service
 
 logger = logging.getLogger(__name__)
 
@@ -199,4 +201,66 @@ async def get_agent_traces(
             )
         )
     return response_traces
+
+
+@router.get("/progress/{project_id}/stream")
+async def stream_project_progress(
+    project_id: str,
+    request: Request,
+    include_history: bool = Query(default=True, description="Whether to yield past events before streaming live"),
+    max_events: Optional[int] = Query(default=None, description="Optional maximum number of events to stream"),
+) -> EventSourceResponse:
+    """Stream real-time SSE progress events (thoughts, tool invocations, scores) for a project."""
+    progress_service = getattr(request.app.state, "progress_service", None)
+    if progress_service is None:
+        from core.logging.progress_service import ProgressService
+        progress_service = ProgressService()
+        request.app.state.progress_service = progress_service
+
+    return EventSourceResponse(
+        progress_service.stream_events(
+            project_id=project_id,
+            include_history=include_history,
+            max_events=max_events,
+        )
+    )
+
+
+@router.get("/progress/{project_id}", response_model=List[ProgressEvent])
+async def get_project_progress(
+    project_id: str,
+    request: Request,
+    phase: Optional[str] = Query(default=None, description="Optional phase filter (planning, search, analysis, writing)"),
+) -> List[ProgressEvent]:
+    """Retrieve all in-memory progress events for a project."""
+    progress_service = getattr(request.app.state, "progress_service", None)
+    if progress_service is None:
+        from core.logging.progress_service import ProgressService
+        progress_service = ProgressService()
+        request.app.state.progress_service = progress_service
+
+    return await progress_service.get_events(project_id=project_id, phase=phase)
+
+
+@router.get("/agent-traces/stream")
+async def stream_agent_traces(
+    project_id: str = Query(..., description="Project UUID to stream traces for"),
+    max_events: Optional[int] = Query(default=None, description="Optional maximum number of events to stream"),
+    request: Request = None,
+) -> EventSourceResponse:
+    """Stream real-time SSE events for agent traces in a project."""
+    progress_service = getattr(request.app.state, "progress_service", None)
+    if progress_service is None:
+        from core.logging.progress_service import ProgressService
+        progress_service = ProgressService()
+        request.app.state.progress_service = progress_service
+
+    return EventSourceResponse(
+        progress_service.stream_events(
+            project_id=project_id,
+            include_history=True,
+            max_events=max_events,
+        )
+    )
+
 

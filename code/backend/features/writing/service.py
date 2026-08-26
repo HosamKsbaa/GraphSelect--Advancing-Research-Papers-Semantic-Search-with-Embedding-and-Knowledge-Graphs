@@ -237,6 +237,37 @@ Description: {section_description}
         }
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Citation Verification
+    # ------------------------------------------------------------------
+
+    async def verify_citations(
+        self,
+        project_id: str,
+        draft_text: str,
+        assigned_dois: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Verify citations in draft text against Neo4j knowledge graph.
+
+        Args:
+            project_id: The project UUID.
+            draft_text: The full draft text.
+            assigned_dois: Optional list of DOIs that should be cited.
+
+        Returns:
+            Dict containing verified, hallucinated, and missing citations.
+        """
+        from agents.writing.citation_verifier import CitationVerifier
+
+        verifier = CitationVerifier(self._neo4j)
+        result = await verifier.verify_text_citations(
+            text=draft_text,
+            project_id=project_id,
+            assigned_dois=assigned_dois,
+        )
+        return result.to_dict()
+
+    # ------------------------------------------------------------------
     # T046 – review_section
     # ------------------------------------------------------------------
 
@@ -252,7 +283,8 @@ Description: {section_description}
 
         Evaluates the section against academic standards, checking citation
         coverage, logical flow, synthesis quality, and factual consistency
-        with the source papers.
+        with the source papers. Also runs deterministic citation verification
+        to detect and reject hallucinated citations.
 
         Args:
             project_id: The project UUID (for logging).
@@ -266,16 +298,25 @@ Description: {section_description}
             - approved (bool): True if the section meets quality standards.
             - feedback (list[str]): Specific improvement suggestions.
             - missing_citations (list[str]): DOIs assigned but not cited.
-            - scores (dict): Sub-scores for coverage, coherence, synthesis.
+            - hallucinated_citations (list[str]): Cited DOIs not in knowledge graph.
+            - scores (dict): Sub-scores for coverage, coherence, synthesis, tone, completeness.
+            - citation_verification (dict): Full citation verification metrics.
         """
         from core.llm.models import CompletionRequest
+        from agents.writing.citation_verifier import CitationVerifier
 
         llm = self._llm
 
-        # Pre-check: which assigned DOIs appear in the draft?
-        missing_citations: list[str] = [
-            doi for doi in paper_dois if doi not in draft_text
-        ]
+        # Run deterministic citation verification against Neo4j
+        verifier = CitationVerifier(self._neo4j)
+        ver_result = await verifier.verify_text_citations(
+            text=draft_text,
+            project_id=project_id,
+            assigned_dois=paper_dois,
+        )
+
+        missing_citations: list[str] = ver_result.missing_assigned_dois
+        hallucinated_citations: list[str] = ver_result.hallucinated_dois
 
         prompt = f"""You are an expert academic reviewer evaluating a literature review section.
 
@@ -291,9 +332,12 @@ Description: {section_description}
 ## Missing Citations (DOIs assigned but NOT appearing in draft)
 {json.dumps(missing_citations)}
 
+## Hallucinated / Unverified Citations (DOIs cited but NOT in knowledge graph)
+{json.dumps(hallucinated_citations)}
+
 ## Evaluation Criteria
 Rate each criterion on a scale of 1-5 and provide specific feedback:
-1. **Citation Coverage** — Are all assigned papers cited and discussed?
+1. **Citation Coverage** — Are all assigned papers cited and discussed? Are there any unverified citations?
 2. **Coherence** — Does the section flow logically? Are transitions smooth?
 3. **Synthesis Quality** — Does the section synthesise across papers
    (comparing, contrasting, identifying patterns) rather than summarising
@@ -318,7 +362,7 @@ Respond in valid JSON:
 }}
 
 Set "approved" to true ONLY if ALL scores are >= 4 AND there are no
-missing citations.
+missing citations AND there are no hallucinated citations.
 """
 
         request = CompletionRequest(
@@ -358,8 +402,42 @@ missing citations.
 
         # Ensure missing_citations from our pre-check are included
         review_missing = review_data.get("missing_citations", [])
-        all_missing = list(set(missing_citations + review_missing))
-        review_data["missing_citations"] = all_missing
+        all_missing = list(set(missing_citations + review_missing)) if missing_citations or review_missing else []
+        review_data["missing_citations"] = review_missing if review_missing is not None else all_missing
+        review_data["hallucinated_citations"] = hallucinated_citations
+        review_data["citation_verification"] = ver_result.to_dict()
+
+        # Normalize scores to both top-level and 'scores' dict
+        scores = review_data.get("scores", {})
+        if not isinstance(scores, dict) or not scores:
+            scores = {
+                "citation_coverage": review_data.get("citation_coverage", 5),
+                "coherence": review_data.get("coherence", 5),
+                "synthesis": review_data.get("synthesis", 5),
+                "academic_tone": review_data.get("academic_tone", 5),
+                "completeness": review_data.get("completeness", 5),
+            }
+            review_data["scores"] = scores
+        for k in ["citation_coverage", "coherence", "synthesis", "academic_tone", "completeness"]:
+            if k in scores:
+                review_data[k] = scores[k]
+            elif k in review_data:
+                scores[k] = review_data[k]
+
+        feedback_list: list[str] = list(review_data.get("feedback", []))
+
+        # Enforce zero-hallucination policy: any ungrounded DOI forces approval to False
+        if hallucinated_citations:
+            feedback_list.append(
+                f"Hallucinated citation(s) detected: {', '.join(hallucinated_citations)}. "
+                "These citations do not exist in the project knowledge graph and must be removed or replaced."
+            )
+            review_data["approved"] = False
+            scores["citation_coverage"] = min(scores.get("citation_coverage", 5), 2)
+            review_data["citation_coverage"] = scores["citation_coverage"]
+            review_data["scores"] = scores
+
+        review_data["feedback"] = feedback_list
 
         # Log trace
         if self._log_service and project_id:
@@ -373,7 +451,9 @@ missing citations.
                     "section": section_title,
                     "approved": review_data.get("approved", False),
                     "scores": review_data.get("scores", {}),
+                    "hallucinated_count": len(hallucinated_citations),
                 },
             )
 
         return review_data
+

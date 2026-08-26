@@ -19,24 +19,55 @@ if TYPE_CHECKING:
     from features.embedding.providers.base import EmbeddingProvider
 
 
+_ALIAS_MAP = {
+    "openalex_service": "openalex",
+    "openalex": "openalex",
+    "neo4j_service": "neo4j",
+    "neo4j": "neo4j",
+    "paper_retrieval_service": "paper_retrieval",
+    "paper_retrieval": "paper_retrieval",
+    "llm_service": "llm",
+    "llm": "llm",
+    "log_service": "log_service",
+    "log": "log_service",
+    "embedding_provider": "embedding_provider",
+    "gemini_provider": "embedding_provider",
+    "embedding_service": "embedding_provider",
+    "planning_service": "planning_service",
+    "planning": "planning_service",
+    "writing_service": "writing_service",
+    "writing": "writing_service",
+    "export_service": "export_service",
+    "export": "export_service",
+    "progress_service": "progress_service",
+    "progress": "progress_service",
+}
+
+
 class ServiceRegistryMeta(type):
     """Metaclass that intercepts attribute access on ServiceRegistry to lazily initialize services."""
 
     def __getattr__(cls, name: str) -> Any:
-        if name in (
-            "neo4j",
-            "openalex",
-            "paper_retrieval",
-            "llm",
-            "log_service",
-            "embedding_provider",
-            "planning_service",
-            "writing_service",
-            "export_service",
-        ):
+        if name in _ALIAS_MAP:
+            canonical = _ALIAS_MAP[name]
+            attr_name = f"_{canonical}"
+            if attr_name in cls.__dict__ and cls.__dict__[attr_name] is not None:
+                return cls.__dict__[attr_name]
             cls._ensure_initialized()
-            return getattr(cls, f"_{name}")
+            if hasattr(cls, attr_name):
+                return getattr(cls, attr_name)
+            return None
         raise AttributeError(f"type object '{cls.__name__}' has no attribute '{name}'")
+
+    def __setattr__(cls, name: str, value: Any) -> None:
+        if name in _ALIAS_MAP:
+            canonical = _ALIAS_MAP[name]
+            type.__setattr__(cls, f"_{canonical}", value)
+            type.__setattr__(cls, canonical, value)
+            type.__setattr__(cls, name, value)
+            type.__setattr__(cls, "_initialized", True)
+        else:
+            type.__setattr__(cls, name, value)
 
 
 class ServiceRegistry(metaclass=ServiceRegistryMeta):
@@ -55,6 +86,7 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
     _planning_service: Any
     _writing_service: Any
     _export_service: Any
+    _progress_service: Any
 
     _initialized: bool = False
     _initializing: bool = False
@@ -227,6 +259,8 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
                 log_service=log_service,
                 projects_dir=settings.projects_dir,
             )
+            from core.logging.progress_service import ProgressService
+            cls._progress_service = ProgressService()
 
             logger.info("ServiceRegistry: on-demand initialization complete")
         except Exception as e:

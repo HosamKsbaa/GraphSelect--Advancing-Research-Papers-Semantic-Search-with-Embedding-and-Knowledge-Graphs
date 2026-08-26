@@ -97,6 +97,16 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         formatted = self._format_document(text, title)
         return await self._embed(formatted, purpose="document", session_id=session_id)
 
+    async def embed_paper(
+        self,
+        text: str,
+        title: str | None = None,
+        *,
+        session_id: str | None = None,
+    ) -> list[float]:
+        """Convenience alias for embed_document."""
+        return await self.embed_document(text, title=title, session_id=session_id)
+
     async def embed_query(
         self,
         query: str,
@@ -128,7 +138,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         return f"title: {doc_title} | text: {text}"
 
     @staticmethod
-    def _format_query(query: str, task: str = "search result") -> str:
+    def _format_query(query: str, task: str = "question answering") -> str:
         """Format text as a query for retrieval embedding.
 
         Uses the asymmetric format: ``"task: {task} | query: {content}"``
@@ -256,3 +266,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             purpose,
         )
         return values
+
+
+# Backwards-compatibility alias
+GeminiService = GeminiEmbeddingProvider
+

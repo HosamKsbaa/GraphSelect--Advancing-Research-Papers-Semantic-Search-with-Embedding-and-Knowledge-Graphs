@@ -149,14 +149,26 @@ class PaperRetrievalService:
 
         # 5. Create citation stubs and CITES relationships
         referenced_dois: list[str] = []
-        referenced_works = openalex_data.get("referenced_works", [])
-        if isinstance(referenced_works, list):
-            for ref_url in referenced_works[:50]:  # Limit to prevent explosion
-                ref_str = str(ref_url).replace("https://openalex.org/", "")
-                # Only process DOI-style references
-                if ref_str.startswith("10."):
-                    referenced_dois.append(ref_str)
-                    await self._neo4j.ensure_stub_and_cite(doi, ref_str)
+        try:
+            referenced_dois = await self._openalex.get_references(
+                doi,
+                max_results=20,
+                openalex_id=paper_data.openalex_id,
+            )
+            for ref_doi in referenced_dois[:20]:
+                await self._neo4j.ensure_stub_and_cite(doi, ref_doi)
+        except Exception as e:
+            logger.warning("Failed to fetch references for %s: %s", doi, e)
+
+        # Fallback to direct DOI strings in referenced_works if get_references yielded nothing
+        if not referenced_dois:
+            referenced_works = openalex_data.get("referenced_works", [])
+            if isinstance(referenced_works, list):
+                for ref_url in referenced_works[:50]:
+                    ref_str = str(ref_url).replace("https://openalex.org/", "")
+                    if ref_str.startswith("10."):
+                        referenced_dois.append(ref_str)
+                        await self._neo4j.ensure_stub_and_cite(doi, ref_str)
 
         # Also get citing papers (limited)
         citing_dois: list[str] = []
@@ -166,8 +178,8 @@ class PaperRetrievalService:
                 max_results=20,
                 openalex_id=paper_data.openalex_id,
             )
-            for cited_doi in citing_dois[:20]:
-                await self._neo4j.ensure_stub_and_cite(cited_doi, doi)
+            for citing_doi in citing_dois[:20]:
+                await self._neo4j.ensure_stub_and_cite(citing_doi, doi)
         except Exception as e:
             logger.warning("Failed to fetch citations for %s: %s", doi, e)
 

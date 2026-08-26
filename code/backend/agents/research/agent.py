@@ -1,6 +1,7 @@
-"""Research Agent — top-level coordinator for literature discovery and analysis.
+"""Research Agent — top-level coordinator for literature discovery, analysis, and synthesis.
 
-Delegates paper search to ALRSAgent and gap analysis to GapFinderAgent.
+Delegates paper search to ALRSAgent, gap analysis to GapFinderAgent,
+and literature synthesis/matrix generation to EvidenceSynthesizerAgent.
 Manages research questions and the project paper library directly.
 """
 from __future__ import annotations
@@ -8,6 +9,7 @@ from __future__ import annotations
 from google.adk.agents import LlmAgent
 
 from agents.research.alrs_agent import create_alrs_agent
+from agents.research.evidence_synthesizer import create_evidence_synthesizer_agent
 from agents.research.gap_finder import create_gap_finder_agent
 from agents.research.tools.retrieval_tools import get_project_papers
 from agents.research.tools.search_tools import (
@@ -23,7 +25,7 @@ _settings = get_settings()
 RESEARCH_AGENT_INSTRUCTION = """\
 You are the **Research Agent**, the coordinator for all literature review
 activities.  You manage research questions, oversee paper discovery, and
-guide gap analysis.
+guide gap analysis and literature synthesis.
 
 ## Your Direct Tools
 1. **add_research_question** — Add a new research question to the project.
@@ -44,6 +46,9 @@ guide gap analysis.
 2. **GapFinderAgent** — Analysis specialist.  Delegate to this agent when
    the user wants to analyze coverage gaps, rank papers, or get suggestions
    for filling research gaps.
+3. **EvidenceSynthesizerAgent** — Synthesis specialist. Delegate to this agent
+   when extracting methodologies, empirical results, benchmarks, limitations,
+   and constructing structured multi-dimensional literature comparison matrices.
 
 ## Coordination Workflow
 When starting a new research project:
@@ -52,35 +57,38 @@ When starting a new research project:
 3. After building an initial paper library, delegate to **GapFinderAgent**
    for gap analysis.
 4. Based on gap analysis, delegate back to **ALRSAgent** with specific queries.
-5. Repeat steps 3-4 until coverage is satisfactory.
+5. Once coverage is satisfactory, delegate to **EvidenceSynthesizerAgent** to
+   extract paper findings, construct structured comparison matrices, and synthesize literature evidence.
 
 ## Important Rules
 - Always check existing questions and papers before starting new searches.
 - Present research questions as numbered lists for clarity.
 - When delegating to sub-agents, provide clear context about what's needed.
-- Track progress: how many papers found, which questions are covered.
+- Track progress: how many papers found, which questions are covered, and synthesis state.
 """
 
 
 def create_research_agent() -> LlmAgent:
     """Create and return the Research Agent with sub-agents.
 
-    The Research Agent coordinates between the ALRS Agent (search/discovery)
-    and the Gap Finder Agent (analysis/ranking).
+    The Research Agent coordinates between the ALRS Agent (search/discovery),
+    the Gap Finder Agent (analysis/ranking), and the Evidence Synthesizer Agent (synthesis/matrices).
 
     Returns:
         Configured LlmAgent with sub_agents for paper research workflow.
     """
     alrs_agent = create_alrs_agent()
     gap_finder_agent = create_gap_finder_agent()
+    evidence_synthesizer_agent = create_evidence_synthesizer_agent()
 
     return LlmAgent(
         name="ResearchAgent",
         model=_settings.adk_model_name,
         description=(
             "Coordinates literature review activities including research "
-            "question management, paper discovery (via ALRSAgent), and "
-            "gap analysis with paper ranking (via GapFinderAgent)."
+            "question management, paper discovery (via ALRSAgent), "
+            "gap analysis with paper ranking (via GapFinderAgent), and "
+            "literature evidence extraction with comparison matrix synthesis (via EvidenceSynthesizerAgent)."
         ),
         instruction=RESEARCH_AGENT_INSTRUCTION,
         tools=[
@@ -90,5 +98,5 @@ def create_research_agent() -> LlmAgent:
             get_top_authors,
             get_top_venues,
         ],
-        sub_agents=[alrs_agent, gap_finder_agent],
+        sub_agents=[alrs_agent, gap_finder_agent, evidence_synthesizer_agent],
     )

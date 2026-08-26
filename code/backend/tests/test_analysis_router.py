@@ -151,3 +151,134 @@ def test_rank_papers_success() -> None:
     assert data["ranked_papers"][0]["hybrid_score"] == 0.75
     assert data["ranked_papers"][1]["doi"] == "10.1234/1"
     assert data["ranked_papers"][1]["hybrid_score"] == 0.5
+
+
+def test_synthesize_evidence_endpoint_success() -> None:
+    """Test synthesizing literature evidence across all project papers."""
+    import json
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_project_papers.return_value = [
+        {"doi": "10.1234/paper1", "title": "Graph Attention Networks", "year": 2021, "abstract": "We present GAT..."}
+    ]
+    mock_neo4j.get_research_questions.return_value = [
+        {"question_id": "q-1", "text": "How do attention mechanisms scale on graphs?"}
+    ]
+    mock_neo4j.get_paper_by_doi.return_value = {
+        "doi": "10.1234/paper1",
+        "title": "Graph Attention Networks",
+        "year": 2021,
+        "abstract": "We present GAT...",
+    }
+    app.state.neo4j_service = mock_neo4j
+
+    mock_llm_instance = AsyncMock()
+    # Mock finding extraction response followed by matrix generation response
+    extract_resp = MagicMock()
+    extract_resp.text = json.dumps({
+        "methodology": "Multi-head self-attention on graph neighborhoods",
+        "key_findings": ["Outperforms standard GCN on citation benchmarks"],
+        "datasets_or_benchmarks": ["Cora", "Citeseer", "Pubmed"],
+        "limitations": ["Quadratic memory in dense graphs"],
+    })
+    extract_resp.usage.total_tokens = 120
+
+    matrix_resp = MagicMock()
+    matrix_resp.text = json.dumps({
+        "dimensions": [
+            {
+                "dimension_name": "Scalability",
+                "findings_by_doi": {"10.1234/paper1": "Moderate scalability"},
+                "consensus": "Attention scales with edge count",
+                "divergence": "Memory overhead varies with heads",
+            }
+        ],
+        "synthesis_narrative": "Literature indicates strong empirical gains for graph attention mechanisms.",
+    })
+    matrix_resp.usage.total_tokens = 250
+
+    mock_llm_instance.complete.side_effect = [extract_resp, matrix_resp]
+    app.state.llm_service = mock_llm_instance
+
+    client = TestClient(app)
+    response = client.post("/api/analysis/project-123/synthesize")
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["project_id"] == "project-123"
+    assert data["paper_count"] == 1
+    assert len(data["findings"]) == 1
+    assert data["findings"][0]["doi"] == "10.1234/paper1"
+    assert data["findings"][0]["methodology"] == "Multi-head self-attention on graph neighborhoods"
+    assert len(data["comparison_matrix"]["dimensions"]) == 1
+    assert "Scalability" in data["comparison_matrix"]["dimensions"][0]["dimension_name"]
+    assert "Dimension" in data["markdown_table"]
+    assert len(data["synthesis_narrative"]) > 0
+
+
+def test_synthesize_evidence_endpoint_with_custom_dois_and_questions() -> None:
+    """Test synthesizing literature evidence with specific custom DOIs and research questions."""
+    import json
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_paper_by_doi.return_value = {
+        "doi": "10.1234/custom1",
+        "title": "Custom Sparse GNN",
+        "year": 2023,
+        "abstract": "We evaluate sparse graph operations...",
+    }
+    app.state.neo4j_service = mock_neo4j
+
+    mock_llm_instance = AsyncMock()
+    extract_resp = MagicMock()
+    extract_resp.text = json.dumps({
+        "methodology": "Sparse tensor factorization",
+        "key_findings": ["Reduces memory footprint by 4x"],
+        "datasets_or_benchmarks": ["OGB-Arxiv"],
+        "limitations": ["Limited to static graphs"],
+    })
+    extract_resp.usage.total_tokens = 100
+
+    matrix_resp = MagicMock()
+    matrix_resp.text = json.dumps({
+        "dimensions": [
+            {
+                "dimension_name": "Efficiency",
+                "findings_by_doi": {"10.1234/custom1": "4x memory reduction"},
+                "consensus": "Sparsity improves memory efficiency",
+                "divergence": "Static vs dynamic graph trade-offs",
+            }
+        ],
+        "synthesis_narrative": "Sparse GNNs achieve superior memory efficiency on large graphs.",
+    })
+    matrix_resp.usage.total_tokens = 200
+
+    mock_llm_instance.complete.side_effect = [extract_resp, matrix_resp]
+    app.state.llm_service = mock_llm_instance
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/analysis/project-123/synthesize",
+        json={
+            "dois": ["10.1234/custom1"],
+            "research_questions": ["What are the memory bottlenecks in GNN scaling?"],
+        },
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["project_id"] == "project-123"
+    assert data["paper_count"] == 1
+    assert data["findings"][0]["doi"] == "10.1234/custom1"
+    assert data["comparison_matrix"]["dimensions"][0]["dimension_name"] == "Efficiency"
+
+
+def test_synthesize_evidence_endpoint_service_unavailable() -> None:
+    """Test synthesize endpoint returns 503 when Neo4j is not available."""
+    old_neo4j = getattr(app.state, "neo4j_service", None)
+    app.state.neo4j_service = None
+    try:
+        client = TestClient(app)
+        response = client.post("/api/analysis/project-123/synthesize")
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+    finally:
+        app.state.neo4j_service = old_neo4j
+

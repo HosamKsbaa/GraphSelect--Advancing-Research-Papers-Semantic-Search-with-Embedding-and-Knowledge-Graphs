@@ -1,0 +1,6 @@
+"""PlannerAgent alias in agents.planning."""
+from __future__ import annotations
+
+from agents.planner.agent import create_planner_agent, planner_agent
+
+__all__ = ["planner_agent", "create_planner_agent"]

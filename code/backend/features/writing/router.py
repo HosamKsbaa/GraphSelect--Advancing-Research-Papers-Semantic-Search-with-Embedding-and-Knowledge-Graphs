@@ -1,12 +1,13 @@
 """Writing API endpoints for ALRS v2.
 
 Thin FastAPI router that delegates to :class:`WritingService` for
-paper abstract retrieval, section drafting, and section review.
+paper abstract retrieval, section drafting, citation verification, and section review.
 
 Endpoints:
-    POST  /api/writing/{project_id}/abstracts  → get_paper_abstracts
-    POST  /api/writing/{project_id}/draft      → draft_section
-    POST  /api/writing/{project_id}/review     → review_section
+    POST  /api/writing/{project_id}/abstracts         → get_paper_abstracts
+    POST  /api/writing/{project_id}/draft             → draft_section
+    POST  /api/writing/{project_id}/review            → review_section
+    POST  /api/writing/{project_id}/verify-citations  → verify_citations
 """
 from __future__ import annotations
 
@@ -14,38 +15,18 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, Field
+
+from features.writing.models import (
+    AbstractsRequest,
+    DraftRequest,
+    ReviewRequest,
+    CitationVerificationRequest,
+    CitationVerificationResponse,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/writing", tags=["writing"])
-
-
-# ── Request models ───────────────────────────────────────────────────
-
-class AbstractsRequest(BaseModel):
-    """Body for the abstracts retrieval endpoint."""
-
-    dois: list[str] = Field(..., min_length=1, description="DOI strings to look up")
-
-
-class DraftRequest(BaseModel):
-    """Body for the section drafting endpoint."""
-
-    section_title: str = Field(..., description="Heading for this section")
-    section_description: str = Field(default="", description="2-3 sentence scope description")
-    paper_dois: list[str] = Field(default_factory=list, description="DOIs assigned to this section")
-    target_level: str = Field(default="master", description="Academic level: 'master' or 'phd'")
-    outline_context: str | None = Field(default=None, description="Optional outline context")
-
-
-class ReviewRequest(BaseModel):
-    """Body for the section review endpoint."""
-
-    section_title: str = Field(..., description="Title of the section being reviewed")
-    draft_text: str = Field(..., description="Full Markdown text of the draft")
-    paper_dois: list[str] = Field(default_factory=list, description="DOIs that should be cited")
-    target_level: str = Field(default="master", description="Academic level: 'master' or 'phd'")
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
@@ -156,3 +137,43 @@ async def review_section(
         paper_dois=body.paper_dois,
         target_level=body.target_level,
     )
+
+
+@router.post("/{project_id}/verify-citations", response_model=CitationVerificationResponse)
+async def verify_citations(
+    project_id: str,
+    body: CitationVerificationRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Verify in-text citations against the Neo4j knowledge graph and assigned paper DOIs."""
+    from features.writing.service import WritingService
+    from config import get_settings
+    from core.logging.log_service import LogService
+
+    neo4j = getattr(request.app.state, "neo4j_service", None)
+    if neo4j is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Neo4j service not initialized",
+        )
+
+    mysql = getattr(request.app.state, "mysql_service", None)
+    log_service = LogService(mysql) if mysql else None
+
+    settings = get_settings()
+    service = WritingService(
+        neo4j=neo4j,
+        llm=getattr(request.app.state, "llm_service", None),
+        log_service=log_service,
+        projects_dir=settings.projects_dir,
+    )
+    try:
+        return await service.verify_citations(
+            project_id=project_id,
+            draft_text=body.draft_text,
+            assigned_dois=body.assigned_dois,
+        )
+    except Exception as exc:
+        logger.exception("verify_citations endpoint failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+

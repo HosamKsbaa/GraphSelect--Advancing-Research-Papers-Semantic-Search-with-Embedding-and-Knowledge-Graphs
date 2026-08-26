@@ -62,15 +62,24 @@ class PaperEmbeddingService:
         if await self._neo4j.has_embedding(doi):
             return False
 
-        abstract = await self._neo4j.get_paper_abstract(doi)
-        if not abstract:
+        paper = await self._neo4j.get_paper_by_doi(doi)
+        if not paper:
             return False
+
+        abstract = paper.get("abstract")
+        if not abstract or not isinstance(abstract, str) or not abstract.strip():
+            return False
+
+        raw_title = paper.get("title")
+        title = str(raw_title).strip() if (raw_title and raw_title != "[pending]") else None
 
         if self._rate_limiter is not None:
             await self._rate_limiter.acquire()
 
         embedding = await self._provider.embed_document(
-            abstract, session_id=session_id,
+            abstract,
+            title=title,
+            session_id=session_id,
         )
         await self._neo4j.store_paper_embedding(
             doi, embedding, model=self._provider.model_name,
