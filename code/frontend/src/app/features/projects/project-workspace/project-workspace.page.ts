@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../../core/api.service';
@@ -46,6 +46,13 @@ export class ProjectWorkspacePage implements OnInit {
     this.showFolderPopover = !this.showFolderPopover;
     if (this.showFolderPopover && !this.projectPath) {
       this.fetchProjectPath();
+    }
+  }
+
+  @HostListener('document:keydown.escape')
+  handleEscape() {
+    if (this.showFolderPopover) {
+      this.showFolderPopover = false;
     }
   }
 

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -99,6 +99,13 @@ export class ProjectListPage implements OnInit {
 
   closeCreateDialog() {
     this.showCreateDialog = false;
+  }
+
+  @HostListener('document:keydown.escape')
+  handleEscape() {
+    if (this.showCreateDialog) {
+      this.closeCreateDialog();
+    }
   }
 
   createProject() {

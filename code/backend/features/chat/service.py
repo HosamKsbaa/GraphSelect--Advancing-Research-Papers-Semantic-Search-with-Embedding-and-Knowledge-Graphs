@@ -480,45 +480,46 @@ class ChatService:
         papers: list[dict[str, Any]],
         questions: list[dict[str, Any]],
     ) -> Tuple[List[ToolTrace], str]:
-        """Generate structured grounded response when live LLM is unavailable."""
+        """Generate structured instruction when live LLM credentials are not configured."""
         lower = user_text.lower().strip()
         tool_traces = [
             ToolTrace(
-                tool_name="KnowledgeGraphGrounding",
+                tool_name="GeminiCredentialsCheck",
                 input_args={"project_id": project_id},
-                output_result=f"Retrieved {len(papers)} ranked ground-truth papers and {len(questions)} research questions from Neo4j.",
-                status="success",
+                output_result="API Key Missing: GEMINI_API_KEY is not configured in Settings or .env file.",
+                status="error",
             ),
         ]
 
         if any(g in lower for g in ["hey", "hello", "hi", "good morning", "good evening", "greetings"]):
             content = (
-                "Hello! I am your **Google ADK Literature Research Assistant**, grounded in your project's Neo4j knowledge graph.\n\n"
-                f"Currently, this project has **{len(papers)} papers** in the library and **{len(questions)} research questions** configured.\n\n"
-                "How can I assist your research today? You can ask me to summarize literature findings, identify gaps, extract conflicting claims, or suggest outline structures."
+                "👋 **Hello! Welcome to the ALRS v2 Literature Research Assistant.**\n\n"
+                "To enable live multi-agent reasoning, literature synthesis, and citation graph querying, your **Gemini API Key** must be configured.\n\n"
+                "### 🛠️ What to do next:\n"
+                "1. Go to [**Settings**](/settings) in the navigation.\n"
+                "2. Paste your **Gemini API Key** (You can generate a free key from [Google AI Studio](https://aistudio.google.com/)).\n"
+                "3. Click **Save Settings** and return here to start chatting!"
             )
         elif any(q in lower for q in ["what model", "who are you", "which model", "what are you", "what model are u"]):
             content = (
-                "I am the **ALRS v2 Literature Research Assistant**, built using the **Google Agent Development Kit (ADK)** and powered by **Google Gemini** (`gemini-3.5-flash` for reasoning and `gemini-embedding-2` for citation graph navigation).\n\n"
-                "My responses are grounded against your project's local **Neo4j knowledge graph** to ensure verified citations and a **0.0% citation hallucination rate**."
+                "🤖 I am the **ALRS v2 Literature Research Assistant**, built with the **Google Agent Development Kit (ADK)** and powered by **Google Gemini** (`gemini-3.5-flash` and `gemini-embedding-2`), grounded with your local Neo4j knowledge graph.\n\n"
+                "⚠️ *Note: Your Gemini API Key is not yet configured. Please add your key in [Settings](/settings) to activate live reasoning.*"
             )
         else:
-            if papers:
-                citation_bullets = "\n".join([
-                    f"- **{p.get('title', 'Literature Paper')}** ({p.get('year', 2023)}) — *DOI: `{p.get('doi') or p.get('id', '10.1145/3447548.3467285')}`* [Verified Ground-Truth]"
-                    for p in papers[:3]
-                ])
-            else:
-                citation_bullets = "- *No library papers currently indexed. Add papers in the Search tab to expand evidence.*"
-
             content = (
-                f"Based on your query: *\"{user_text}\"*, here is the synthesis grounded in your project's knowledge graph:\n\n"
-                f"### Research Findings & Synthesis\n"
-                f"1. **Graph Structural Modeling**: Literature in your project domain highlights the importance of topological modeling and dynamic citation graph analysis.\n"
-                f"2. **Evidence Polarity**: Claims extracted from the citation network show strong methodological consensus, with active investigation into scalability.\n\n"
-                f"### Grounded Citations (0.0% Hallucination)\n"
-                f"{citation_bullets}\n\n"
-                f"Would you like me to formulate novel gap-discovery queries or draft a literature review section around this topic?"
+                "⚠️ **Configuration Missing: Gemini API Key Not Found**\n\n"
+                f"I cannot analyze your prompt: *\"{user_text}\"* because a valid **Gemini API Key** has not been provided.\n\n"
+                "### 🛠️ What to do:\n"
+                "1. **In the Web App (Instant)**:\n"
+                "   - Navigate to the [**Settings Page**](/settings).\n"
+                "   - Enter your **Gemini API Key** (Get a free key from [Google AI Studio](https://aistudio.google.com/)).\n"
+                "   - Click **Save Settings**.\n\n"
+                "2. **In your `.env` File**:\n"
+                "   - Open `.env` in the root folder.\n"
+                "   - Set: `GEMINI_API_KEY=your_key_here`\n"
+                "   - Set: `USE_VERTEX_AI=false`\n"
+                "   - Restart containers with `docker compose restart`.\n\n"
+                "Once saved, ask me any research question and I will synthesize your literature with verified citations!"
             )
 
         return tool_traces, content

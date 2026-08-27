@@ -86,6 +86,35 @@ DDL_STATEMENTS: list[str] = [
         INDEX idx_agent_traces_created (created_at),
         INDEX idx_agent_traces_project_agent (project_id, agent_name)
     )''',
+    '''CREATE TABLE IF NOT EXISTS chat_sessions (
+        id VARCHAR(36) PRIMARY KEY,
+        project_id VARCHAR(36) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message_count INT NOT NULL DEFAULT 0,
+        last_message_preview TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_chat_sessions_project (project_id),
+        INDEX idx_chat_sessions_updated (updated_at),
+        INDEX idx_chat_sessions_project_updated (project_id, updated_at),
+        CONSTRAINT fk_chat_sessions_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )''',
+    '''CREATE TABLE IF NOT EXISTS chat_messages (
+        id VARCHAR(36) PRIMARY KEY,
+        chat_id VARCHAR(36) NOT NULL,
+        project_id VARCHAR(36) NOT NULL,
+        sender ENUM('user', 'assistant', 'system', 'tool') NOT NULL,
+        content MEDIUMTEXT NOT NULL,
+        tool_traces JSON,
+        citations JSON,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_chat_messages_chat (chat_id),
+        INDEX idx_chat_messages_project (project_id),
+        INDEX idx_chat_messages_created (created_at),
+        INDEX idx_chat_messages_chat_created (chat_id, created_at),
+        CONSTRAINT fk_chat_messages_chat FOREIGN KEY (chat_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        CONSTRAINT fk_chat_messages_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )''',
 ]
 
 
@@ -202,6 +231,27 @@ class MySQLService:
                 logger.info("Added response_body column to api_logs table.")
         except Exception as e:
             logger.error("Error upgrading schema for api_logs: %s", e)
+
+        # Ensure chat tables columns exist on older schemas
+        try:
+            cs_cols = await self.fetch_all("SHOW COLUMNS FROM chat_sessions LIKE 'last_message_preview'")
+            if not cs_cols:
+                await self.execute("ALTER TABLE chat_sessions ADD COLUMN last_message_preview TEXT")
+                logger.info("Added last_message_preview column to chat_sessions table")
+        except Exception as e:
+            logger.debug("Schema check for chat_sessions skipped: %s", e)
+
+        try:
+            cm_tool = await self.fetch_all("SHOW COLUMNS FROM chat_messages LIKE 'tool_traces'")
+            if not cm_tool:
+                await self.execute("ALTER TABLE chat_messages ADD COLUMN tool_traces JSON")
+                logger.info("Added tool_traces column to chat_messages table")
+            cm_cit = await self.fetch_all("SHOW COLUMNS FROM chat_messages LIKE 'citations'")
+            if not cm_cit:
+                await self.execute("ALTER TABLE chat_messages ADD COLUMN citations JSON")
+                logger.info("Added citations column to chat_messages table")
+        except Exception as e:
+            logger.debug("Schema check for chat_messages skipped: %s", e)
 
         logger.info('MySQL schema initialization complete')
 

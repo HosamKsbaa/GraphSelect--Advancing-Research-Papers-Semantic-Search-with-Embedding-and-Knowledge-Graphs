@@ -43,19 +43,28 @@ class LLMService:
         model_name: str = "gemini-3.5-flash",
         log_service: Any | None = None,
     ) -> None:
+        import os
         from config import get_settings
         settings = get_settings()
 
-        if settings.use_vertex_ai:
+        effective_key = api_key or os.environ.get("GEMINI_API_KEY") or settings.gemini_api_key
+        # Check if placeholder
+        if effective_key in {"", "your_gemini_api_key_here"}:
+            effective_key = None
+
+        if settings.use_vertex_ai and settings.vertex_project:
             self._client = genai.Client(
                 vertexai=True,
                 project=settings.vertex_project,
                 location=settings.vertex_location,
             )
             logger.info("LLMService initialized via Vertex AI (project=%s, location=%s)", settings.vertex_project, settings.vertex_location)
-        else:
-            self._client = genai.Client(api_key=api_key or settings.gemini_api_key)
+        elif effective_key:
+            self._client = genai.Client(api_key=effective_key)
             logger.info("LLMService initialized via Google AI Studio")
+        else:
+            self._client = None
+            logger.warning("LLMService initialized without credentials (GEMINI_API_KEY not configured)")
 
         self._model_name = model_name
         self._log_service = log_service
@@ -72,8 +81,13 @@ class LLMService:
             CompletionResponse with generated text and token usage.
 
         Raises:
-            Exception: After all retries are exhausted.
+            Exception: After all retries are exhausted or if credentials missing.
         """
+        if self._client is None:
+            raise ValueError(
+                "Gemini API key is not configured. Please add your GEMINI_API_KEY in Settings or .env file."
+            )
+
         loop = asyncio.get_running_loop()
 
         config = types.GenerateContentConfig(

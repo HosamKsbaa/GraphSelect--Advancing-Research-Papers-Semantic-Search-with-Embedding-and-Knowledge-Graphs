@@ -1,6 +1,13 @@
 """Shared test fixtures for ALRS v2 backend tests."""
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("OPENALEX_API_KEY", "test-openalex-key")
+os.environ.setdefault("NEO4J_PASSWORD", "test-neo4j-password")
+os.environ.setdefault("MYSQL_PASSWORD", "test-mysql-password")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+
 from datetime import datetime
 from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch

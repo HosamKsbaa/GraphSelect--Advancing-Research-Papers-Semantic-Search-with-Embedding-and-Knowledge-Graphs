@@ -390,6 +390,31 @@ export class ApiService {
     if (endTime) params += `&end_time=${encodeURIComponent(endTime)}`;
     return this.http.get<AgentTraceListResponse>(`${this.baseUrl}/logs/agent-traces?${params}`);
   }
+
+  // --- Project Chats ---
+  listProjectChats(projectId: string): Observable<ChatSessionSummary[]> {
+    return this.http.get<ChatSessionListResponse>(`${this.baseUrl}/projects/${projectId}/chats`).pipe(
+      map(res => res.chats || [])
+    );
+  }
+
+  createProjectChat(projectId: string, title?: string): Observable<ChatSessionSummary> {
+    return this.http.post<ChatSessionSummary>(`${this.baseUrl}/projects/${projectId}/chats`, { title });
+  }
+
+  getChatMessages(projectId: string, chatId: string): Observable<ChatMessage[]> {
+    return this.http.get<ChatMessagesResponse>(`${this.baseUrl}/projects/${projectId}/chats/${chatId}/messages`).pipe(
+      map(res => res.messages || [])
+    );
+  }
+
+  sendChatMessage(projectId: string, chatId: string, message: string): Observable<SendMessageResponse> {
+    return this.http.post<SendMessageResponse>(`${this.baseUrl}/projects/${projectId}/chats/${chatId}/messages`, { message });
+  }
+
+  deleteProjectChat(projectId: string, chatId: string): Observable<{ status: string; message: string }> {
+    return this.http.delete<{ status: string; message: string }>(`${this.baseUrl}/projects/${projectId}/chats/${chatId}`);
+  }
 }
 
 export interface ProgressEvent {
@@ -738,4 +763,53 @@ export interface AgentTraceListResponse {
 export interface AddPapersToProjectRequest {
   project_id: string;
   dois: string[];
+}
+
+// --- ALRS Project Chat Interfaces ---
+export interface ToolTrace {
+  tool_name: string;
+  input_args: Record<string, unknown>;
+  output_result?: string;
+  status: 'success' | 'error' | 'running';
+}
+
+export interface CitationTrace {
+  doi: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  verified_in_graph: boolean;
+}
+
+export interface ChatMessage {
+  id: string;
+  chat_id: string;
+  sender: 'user' | 'assistant' | 'system' | 'tool';
+  content: string;
+  timestamp: string;
+  tool_traces?: ToolTrace[];
+  citations?: CitationTrace[];
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  project_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  last_message_preview?: string | null;
+}
+
+export interface ChatSessionListResponse {
+  chats: ChatSessionSummary[];
+}
+
+export interface ChatMessagesResponse {
+  messages: ChatMessage[];
+}
+
+export interface SendMessageResponse {
+  user_message: ChatMessage;
+  assistant_message: ChatMessage;
 }

@@ -105,9 +105,9 @@
 
   <!-- Configuration Dialog -->
   @if (showConfigDialog) {
-    <div class="dialog-backdrop">
+    <div class="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="outlineConfigDialogTitle">
       <div class="dialog-content card">
-        <h3>Outline Configuration</h3>
+        <h3 id="outlineConfigDialogTitle">Outline Configuration</h3>
         
         <div class="form-group">
           <label for="style">Writing Style</label>

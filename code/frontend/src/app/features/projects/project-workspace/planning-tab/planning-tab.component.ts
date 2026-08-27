@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -56,6 +56,13 @@ export class PlanningTabComponent implements OnInit {
   
   closeConfigDialog() {
     this.showConfigDialog = false;
+  }
+
+  @HostListener('document:keydown.escape')
+  handleEscape() {
+    if (this.showConfigDialog) {
+      this.closeConfigDialog();
+    }
   }
 
   generateOutline() {

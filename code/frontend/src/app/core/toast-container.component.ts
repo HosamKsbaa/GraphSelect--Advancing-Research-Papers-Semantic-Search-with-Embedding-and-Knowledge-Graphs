@@ -9,9 +9,9 @@ import { ToastService, Toast } from './toast.service';
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <div class="toast-container">
+    <div class="toast-container" role="region" aria-label="Notifications" aria-live="polite">
       @for (toast of activeToasts; track toast.id) {
-        <div class="toast toast-{{ toast.type }} animate-slide-in-right" [class.toast-exiting]="exitingIds.has(toast.id)">
+        <div class="toast toast-{{ toast.type }} animate-slide-in-right" [class.toast-exiting]="exitingIds.has(toast.id)" [attr.role]="toast.type === 'error' ? 'alert' : 'status'" [attr.aria-live]="toast.type === 'error' ? 'assertive' : 'polite'">
           <div class="toast-icon">
             @if (toast.type === 'error') {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -40,7 +40,7 @@ import { ToastService, Toast } from './toast.service';
               </a>
             }
           </div>
-          <button class="toast-close" (click)="dismiss(toast.id)">
+          <button class="toast-close" (click)="dismiss(toast.id)" aria-label="Dismiss notification">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>

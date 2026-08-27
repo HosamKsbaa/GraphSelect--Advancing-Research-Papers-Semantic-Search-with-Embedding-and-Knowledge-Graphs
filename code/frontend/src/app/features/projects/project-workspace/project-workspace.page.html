@@ -12,13 +12,14 @@
     </span>
   </div>
 
-  <nav class="workspace-nav">
-    <div class="nav-links">
-      <a [routerLink]="['/projects', projectId, 'research']" routerLinkActive="active" class="tab-link">Research</a>
-      <a [routerLink]="['/projects', projectId, 'analysis']" routerLinkActive="active" class="tab-link">Analysis</a>
-      <a [routerLink]="['/projects', projectId, 'planning']" routerLinkActive="active" class="tab-link">Planning</a>
-      <a [routerLink]="['/projects', projectId, 'writing']" routerLinkActive="active" class="tab-link">Writing</a>
-      <a [routerLink]="['/projects', projectId, 'export']" routerLinkActive="active" class="tab-link">Export</a>
+  <nav class="workspace-nav" aria-label="Project Workspace">
+    <div class="nav-links" role="tablist">
+      <a [routerLink]="['/projects', projectId, 'research']" routerLinkActive="active" role="tab" class="tab-link" (click)="showFolderPopover = false">Research</a>
+      <a [routerLink]="['/projects', projectId, 'analysis']" routerLinkActive="active" role="tab" class="tab-link" (click)="showFolderPopover = false">Analysis</a>
+      <a [routerLink]="['/projects', projectId, 'planning']" routerLinkActive="active" role="tab" class="tab-link" (click)="showFolderPopover = false">Planning</a>
+      <a [routerLink]="['/projects', projectId, 'writing']" routerLinkActive="active" role="tab" class="tab-link" (click)="showFolderPopover = false">Writing</a>
+      <a [routerLink]="['/projects', projectId, 'chat']" routerLinkActive="active" role="tab" class="tab-link" (click)="showFolderPopover = false">Chat</a>
+      <a [routerLink]="['/projects', projectId, 'export']" routerLinkActive="active" role="tab" class="tab-link" (click)="showFolderPopover = false">Export</a>
     </div>
     <div class="nav-actions" style="margin-left: auto; padding-right: 1.5rem; position: relative;">
       <button class="btn-secondary" (click)="toggleFolderPopover()" title="Get Project Folder Path">

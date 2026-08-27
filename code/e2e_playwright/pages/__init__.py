@@ -7,6 +7,7 @@ from e2e_playwright.pages.research_tab_page import ResearchTabPage
 from e2e_playwright.pages.analysis_tab_page import AnalysisTabPage
 from e2e_playwright.pages.planning_tab_page import PlanningTabPage
 from e2e_playwright.pages.writing_tab_page import WritingTabPage
+from e2e_playwright.pages.chat_tab_page import ChatTabPage
 from e2e_playwright.pages.export_tab_page import ExportTabPage
 from e2e_playwright.pages.search_wizard_page import SearchWizardPage
 from e2e_playwright.pages.system_status_page import SystemStatusPage
@@ -22,6 +23,7 @@ __all__ = [
     "AnalysisTabPage",
     "PlanningTabPage",
     "WritingTabPage",
+    "ChatTabPage",
     "ExportTabPage",
     "SearchWizardPage",
     "SystemStatusPage",

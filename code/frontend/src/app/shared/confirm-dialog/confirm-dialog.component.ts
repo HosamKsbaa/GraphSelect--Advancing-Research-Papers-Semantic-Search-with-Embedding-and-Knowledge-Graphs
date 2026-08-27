@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ElementRef, ViewChild, AfterViewInit, HostListener } from '@angular/core';
 
 @Component({
   selector: 'app-confirm-dialog',
@@ -78,6 +78,11 @@ export class ConfirmDialogComponent implements AfterViewInit {
 
   onCancel() {
     this.cancelled.emit();
+  }
+
+  @HostListener('document:keydown.escape')
+  handleEscape() {
+    this.onCancel();
   }
 
   trapFocus(e: Event, buttonType: 'cancel' | 'confirm') {

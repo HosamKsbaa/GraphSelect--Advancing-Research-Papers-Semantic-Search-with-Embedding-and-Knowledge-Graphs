@@ -111,11 +111,11 @@
 
 <!-- LaTeX Template Selection Dialog (Modal) -->
 @if (showLatexDialog) {
-  <div class="modal-backdrop">
+  <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="latexExportDialogTitle">
     <div class="modal-dialog card glass">
       <div class="modal-header">
-        <h2>Export LaTeX</h2>
-        <button class="btn-close" (click)="closeLatexDialog()">&times;</button>
+        <h2 id="latexExportDialogTitle">Export LaTeX</h2>
+        <button class="btn-close" (click)="closeLatexDialog()" aria-label="Close dialog">&times;</button>
       </div>
       <div class="modal-body">
         <p>Select a formatting template for your literature review:</p>

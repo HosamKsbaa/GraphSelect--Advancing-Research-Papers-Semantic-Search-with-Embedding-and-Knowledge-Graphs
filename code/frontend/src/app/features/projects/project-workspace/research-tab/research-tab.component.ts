@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, inject } from '@angular/core';
+import { Component, OnInit, signal, inject, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -148,6 +148,13 @@ export class ResearchTabComponent implements OnInit {
 
   cancelDelete() {
     this.showConfirmDialog.set({isOpen: false});
+  }
+
+  @HostListener('document:keydown.escape')
+  handleEscape() {
+    if (this.showConfirmDialog().isOpen) {
+      this.cancelDelete();
+    }
   }
 
   async proceedDeleteQuestion() {

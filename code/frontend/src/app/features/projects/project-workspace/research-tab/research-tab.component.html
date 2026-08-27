@@ -188,9 +188,9 @@
   </aside>
 
   <!-- Confirm Dialog Mockup -->
-  <div class="modal-overlay" *ngIf="showConfirmDialog().isOpen">
+  <div class="modal-overlay" *ngIf="showConfirmDialog().isOpen" role="dialog" aria-modal="true" aria-labelledby="deleteQuestionDialogTitle">
     <div class="modal-content glass-panel">
-      <h3>Delete Research Question?</h3>
+      <h3 id="deleteQuestionDialogTitle">Delete Research Question?</h3>
       <p>Warning: This may impact downstream analysis and currently embedded papers.</p>
       <div class="modal-actions">
         <button class="btn-cancel" (click)="cancelDelete()">Cancel</button>

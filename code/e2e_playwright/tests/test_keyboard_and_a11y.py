@@ -387,12 +387,13 @@ def test_escape_key_dismisses_confirm_delete_dialog(page: Page, base_url: str):
 
     research_tab = ResearchTabPage(page, base_url)
     research_tab.navigate(project_id)
+    expect(research_tab.question_input).to_be_visible()
 
     # Set confirm dialog open state
     page.evaluate("() => { const comp = document.querySelector('app-research-tab'); if (comp) { window.ng?.getComponent(comp)?.showConfirmDialog.set({isOpen: true, questionId: 'q1'}); } }")
 
     confirm_overlay = page.locator(".modal-overlay")
-    expect(confirm_overlay).to_be_visible()
+    expect(confirm_overlay).to_be_visible(timeout=5000)
 
     # Press Escape key
     page.keyboard.press("Escape")
@@ -495,8 +496,8 @@ def test_aria_roles_on_workspace_tabs_and_navigation(page: Page, base_url: str):
 
     # Workspace Tabs
     tabs = page.locator(".workspace-nav .nav-links a.tab-link")
-    expect(tabs).to_have_count(5)
-    for i in range(5):
+    expect(tabs).to_have_count(6)
+    for i in range(6):
         expect(tabs.nth(i)).to_have_attribute("role", "tab")
 
     # Sidebar Navigation Landmark
@@ -756,11 +757,12 @@ def test_full_keyboard_only_end_to_end_workflow(page: Page, base_url: str):
     research_tab = ResearchTabPage(page, base_url)
     expect(research_tab.question_input).to_be_visible()
 
+    research_tab.question_input.click()
     research_tab.question_input.focus()
     expect(research_tab.question_input).to_be_focused()
 
     question_content = "How does keyboard accessibility improve academic paper co-authoring?"
-    research_tab.question_input.press_sequentially(question_content)
+    research_tab.question_input.press_sequentially(question_content, delay=30)
     expect(research_tab.question_input).to_have_value(question_content)
 
     # Press Enter to submit question

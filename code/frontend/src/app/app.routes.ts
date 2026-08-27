@@ -26,6 +26,7 @@ export const routes: Routes = [
       { path: 'analysis', loadComponent: () => import('./features/projects/project-workspace/analysis-tab/analysis-tab.component').then(m => m.AnalysisTabComponent) },
       { path: 'planning', loadComponent: () => import('./features/projects/project-workspace/planning-tab/planning-tab.component').then(m => m.PlanningTabComponent) },
       { path: 'writing', loadComponent: () => import('./features/projects/project-workspace/writing-tab/writing-tab.component').then(m => m.WritingTabComponent) },
+      { path: 'chat', loadComponent: () => import('./features/projects/project-workspace/chat-tab/chat-tab.component').then(m => m.ChatTabComponent) },
       { path: 'export', loadComponent: () => import('./features/projects/project-workspace/export-tab/export-tab.component').then(m => m.ExportTabComponent) },
     ]
   },
