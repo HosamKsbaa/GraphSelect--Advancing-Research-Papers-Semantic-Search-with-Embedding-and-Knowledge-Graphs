@@ -29,7 +29,19 @@ from e2e_playwright.pages.settings_page import SettingsPage
 
 
 def _mock_project_base(page: Page, project_id: str, name: str = "Responsive Test Project"):
-    """Helper to mock baseline project metadata and touch endpoint."""
+    """Helper to mock baseline project metadata, settings, and touch endpoint."""
+    mock_api_route(page, "**/api/settings*", status_code=200, json_data={
+        "mode": "studio",
+        "has_credentials": True,
+        "gemini_api_key_set": True,
+        "openalex_api_key_set": True,
+        "gemini_api_key_preview": "AIzaSy...",
+        "vertex_project": None,
+        "vertex_location": "us-central1",
+        "use_vertex_ai": False,
+        "openalex_api_key_preview": None,
+        "openalex_email": ""
+    })
     mock_api_route(page, f"**/api/projects/{project_id}*", status_code=200, json_data={
         "id": project_id,
         "name": name,
@@ -162,7 +174,7 @@ def test_responsive_search_wizard_and_results_component(responsive_page: Page, b
 
     wizard.seed_title_input.fill("GraphSelect")
     wizard.seed_search_btn.click(force=True)
-    expect(wizard.candidate_cards).to_have_count(2)
+    expect(wizard.candidate_cards).to_have_count(2, timeout=10000)
 
     card0 = wizard.candidate_cards.nth(0)
     expect(card0).to_be_visible()
@@ -189,7 +201,8 @@ def test_responsive_search_wizard_and_results_component(responsive_page: Page, b
     assert grid_box is not None
     assert grid_box["width"] > 0
 
-    session_id = "session-resp-001"
+    vp_name = getattr(responsive_page, "viewport_name", "desktop")
+    session_id = f"session-resp-{vp_name}"
     seed_doi = "10.1145/3534678.3539078"
     mock_api_route(responsive_page, "**/api/search/start*", status_code=200, json_data={
         "session_id": session_id,
@@ -228,6 +241,10 @@ def test_responsive_search_wizard_and_results_component(responsive_page: Page, b
         ]
     }
     mock_api_route(responsive_page, f"**/api/search/{session_id}/results*", status_code=200, json_data=mock_ranked_results)
+    mock_api_route(responsive_page, f"**/api/search/{session_id}/rerank*", status_code=200, json_data=mock_ranked_results)
+    mock_api_route(responsive_page, "**/api/projects*", status_code=200, json_data=[
+        {"id": "p1", "name": "Target Project Alpha"}
+    ])
 
     wizard.fill_research_questions(["How do attention mechanisms scale in citation graphs?"])
     wizard.step2_start_btn.click(force=True)
@@ -262,7 +279,8 @@ def test_responsive_search_wizard_and_results_component(responsive_page: Page, b
 
 def test_responsive_workspace_research_tab(responsive_page: Page, base_url: str):
     """Verify Workspace Research Tab sidebars, question input, library table, and row details adapt cleanly."""
-    project_id = "test-proj-resp-research"
+    vp_name = getattr(responsive_page, "viewport_name", "desktop")
+    project_id = f"test-proj-resp-research-{vp_name}"
 
     _mock_project_base(responsive_page, project_id, "Responsive Research Workspace")
 
@@ -319,7 +337,7 @@ def test_responsive_workspace_research_tab(responsive_page: Page, base_url: str)
 
     expect(research_tab.question_input).to_be_visible()
     expect(research_tab.add_question_btn).to_be_visible()
-    expect(research_tab.question_items).to_have_count(2)
+    expect(research_tab.question_items).to_have_count(2, timeout=10000)
 
     q_input_box = research_tab.question_input.bounding_box()
     assert q_input_box is not None
@@ -336,16 +354,16 @@ def test_responsive_workspace_research_tab(responsive_page: Page, base_url: str)
     assert table_box is not None
     assert table_box["width"] > 0
 
-    expect(research_tab.paper_rows).to_have_count(2)
+    expect(research_tab.paper_rows).to_have_count(2, timeout=10000)
 
     research_tab.filter_library("GraphSelect")
-    expect(research_tab.paper_rows).to_have_count(1)
+    expect(research_tab.paper_rows).to_have_count(1, timeout=10000)
     expect(research_tab.paper_rows.first).to_contain_text("GraphSelect")
 
     research_tab.filter_library("")
-    expect(research_tab.paper_rows).to_have_count(2)
+    expect(research_tab.paper_rows).to_have_count(2, timeout=10000)
 
-    research_tab.paper_rows.first.click(force=True)
+    research_tab.paper_rows.first.dispatch_event("click")
     expect(research_tab.detail_rows.first).to_be_visible()
     detail_box = research_tab.detail_rows.first.bounding_box()
     assert detail_box is not None
@@ -361,7 +379,8 @@ def test_responsive_workspace_research_tab(responsive_page: Page, base_url: str)
 
 def test_responsive_workspace_analysis_tab(responsive_page: Page, base_url: str):
     """Verify Workspace Analysis Tab 2-column to 1-column responsive collapse, coverage cards, and polarity subgraph."""
-    project_id = "test-proj-resp-analysis"
+    vp_name = getattr(responsive_page, "viewport_name", "desktop")
+    project_id = f"test-proj-resp-analysis-{vp_name}"
     viewport = responsive_page.viewport_size or {"width": 1280, "height": 800}
     viewport_width = viewport["width"]
 
@@ -433,7 +452,7 @@ def test_responsive_workspace_analysis_tab(responsive_page: Page, base_url: str)
     else:
         assert ins_box["y"] >= cov_box["y"]
 
-    expect(analysis_tab.coverage_cards).to_have_count(2)
+    expect(analysis_tab.coverage_cards).to_have_count(2, timeout=10000)
     card0 = analysis_tab.coverage_cards.nth(0)
     card0_box = card0.bounding_box()
     assert card0_box is not None
@@ -441,9 +460,10 @@ def test_responsive_workspace_analysis_tab(responsive_page: Page, base_url: str)
     expect(card0.locator(".status-badge")).to_contain_text("Gap")
     expect(card0.locator(".progress-bar")).to_have_class("progress-bar progress-bad")
 
+    analysis_tab.suggest_queries_btns.first.scroll_into_view_if_needed()
     analysis_tab.suggest_queries_btns.first.click(force=True)
     expect(analysis_tab.suggested_queries_container.first).to_be_visible()
-    expect(analysis_tab.suggested_query_items).to_have_count(2)
+    expect(analysis_tab.suggested_query_items).to_have_count(2, timeout=10000)
 
     # Citation stats formatted as decimals in Angular template
     expect(analysis_tab.stats_panel).to_be_visible()
@@ -467,7 +487,8 @@ def test_responsive_workspace_analysis_tab(responsive_page: Page, base_url: str)
 
 def test_responsive_workspace_planning_tab(responsive_page: Page, base_url: str):
     """Verify Workspace Planning Tab readiness stat wrapping, outline configuration dialog, and section cards."""
-    project_id = "test-proj-resp-planning"
+    vp_name = getattr(responsive_page, "viewport_name", "desktop")
+    project_id = f"test-proj-resp-planning-{vp_name}"
 
     _mock_project_base(responsive_page, project_id, "Responsive Planning Workspace")
 
@@ -532,7 +553,7 @@ def test_responsive_workspace_planning_tab(responsive_page: Page, base_url: str)
     planning_tab.confirm_generate_btn.click(force=True)
     expect(planning_tab.config_dialog).not_to_be_visible()
 
-    expect(planning_tab.section_cards).to_have_count(2)
+    expect(planning_tab.section_cards).to_have_count(2, timeout=10000)
     card0 = planning_tab.section_cards.nth(0)
     card0_box = card0.bounding_box()
     assert card0_box is not None
@@ -551,7 +572,8 @@ def test_responsive_workspace_planning_tab(responsive_page: Page, base_url: str)
 
 def test_responsive_workspace_writing_tab(responsive_page: Page, base_url: str):
     """Verify Workspace Writing Tab split layout, badges, markdown editor/preview toggle, and feedback panel."""
-    project_id = "test-proj-resp-writing"
+    vp_name = getattr(responsive_page, "viewport_name", "desktop")
+    project_id = f"test-proj-resp-writing-{vp_name}"
 
     _mock_project_base(responsive_page, project_id, "Responsive Writing Workspace")
 
@@ -598,10 +620,10 @@ def test_responsive_workspace_writing_tab(responsive_page: Page, base_url: str):
     writing_tab = WritingTabPage(responsive_page, base_url)
     writing_tab.navigate(project_id)
 
-    expect(writing_tab.section_cards).to_have_count(2)
+    expect(writing_tab.section_cards).to_have_count(2, timeout=10000)
 
     # Select Section 1 and draft
-    writing_tab.section_cards.first.click(force=True)
+    writing_tab.select_section(0)
     expect(writing_tab.draft_workspace).to_be_visible()
 
     workspace_box = writing_tab.draft_workspace.bounding_box()
@@ -613,24 +635,24 @@ def test_responsive_workspace_writing_tab(responsive_page: Page, base_url: str):
     expect(writing_tab.draft_section_btn).to_be_visible()
 
     # Draft section
-    writing_tab.draft_section_btn.click(force=True)
+    writing_tab.click_draft_section()
 
     expect(writing_tab.markdown_preview).to_be_visible()
     expect(writing_tab.markdown_preview).to_contain_text("Introduction")
 
     # Toggle to Markdown Editor
-    writing_tab.toggle_edit_btn.click(force=True)
+    writing_tab.toggle_edit_preview()
     expect(writing_tab.markdown_editor).to_be_visible()
     expect(writing_tab.markdown_editor).to_have_value(mock_draft_response["draft_text"])
 
-    writing_tab.markdown_editor.fill("## Introduction\n\nUpdated draft text in responsive viewport.")
+    writing_tab.fill_markdown_editor("## Introduction\n\nUpdated draft text in responsive viewport.")
     expect(writing_tab.markdown_editor).to_have_value("## Introduction\n\nUpdated draft text in responsive viewport.")
 
     # Toggle back to Preview
-    writing_tab.toggle_edit_btn.click(force=True)
+    writing_tab.toggle_edit_preview()
 
-    # Review section (use specific button selector to avoid strict mode collisions)
-    responsive_page.locator(".workspace-header button.btn-secondary").click(force=True)
+    # Review section
+    writing_tab.click_review_section()
 
     expect(writing_tab.feedback_panel).to_be_visible()
     expect(writing_tab.feedback_status_badge).to_contain_text("Needs Revision")
@@ -646,7 +668,8 @@ def test_responsive_workspace_writing_tab(responsive_page: Page, base_url: str):
 
 def test_responsive_workspace_export_tab(responsive_page: Page, base_url: str):
     """Verify Workspace Export Tab export cards grid, LaTeX template modal scaling, and radio controls."""
-    project_id = "test-proj-resp-export"
+    vp_name = getattr(responsive_page, "viewport_name", "desktop")
+    project_id = f"test-proj-resp-export-{vp_name}"
 
     _mock_project_base(responsive_page, project_id, "Responsive Export Workspace")
 

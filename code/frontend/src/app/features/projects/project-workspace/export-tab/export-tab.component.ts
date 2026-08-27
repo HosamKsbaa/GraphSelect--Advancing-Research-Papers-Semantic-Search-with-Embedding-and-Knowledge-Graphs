@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, HostListener } from '@angular/core';
+import { Component, OnInit, inject, HostListener, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -15,6 +15,7 @@ import { LoadingIndicatorComponent } from '../../../../shared/loading-indicator/
 export class ExportTabComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private apiService = inject(ApiService);
+  private cdr = inject(ChangeDetectorRef);
 
   projectId: string = '';
   summary: ProjectSummary | null = null;
@@ -31,14 +32,34 @@ export class ExportTabComponent implements OnInit {
   // Citation Graph export state
   isExportingGraph = false;
 
+  getEffectiveProjectId(): string {
+    const parentId = this.route.parent?.snapshot.paramMap.get('id');
+    const selfId = this.route.snapshot.paramMap.get('id');
+    if (parentId || selfId) return parentId || selfId || '';
+    if (typeof window !== 'undefined' && window.location) {
+      const parts = window.location.pathname.split('/projects/');
+      if (parts.length > 1) {
+        const id = parts[1].split('/')[0];
+        if (id) return id;
+      }
+    }
+    return '';
+  }
+
   ngOnInit() {
-    // Try to get projectId from parent route where the layout component is
-    this.projectId = this.route.parent?.snapshot.paramMap.get('id') || '';
+    this.projectId = this.getEffectiveProjectId();
     if (this.projectId) {
       this.loadSummary();
     } else {
       this.isLoading = false;
     }
+    this.route.parent?.paramMap.subscribe(params => {
+      const id = params.get('id') || this.getEffectiveProjectId();
+      if (id && id !== this.projectId) {
+        this.projectId = id;
+        this.loadSummary();
+      }
+    });
   }
 
   loadSummary() {
@@ -47,10 +68,12 @@ export class ExportTabComponent implements OnInit {
       next: (summary) => {
         this.summary = summary;
         this.isLoading = false;
+        this.cdr.markForCheck();
       },
       error: (err) => {
         console.error('Failed to load project summary', err);
         this.isLoading = false;
+        this.cdr.markForCheck();
       }
     });
   }

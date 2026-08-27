@@ -1,199 +1,456 @@
 """FastAPI settings router for ALRS v2 backend.
 
-Exposes endpoints to read and update application configuration (API keys, email)
-stored in the .env file. Sensitive values are masked in GET responses.
+Exposes endpoints to read, test, and update application configuration and
+dual-mode authentication (Google AI Studio vs. Vertex AI) stored in .env.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException, Request, status
 
-from config import get_settings
+from config import find_env_file, get_settings
 from features.settings.models import (
+    AuthStatusResponse,
+    AuthUpdateRequest,
     SettingsResponse,
     SettingsUpdateRequest,
     SettingsUpdateResponse,
+    TestConnectionRequest,
+    TestConnectionResponse,
 )
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-ENV_FILE = Path(__file__).resolve().parent.parent.parent / ".env"
+ENV_FILE = find_env_file()
 
+# Mutex to guard concurrent .env file writes
+_ENV_WRITE_LOCK = asyncio.Lock()
 
-# --- Helpers ---
-
-# Sentinel values that ship in the default .env template.
-# Any key matching one of these is treated as "not configured".
+# Sentinel values that ship in default configuration
 _PLACEHOLDER_KEYS = {"", "your_gemini_api_key_here", "your_openalex_api_key_here"}
+_PLACEHOLDER_PROJECTS = {"", "your-gcp-project-id", "your_project_id_here"}
 
 
-def _mask_key(key: str) -> str:
-    """Return a masked preview of an API key, showing only the last 4 chars.
+# ── Helpers ──────────────────────────────────────────────────────────
 
-    Masking strategy:
-        - Placeholder / empty → ``"Not set"``
-        - Very short key (≤ 4 chars) → ``"****"`` (no chars revealed)
-        - Normal key → up to 20 bullet chars (``•``) followed by the
-          last 4 characters, e.g. ``••••••••••••efgh``
+def _clean_key_value(key: str, value: str) -> tuple[str, str]:
+    """Sanitize env key and value to prevent CRLF / newline injection and file corruption.
 
-    The 20-bullet cap prevents the frontend from displaying an
-    excessively long masked string for very long keys.
-
-    Args:
-        key: Raw API key value read from ``.env``.
-
-    Returns:
-        Human-readable masked string safe for display in the UI.
+    - Keys: Stripped of whitespace, newlines, null bytes, and '=' characters.
+    - Values: Truncated at first newline/CRLF and stripped to guarantee single-line
+      persistence without injecting arbitrary environment variables.
     """
-    if not key or key in _PLACEHOLDER_KEYS:
+    clean_key = (
+        str(key)
+        .replace("\r", "")
+        .replace("\n", "")
+        .replace("\0", "")
+        .replace("=", "")
+        .strip()
+    )
+    raw_val = str(value).replace("\0", "")
+    clean_val = raw_val.split("\r")[0].split("\n")[0].strip()
+    return clean_key, clean_val
+
+
+def _set_env_line(key: str, value: str) -> str:
+    """Format and return a single sanitized KEY=VALUE line for .env persistence."""
+    clean_key, clean_val = _clean_key_value(key, value)
+    return f"{clean_key}={clean_val}"
+
+
+def _mask_key(key: str | None) -> str:
+    """Return a masked preview of an API key, showing only the last 4 chars."""
+    if not key or key.strip() in _PLACEHOLDER_KEYS:
         return "Not set"
-    # Keys ≤ 4 chars would be fully exposed — mask them entirely
-    if len(key) <= 4:
+    raw = key.strip()
+    if len(raw) <= 4:
         return "****"
-    # Cap the mask body at 20 bullets so the UI column stays compact
-    return "•" * min(len(key) - 4, 20) + key[-4:]
+    return "•" * min(len(raw) - 4, 20) + raw[-4:]
 
 
-def _is_real_key(key: str) -> bool:
-    """Check whether *key* is a genuine API key (not a placeholder).
+def _is_real_key(key: str | None) -> bool:
+    """Check whether key is a genuine API key (not empty or placeholder)."""
+    return bool(key and key.strip() and key.strip() not in _PLACEHOLDER_KEYS)
 
-    Args:
-        key: Raw value read from ``.env``.
 
-    Returns:
-        ``True`` if the key is non-empty and not in
-        :data:`_PLACEHOLDER_KEYS`.
-    """
-    return bool(key) and key not in _PLACEHOLDER_KEYS
+def _is_real_project(project: str | None) -> bool:
+    """Check whether project is a genuine GCP project ID."""
+    return bool(project and project.strip() and project.strip() not in _PLACEHOLDER_PROJECTS)
 
 
 def _read_env_lines() -> list[str]:
-    """Read all lines from the ``.env`` file as a list of strings.
-
-    Returns:
-        List of raw lines (without trailing newlines).  Returns an
-        empty list if the file does not exist so callers never need
-        to handle ``FileNotFoundError``.
-    """
-    if not ENV_FILE.exists():
+    """Read all lines from .env without trailing newlines."""
+    target_file = ENV_FILE if isinstance(ENV_FILE, Path) else Path(ENV_FILE)
+    if not target_file.exists():
         return []
-    return ENV_FILE.read_text(encoding="utf-8").splitlines()
+    return target_file.read_text(encoding="utf-8").splitlines()
 
 
 def _get_env_value(key: str) -> str:
-    """Read a specific key's value from the ``.env`` file.
-
-    Performs a case-insensitive scan of the file.  Comment lines
-    (starting with ``#``) and lines without an ``=`` delimiter are
-    silently skipped.
-
-    Args:
-        key: Environment variable name to look up (e.g.
-            ``"GEMINI_API_KEY"``).
-
-    Returns:
-        The trimmed value string, or ``""`` if the key is absent.
-    """
+    """Read a specific key value from .env (case-insensitive)."""
     for line in _read_env_lines():
         stripped = line.strip()
-        # Skip comments and lines that aren't key=value pairs
         if stripped.startswith("#") or "=" not in stripped:
             continue
         k, _, v = stripped.partition("=")
-        # Case-insensitive match so "gemini_api_key" == "GEMINI_API_KEY"
         if k.strip().upper() == key.upper():
             return v.strip()
     return ""
 
 
 def _update_env_file(updates: dict[str, str]) -> None:
-    """Update specific keys in the ``.env`` file, preserving structure.
-
-    Algorithm:
-        1. Read every line of the existing file.
-        2. For each ``KEY=value`` line whose key matches an entry in
-           *updates* (case-insensitive), replace the value in-place.
-        3. Comment lines and unrelated keys are copied verbatim.
-        4. Any keys in *updates* that were **not** found in the file
-           are appended at the end.
-
-    This approach keeps the developer's hand-written comments and
-    blank-line grouping intact, which is important because operators
-    may customise the ``.env`` file manually.
-
-    Args:
-        updates: Mapping of environment variable names to their new
-            values (e.g. ``{"GEMINI_API_KEY": "abc123"}``).  Keys
-            are matched case-insensitively.
-
-    Raises:
-        OSError: If the file cannot be written (permissions, disk
-            full, etc.).  Callers should handle this.
-    """
+    """Update specific keys in .env preserving formatting, comments, and structure."""
+    target_file = ENV_FILE if isinstance(ENV_FILE, Path) else Path(ENV_FILE)
+    target_file.parent.mkdir(parents=True, exist_ok=True)
     lines = _read_env_lines()
-    updated_keys: set[str] = set()  # Track which keys have been replaced
+
+    # Pre-clean all incoming update pairs
+    sanitized_updates: dict[str, str] = {}
+    for raw_k, raw_v in updates.items():
+        k, v = _clean_key_value(raw_k, str(raw_v) if raw_v is not None else "")
+        if k:
+            sanitized_updates[k] = v
+
+    updated_keys: set[str] = set()
     new_lines: list[str] = []
 
     for line in lines:
         stripped = line.strip()
-        # Preserve comments and non-key-value lines as-is
         if stripped.startswith("#") or "=" not in stripped:
             new_lines.append(line)
             continue
 
-        k, _, v = stripped.partition("=")
+        k, _, _ = stripped.partition("=")
         key_name = k.strip()
 
-        # Check if this line's key matches any of the requested updates
-        if key_name.upper() in {u.upper() for u in updates}:
-            # Find the matching update key (case-insensitive lookup)
-            for update_key, update_val in updates.items():
-                if update_key.upper() == key_name.upper():
-                    new_lines.append(f"{key_name}={update_val}")
-                    updated_keys.add(update_key.upper())
-                    break
+        matched_update_key = None
+        for update_key in sanitized_updates:
+            if update_key.upper() == key_name.upper():
+                matched_update_key = update_key
+                break
+
+        if matched_update_key is not None:
+            new_lines.append(_set_env_line(key_name, sanitized_updates[matched_update_key]))
+            updated_keys.add(matched_update_key.upper())
         else:
             new_lines.append(line)
 
-    # Append any keys that didn't already exist in the file
-    for key, val in updates.items():
+    for key, val in sanitized_updates.items():
         if key.upper() not in updated_keys:
-            new_lines.append(f"{key}={val}")
+            new_lines.append(_set_env_line(key, val))
 
-    ENV_FILE.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    target_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
-# --- Endpoints ---
-
-@router.get("", response_model=SettingsResponse)
-async def get_settings_endpoint() -> SettingsResponse:
-    """Get current application settings with masked API keys.
-
-    Reads raw key values directly from the ``.env`` file (not from
-    the cached ``Settings`` singleton) so the response always
-    reflects the latest on-disk state.  Embedding model metadata
-    comes from the ``Settings`` object because those values are
-    not user-editable at runtime.
-
-    Returns:
-        ``SettingsResponse`` with boolean flags indicating whether
-        each key is configured, masked key previews safe for UI
-        display, and read-only embedding configuration.
-    """
-    # Read keys directly from .env to reflect unsaved / just-written state
+def sync_os_environ_from_env() -> None:
+    """Read the active canonical .env file and synchronize all runtime auth env vars."""
+    use_vertex_raw = _get_env_value("USE_VERTEX_AI")
     gemini_key = _get_env_value("GEMINI_API_KEY")
+    vertex_project = _get_env_value("VERTEX_PROJECT")
+    vertex_location = _get_env_value("VERTEX_LOCATION") or "us-central1"
     openalex_key = _get_env_value("OPENALEX_API_KEY")
     openalex_email = _get_env_value("OPENALEX_EMAIL")
 
-    # Read-only embedding config from the cached Settings singleton
+    _, gemini_clean = _clean_key_value("GEMINI_API_KEY", gemini_key)
+    _, proj_clean = _clean_key_value("VERTEX_PROJECT", vertex_project)
+    _, loc_clean = _clean_key_value("VERTEX_LOCATION", vertex_location)
+    _, openalex_clean = _clean_key_value("OPENALEX_API_KEY", openalex_key)
+    _, email_clean = _clean_key_value("OPENALEX_EMAIL", openalex_email)
+
+    is_vertex = use_vertex_raw.lower() in ("true", "1", "yes")
+
+    if is_vertex:
+        os.environ["USE_VERTEX_AI"] = "true"
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
+        if proj_clean and proj_clean not in _PLACEHOLDER_PROJECTS:
+            os.environ["VERTEX_PROJECT"] = proj_clean
+            os.environ["GOOGLE_CLOUD_PROJECT"] = proj_clean
+        else:
+            os.environ.pop("GOOGLE_CLOUD_PROJECT", None)
+            os.environ.pop("VERTEX_PROJECT", None)
+
+        if loc_clean:
+            os.environ["VERTEX_LOCATION"] = loc_clean
+            os.environ["GOOGLE_CLOUD_LOCATION"] = loc_clean
+
+        os.environ.pop("GEMINI_API_KEY", None)
+        os.environ.pop("GOOGLE_API_KEY", None)
+    else:
+        os.environ["USE_VERTEX_AI"] = "false"
+        os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "FALSE"
+        if gemini_clean and gemini_clean not in _PLACEHOLDER_KEYS:
+            os.environ["GEMINI_API_KEY"] = gemini_clean
+            os.environ["GOOGLE_API_KEY"] = gemini_clean
+        else:
+            os.environ.pop("GEMINI_API_KEY", None)
+            os.environ.pop("GOOGLE_API_KEY", None)
+
+        os.environ.pop("GOOGLE_CLOUD_PROJECT", None)
+        os.environ.pop("VERTEX_PROJECT", None)
+
+    if openalex_clean and openalex_clean not in _PLACEHOLDER_KEYS:
+        os.environ["OPENALEX_API_KEY"] = openalex_clean
+    if email_clean:
+        os.environ["OPENALEX_EMAIL"] = email_clean
+
+
+def reload_runtime_services(app_state: Any = None) -> tuple[Any, Any]:
+    """Hot-swap runtime LLM and embedding services across app.state and ServiceRegistry."""
+    from config import get_settings
+    from core.llm.service import LLMService
+    from features.embedding.providers.gemini_provider import GeminiEmbeddingProvider
+    from agents._service_registry import ServiceRegistry
+
+    # 1. Sync os.environ before clearing Settings singleton
+    sync_os_environ_from_env()
+
+    # 2. Clear cached settings singleton and load fresh settings
+    get_settings.cache_clear()
     settings = get_settings()
+
+    new_llm = LLMService(
+        api_key=settings.gemini_api_key,
+        model_name=settings.adk_model_name,
+    )
+    new_embedding = GeminiEmbeddingProvider(
+        api_key=settings.gemini_api_key,
+        output_dimensionality=settings.embedding_dimensions,
+        model_name=settings.embedding_model,
+    )
+
+    if app_state is not None:
+        app_state.llm_service = new_llm
+
+    if hasattr(ServiceRegistry, "_llm"):
+        ServiceRegistry._llm = new_llm
+    if hasattr(ServiceRegistry, "llm"):
+        ServiceRegistry.llm = new_llm
+    if hasattr(ServiceRegistry, "llm_service"):
+        ServiceRegistry.llm_service = new_llm
+
+    if hasattr(ServiceRegistry, "_embedding_provider"):
+        ServiceRegistry._embedding_provider = new_embedding
+    if hasattr(ServiceRegistry, "embedding_provider"):
+        ServiceRegistry.embedding_provider = new_embedding
+
+    if getattr(ServiceRegistry, "_initialized", False):
+        if hasattr(ServiceRegistry, "_planning_service") and ServiceRegistry._planning_service is not None:
+            try:
+                ServiceRegistry._planning_service.llm = new_llm
+                ServiceRegistry._planning_service._llm = new_llm
+            except Exception:
+                pass
+        if hasattr(ServiceRegistry, "_writing_service") and ServiceRegistry._writing_service is not None:
+            try:
+                ServiceRegistry._writing_service.llm = new_llm
+                ServiceRegistry._writing_service._llm = new_llm
+            except Exception:
+                pass
+        if hasattr(ServiceRegistry, "_paper_retrieval") and ServiceRegistry._paper_retrieval is not None:
+            try:
+                ServiceRegistry._paper_retrieval._embedding_provider = new_embedding
+            except Exception:
+                pass
+
+    logger.info(
+        "Runtime services reloaded (mode=%s, use_vertex_ai=%s, is_configured=%s)",
+        "vertex" if settings.use_vertex_ai else "studio",
+        settings.use_vertex_ai,
+        new_llm.is_configured,
+    )
+    return new_llm, new_embedding
+
+
+# ── Endpoints ────────────────────────────────────────────────────────
+
+@router.get("/auth", response_model=AuthStatusResponse)
+async def get_auth_status() -> AuthStatusResponse:
+    """Get active authentication mode and credential status for popup modal."""
+    gemini_key = _get_env_value("GEMINI_API_KEY")
+    openalex_key = _get_env_value("OPENALEX_API_KEY")
+    openalex_email = _get_env_value("OPENALEX_EMAIL")
+    vertex_project = _get_env_value("VERTEX_PROJECT")
+    vertex_location = _get_env_value("VERTEX_LOCATION") or "us-central1"
+    use_vertex_raw = _get_env_value("USE_VERTEX_AI")
+
+    settings = get_settings()
+
+    if use_vertex_raw.lower() in ("true", "1", "yes"):
+        use_vertex = True
+    elif use_vertex_raw.lower() in ("false", "0", "no"):
+        use_vertex = False
+    else:
+        use_vertex = settings.use_vertex_ai
+
+    mode: Literal["studio", "vertex"] = "vertex" if use_vertex else "studio"
+    has_credentials = (
+        _is_real_project(vertex_project) if use_vertex else _is_real_key(gemini_key)
+    )
+
+    masked_key = _mask_key(gemini_key)
+    masked_openalex = _mask_key(openalex_key)
+
+    return AuthStatusResponse(
+        mode=mode,
+        has_credentials=has_credentials,
+        gemini_api_key_preview=masked_key if _is_real_key(gemini_key) else None,
+        gemini_api_key_set=_is_real_key(gemini_key),
+        vertex_project=vertex_project if _is_real_project(vertex_project) else None,
+        vertex_location=vertex_location,
+        use_vertex_ai=use_vertex,
+        openalex_api_key_preview=masked_openalex if _is_real_key(openalex_key) else None,
+        openalex_api_key_set=_is_real_key(openalex_key),
+        openalex_email=openalex_email or "",
+    )
+
+
+@router.post("/test-connection", response_model=TestConnectionResponse)
+async def test_connection_endpoint(body: TestConnectionRequest) -> TestConnectionResponse:
+    """Perform a live ping to the Gemini model to test credentials before saving."""
+    from core.llm.service import LLMService
+
+    settings = get_settings()
+    test_model = settings.adk_model_name or "gemini-3.5-flash"
+
+    target_mode: Literal["studio", "vertex"]
+    if body.mode:
+        target_mode = body.mode
+    elif body.gemini_api_key is not None and body.vertex_project is None:
+        target_mode = "studio"
+    elif body.vertex_project is not None and body.gemini_api_key is None:
+        target_mode = "vertex"
+    else:
+        target_mode = "vertex" if settings.use_vertex_ai else "studio"
+
+    if body.gemini_api_key is not None:
+        api_key = body.gemini_api_key.strip()
+    else:
+        api_key = _get_env_value("GEMINI_API_KEY") or settings.gemini_api_key
+
+    if body.vertex_project is not None:
+        project = body.vertex_project.strip()
+    else:
+        project = _get_env_value("VERTEX_PROJECT") or settings.vertex_project
+
+    if body.vertex_location is not None and body.vertex_location.strip():
+        location = body.vertex_location.strip()
+    else:
+        location = _get_env_value("VERTEX_LOCATION") or settings.vertex_location or "us-central1"
+
+    result = await LLMService.test_connection(
+        mode=target_mode,
+        api_key=api_key,
+        project=project,
+        location=location,
+        model_name=test_model,
+    )
+
+    return TestConnectionResponse(
+        success=result["success"],
+        message=result["message"],
+        model=result.get("model", test_model),
+        latency_ms=result.get("latency_ms"),
+        mode=target_mode,
+        error=result.get("error"),
+        details=result.get("details"),
+    )
+
+@router.post("/auth", response_model=SettingsResponse)
+async def update_auth(body: AuthUpdateRequest, request: Request) -> SettingsResponse:
+    """Save auth credentials to .env and immediately hot-reload runtime services."""
+    async with _ENV_WRITE_LOCK:
+        use_vertex = body.use_vertex_ai if body.use_vertex_ai is not None else (body.mode == "vertex" if body.mode is not None else None)
+
+        updates: dict[str, str] = {}
+        if use_vertex is not None:
+            updates["USE_VERTEX_AI"] = "true" if use_vertex else "false"
+        if body.gemini_api_key is not None:
+            _, clean_val = _clean_key_value("GEMINI_API_KEY", body.gemini_api_key)
+            updates["GEMINI_API_KEY"] = clean_val
+        if body.vertex_project is not None:
+            _, clean_val = _clean_key_value("VERTEX_PROJECT", body.vertex_project)
+            updates["VERTEX_PROJECT"] = clean_val
+        if body.vertex_location is not None:
+            _, clean_val = _clean_key_value("VERTEX_LOCATION", body.vertex_location)
+            updates["VERTEX_LOCATION"] = clean_val
+        if body.openalex_api_key is not None:
+            _, clean_val = _clean_key_value("OPENALEX_API_KEY", body.openalex_api_key)
+            updates["OPENALEX_API_KEY"] = clean_val
+        if body.openalex_email is not None:
+            _, clean_val = _clean_key_value("OPENALEX_EMAIL", body.openalex_email)
+            updates["OPENALEX_EMAIL"] = clean_val
+
+        try:
+            if updates:
+                _update_env_file(updates)
+            reload_runtime_services(getattr(request.app, "state", None))
+
+            gemini_key = _get_env_value("GEMINI_API_KEY")
+            openalex_key = _get_env_value("OPENALEX_API_KEY")
+            openalex_email = _get_env_value("OPENALEX_EMAIL")
+            vertex_project = _get_env_value("VERTEX_PROJECT")
+            vertex_location = _get_env_value("VERTEX_LOCATION") or "us-central1"
+            use_vertex_raw = _get_env_value("USE_VERTEX_AI")
+
+            settings = get_settings()
+            if use_vertex_raw.lower() in ("true", "1", "yes"):
+                active_use_vertex = True
+            elif use_vertex_raw.lower() in ("false", "0", "no"):
+                active_use_vertex = False
+            else:
+                active_use_vertex = settings.use_vertex_ai
+
+            has_creds = _is_real_project(vertex_project) if active_use_vertex else _is_real_key(gemini_key)
+
+            return SettingsResponse(
+                gemini_api_key_set=_is_real_key(gemini_key),
+                gemini_api_key_preview=_mask_key(gemini_key),
+                openalex_api_key_set=_is_real_key(openalex_key),
+                openalex_api_key_preview=_mask_key(openalex_key),
+                openalex_email=openalex_email or "",
+                embedding_model=settings.embedding_model,
+                embedding_dimensions=settings.embedding_dimensions,
+                use_vertex_ai=active_use_vertex,
+                mode="vertex" if active_use_vertex else "studio",
+                vertex_project=vertex_project if _is_real_project(vertex_project) else None,
+                vertex_location=vertex_location,
+                has_credentials=has_creds,
+            )
+        except Exception as exc:
+            logger.error("Failed to update auth settings: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to write settings: {exc}",
+            )
+
+
+@router.get("", response_model=SettingsResponse)
+async def get_settings_endpoint() -> SettingsResponse:
+    """Get current application settings with masked credentials."""
+    gemini_key = _get_env_value("GEMINI_API_KEY")
+    openalex_key = _get_env_value("OPENALEX_API_KEY")
+    openalex_email = _get_env_value("OPENALEX_EMAIL")
+    vertex_project = _get_env_value("VERTEX_PROJECT")
+    vertex_location = _get_env_value("VERTEX_LOCATION") or "us-central1"
+    use_vertex_raw = _get_env_value("USE_VERTEX_AI")
+
+    settings = get_settings()
+    if use_vertex_raw.lower() in ("true", "1", "yes"):
+        use_vertex = True
+    elif use_vertex_raw.lower() in ("false", "0", "no"):
+        use_vertex = False
+    else:
+        use_vertex = settings.use_vertex_ai
+
+    has_creds = _is_real_project(vertex_project) if use_vertex else _is_real_key(gemini_key)
 
     return SettingsResponse(
         gemini_api_key_set=_is_real_key(gemini_key),
@@ -203,73 +460,75 @@ async def get_settings_endpoint() -> SettingsResponse:
         openalex_email=openalex_email or "",
         embedding_model=settings.embedding_model,
         embedding_dimensions=settings.embedding_dimensions,
+        use_vertex_ai=use_vertex,
+        mode="vertex" if use_vertex else "studio",
+        vertex_project=vertex_project if _is_real_project(vertex_project) else None,
+        vertex_location=vertex_location,
+        has_credentials=has_creds,
     )
 
 
 @router.put("", response_model=SettingsUpdateResponse)
-async def update_settings(body: SettingsUpdateRequest) -> SettingsUpdateResponse:
-    """Update application settings in the ``.env`` file.
+async def update_settings(body: SettingsUpdateRequest, request: Request) -> SettingsUpdateResponse:
+    """Update application settings in .env and hot-reload runtime services."""
+    async with _ENV_WRITE_LOCK:
+        updates: dict[str, str] = {}
+        changes: list[str] = []
 
-    Only non-``None``, non-empty fields are written; omitted fields
-    are left unchanged.  After a successful write the ``Settings``
-    LRU cache is invalidated so the *next* request (via any router)
-    picks up the new values without a full server restart, although
-    some services may still hold stale references.
+        if body.gemini_api_key is not None and body.gemini_api_key.strip():
+            _, clean_val = _clean_key_value("GEMINI_API_KEY", body.gemini_api_key)
+            updates["GEMINI_API_KEY"] = clean_val
+            changes.append("Gemini API key")
 
-    Args:
-        body: Partial update payload — each field is optional.
-            Empty strings are treated as "no change" for API keys,
-            but *are* written for email (allows clearing the value).
+        if body.openalex_api_key is not None and body.openalex_api_key.strip():
+            _, clean_val = _clean_key_value("OPENALEX_API_KEY", body.openalex_api_key)
+            updates["OPENALEX_API_KEY"] = clean_val
+            changes.append("OpenAlex API key")
 
-    Returns:
-        ``SettingsUpdateResponse`` indicating which fields were
-        changed and whether a restart is recommended.
+        if body.openalex_email is not None:
+            _, clean_val = _clean_key_value("OPENALEX_EMAIL", body.openalex_email)
+            updates["OPENALEX_EMAIL"] = clean_val
+            changes.append("OpenAlex email")
 
-    Raises:
-        HTTPException 500: If the ``.env`` file cannot be written
-            (disk full, permission denied, etc.).
-    """
-    updates: dict[str, str] = {}
-    changes: list[str] = []  # Human-readable list for the response message
+        if body.mode is not None:
+            use_vertex = (body.mode == "vertex")
+            updates["USE_VERTEX_AI"] = "true" if use_vertex else "false"
+            changes.append(f"Auth mode ({body.mode})")
+        elif body.use_vertex_ai is not None:
+            updates["USE_VERTEX_AI"] = "true" if body.use_vertex_ai else "false"
+            changes.append("Vertex AI mode")
 
-    # Only update keys that were explicitly provided and non-empty
-    if body.gemini_api_key is not None and body.gemini_api_key.strip():
-        updates["GEMINI_API_KEY"] = body.gemini_api_key.strip()
-        changes.append("Gemini API key")
+        if body.vertex_project is not None:
+            _, clean_val = _clean_key_value("VERTEX_PROJECT", body.vertex_project)
+            updates["VERTEX_PROJECT"] = clean_val
+            changes.append("Vertex project ID")
 
-    if body.openalex_api_key is not None and body.openalex_api_key.strip():
-        updates["OPENALEX_API_KEY"] = body.openalex_api_key.strip()
-        changes.append("OpenAlex API key")
+        if body.vertex_location is not None:
+            _, clean_val = _clean_key_value("VERTEX_LOCATION", body.vertex_location)
+            updates["VERTEX_LOCATION"] = clean_val
+            changes.append("Vertex location")
 
-    # Email is allowed to be empty (clears the polite-pool identity)
-    if body.openalex_email is not None:
-        updates["OPENALEX_EMAIL"] = body.openalex_email.strip()
-        changes.append("OpenAlex email")
+        if not updates:
+            return SettingsUpdateResponse(
+                success=True,
+                message="No changes to apply",
+                restart_required=False,
+            )
 
-    if not updates:
-        return SettingsUpdateResponse(
-            success=True,
-            message="No changes to apply",
-            restart_required=False,
-        )
+        try:
+            _update_env_file(updates)
+            reload_runtime_services(getattr(request.app, "state", None))
 
-    try:
-        _update_env_file(updates)
+            logger.info("Settings updated: %s", ", ".join(changes))
+            return SettingsUpdateResponse(
+                success=True,
+                message=f"Updated: {', '.join(changes)}. Applied immediately.",
+                restart_required=False,
+            )
+        except Exception as exc:
+            logger.error("Failed to update settings: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to write settings: {exc}",
+            )
 
-        # Invalidate the @lru_cache on get_settings() so the next
-        # call re-reads the .env file with the updated values.
-        from config import get_settings as _gs
-        _gs.cache_clear()
-
-        logger.info("Settings updated: %s", ", ".join(changes))
-        return SettingsUpdateResponse(
-            success=True,
-            message=f"Updated: {', '.join(changes)}. Restart the server for full effect.",
-            restart_required=True,
-        )
-    except Exception as exc:
-        logger.error("Failed to update settings: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to write settings: {exc}",
-        )

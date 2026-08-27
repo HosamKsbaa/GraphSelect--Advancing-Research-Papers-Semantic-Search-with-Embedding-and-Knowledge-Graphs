@@ -51,6 +51,7 @@ class ResearchTabPage(BasePage):
         """Navigate to the research tab for a specific project."""
         self.goto(f"/projects/{project_id}/research")
         self.wait_for_url_match(f"**/projects/{project_id}/research")
+        expect(self.container).to_be_visible(timeout=10000)
 
     # Research Questions Methods
     def add_research_question(self, question_text: str) -> None:

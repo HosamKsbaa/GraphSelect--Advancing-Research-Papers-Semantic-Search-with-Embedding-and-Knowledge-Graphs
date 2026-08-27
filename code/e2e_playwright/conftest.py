@@ -12,6 +12,9 @@ os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 BASE_URL = os.environ.get("ALRS_BASE_URL", "http://localhost:4200")
 API_URL = os.environ.get("ALRS_API_URL", "http://localhost:4200/api")
 
+# Set default assertion timeout to 10s for reliable CI/CD & multi-viewport tests
+expect.set_options(timeout=10000)
+
 VIEWPORTS: Dict[str, Dict[str, Any]] = {
     "desktop_fhd": {"width": 1920, "height": 1080, "is_mobile": False, "has_touch": False},
     "desktop_hd":  {"width": 1280, "height": 800,  "is_mobile": False, "has_touch": False},

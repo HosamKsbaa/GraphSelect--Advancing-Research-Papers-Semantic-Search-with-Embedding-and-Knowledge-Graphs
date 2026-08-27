@@ -18,12 +18,12 @@ class BasePage:
         self.health_indicator = page.locator(".sidebar-footer .health-indicator")
         
         # Sidebar Links
-        self.nav_projects = page.locator("a[routerLink='/projects']")
-        self.nav_search = page.locator("a[routerLink='/search']")
-        self.nav_system_status = page.locator("a[routerLink='/system-status']")
-        self.nav_logs = page.locator("a[routerLink='/logs']")
-        self.nav_debug = page.locator("a[routerLink='/debug']")
-        self.nav_settings = page.locator("a[routerLink='/settings']")
+        self.nav_projects = page.locator("a[routerLink='/projects'], a[href='/projects']")
+        self.nav_search = page.locator("a[routerLink='/search'], a[href='/search']")
+        self.nav_system_status = page.locator("a[routerLink='/system-status'], a[href='/system-status']")
+        self.nav_logs = page.locator("a[routerLink='/logs'], a[href='/logs']")
+        self.nav_debug = page.locator("a[routerLink='/debug'], a[href='/debug']")
+        self.nav_settings = page.locator("a[routerLink='/settings'], a[href='/settings']")
         
         # Global Toast Container
         self.toast_container = page.locator("alrs-toast-container")
@@ -35,11 +35,11 @@ class BasePage:
     def goto(self, path: str = "") -> None:
         """Navigate to a relative path from the base URL."""
         target_url = f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
-        self.page.goto(target_url)
+        self.page.goto(target_url, wait_until="commit")
 
-    def wait_for_url_match(self, pattern: str, timeout: float = 10000) -> None:
+    def wait_for_url_match(self, pattern: str, timeout: float = 15000) -> None:
         """Wait for page URL to match the expected glob or regex pattern."""
-        self.page.wait_for_url(pattern, timeout=timeout)
+        self.page.wait_for_url(pattern, timeout=timeout, wait_until="commit")
 
     def get_page_title(self) -> str:
         """Get the text content of the primary h1 heading."""

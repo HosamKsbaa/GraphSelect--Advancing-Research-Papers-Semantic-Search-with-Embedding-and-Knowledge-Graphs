@@ -2,7 +2,7 @@
   <div class="page-header">
     <h1 class="page-title">Settings</h1>
     <p class="text-secondary">
-      Configure API keys and contact email. Changes are saved to the backend <code class="mono">.env</code> file.
+      Configure API keys, Vertex AI credentials, and contact email. Changes are saved to the backend <code class="mono">.env</code> file and applied immediately.
     </p>
   </div>
 
@@ -53,7 +53,7 @@
       </div>
     </div>
 
-    <!-- ─── API Keys Section ─── -->
+    <!-- ─── Dual-Mode AI Authentication Section ─── -->
     <div class="settings-section card glass">
       <div class="section-header">
         <div class="section-icon section-icon-keys">
@@ -62,58 +62,257 @@
           </svg>
         </div>
         <div>
-          <h2 class="section-title">API Keys</h2>
-          <p class="section-subtitle text-muted">Enter your API keys to connect to external services</p>
+          <h2 class="section-title">AI Provider & Authentication</h2>
+          <p class="section-subtitle text-muted">Select provider mode and configure credentials for reasoning and embeddings</p>
         </div>
       </div>
 
       <div class="section-body">
-        <!-- Gemini API Key -->
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">Gemini API Key</div>
-            <div class="setting-description text-muted">
-              Required for text embeddings and semantic similarity.
-              <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-accent">Get a key →</a>
-            </div>
-            <div class="setting-status">
-              @if (settings?.gemini_api_key_set) {
-                <span class="badge badge-success">Active</span>
-                <span class="mono text-xs text-muted">{{ settings?.gemini_api_key_preview }}</span>
-              } @else {
-                <span class="badge badge-error">Not Set</span>
-                <span class="text-xs text-muted">Embedding & similarity features won't work</span>
-              }
-            </div>
-          </div>
-          <div class="setting-input">
-            <div class="input-with-toggle">
-              <input
-                id="gemini-key"
-                [type]="showGeminiKey ? 'text' : 'password'"
-                placeholder="Enter new Gemini API key…"
-                [(ngModel)]="geminiApiKey"
-                autocomplete="off"
-              />
-              <button class="toggle-btn" (click)="toggleGeminiVisibility()" type="button" title="Toggle visibility">
-                @if (showGeminiKey) {
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-                    <line x1="1" y1="1" x2="23" y2="23"/>
-                  </svg>
-                } @else {
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                    <circle cx="12" cy="12" r="3"/>
-                  </svg>
-                }
-              </button>
-            </div>
+        <!-- Segmented Mode Switcher -->
+        <div class="mode-switcher-container">
+          <div class="mode-switcher segmented-control" role="tablist" aria-label="AI Provider Mode">
+            <button
+              id="tabAiStudio"
+              type="button"
+              class="segment-btn"
+              [class.active]="authMode === 'studio'"
+              (click)="setMode('studio')"
+              role="tab"
+              [attr.aria-selected]="authMode === 'studio'"
+              tabindex="-1"
+            >
+              <span class="segment-icon">⚡</span>
+              <span class="segment-title">Google AI Studio</span>
+              <span class="segment-subtitle text-xs">(API Key)</span>
+            </button>
+            <button
+              id="tabVertexAi"
+              type="button"
+              class="segment-btn"
+              [class.active]="authMode === 'vertex'"
+              (click)="setMode('vertex')"
+              role="tab"
+              [attr.aria-selected]="authMode === 'vertex'"
+              tabindex="-1"
+            >
+              <span class="segment-icon">🏢</span>
+              <span class="segment-title">Vertex AI</span>
+              <span class="segment-subtitle text-xs">(Google Cloud)</span>
+            </button>
           </div>
         </div>
 
-        <div class="setting-divider"></div>
+        <!-- Option A: Google AI Studio Controls -->
+        @if (authMode === 'studio') {
+          <div class="auth-mode-content animate-fade-in">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">Gemini API Key</div>
+                <div class="setting-description text-muted">
+                  Required for text embeddings, semantic similarity, and AI agent reasoning.
+                  <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-accent">Get a key →</a>
+                </div>
+                <div class="setting-status">
+                  @if (settings?.gemini_api_key_set) {
+                    <span class="badge badge-success">Active</span>
+                    <span class="mono text-xs text-muted">{{ settings?.gemini_api_key_preview }}</span>
+                  } @else {
+                    <span class="badge badge-error">Not Set</span>
+                    <span class="text-xs text-muted">Embedding & similarity features won't work</span>
+                  }
+                </div>
+              </div>
+              <div class="setting-input">
+                <div class="input-with-toggle">
+                  <input
+                    id="gemini-key"
+                    name="geminiApiKey"
+                    [type]="showGeminiKey ? 'text' : 'password'"
+                    placeholder="Enter new Gemini API key (AIzaSy...)"
+                    [(ngModel)]="geminiApiKey"
+                    autocomplete="off"
+                  />
+                  <button class="toggle-btn btn-toggle-eye" id="modal-gemini-key-toggle" (click)="toggleGeminiVisibility()" type="button" title="Toggle visibility">
+                    @if (showGeminiKey) {
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                        <line x1="1" y1="1" x2="23" y2="23"/>
+                      </svg>
+                    } @else {
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
 
+            <!-- Setup Guide Card (Studio) -->
+            <div class="setup-guide guide-card ai-studio-guide card">
+              <div class="guide-header">
+                <span class="guide-icon">💡</span>
+                <span class="guide-title">How to get a Google AI Studio API key</span>
+              </div>
+              <ol class="guide-steps">
+                <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-accent" tabindex="-1">Google AI Studio</a>.</li>
+                <li>Sign in with your Google account and click <strong>Create API key</strong>.</li>
+                <li>Copy your key (starts with <code class="mono">AIzaSy...</code>), paste it into the field above, and click <strong>Test Connection</strong>.</li>
+              </ol>
+            </div>
+          </div>
+        }
+
+        <!-- Option B: Vertex AI Controls -->
+        @if (authMode === 'vertex') {
+          <div class="auth-mode-content animate-fade-in">
+            <!-- GCP Project ID -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">Google Cloud Project ID</div>
+                <div class="setting-description text-muted">
+                  Your GCP project ID with Vertex AI API enabled.
+                </div>
+                <div class="setting-status">
+                  @if (settings?.vertex_project) {
+                    <span class="badge badge-success">Active Project</span>
+                    <span class="mono text-xs text-muted">{{ settings?.vertex_project }}</span>
+                  } @else {
+                    <span class="badge badge-error">Not Set</span>
+                    <span class="text-xs text-muted">Project ID required for Vertex AI</span>
+                  }
+                </div>
+              </div>
+              <div class="setting-input">
+                <input
+                  id="vertex-project"
+                  name="vertexProject"
+                  type="text"
+                  placeholder="e.g. my-cloud-project-12345"
+                  [(ngModel)]="vertexProject"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+
+            <div class="setting-divider"></div>
+
+            <!-- GCP Location -->
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">Google Cloud Location / Region</div>
+                <div class="setting-description text-muted">
+                  The GCP region where Vertex AI models are deployed (default: <code class="mono">us-central1</code>).
+                </div>
+              </div>
+              <div class="setting-input">
+                <input
+                  id="vertex-location"
+                  name="vertexLocation"
+                  type="text"
+                  placeholder="us-central1"
+                  [(ngModel)]="vertexLocation"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+
+            <!-- Setup Guide Card (Vertex) -->
+            <div class="setup-guide guide-card vertex-guide card">
+              <div class="guide-header">
+                <span class="guide-icon">🏢</span>
+                <span class="guide-title">Google Cloud Vertex AI Setup Guide</span>
+              </div>
+              <ol class="guide-steps">
+                <li>
+                  Authenticate with Application Default Credentials (ADC) on your machine:
+                  <div class="code-box">
+                    <code class="mono">gcloud auth application-default login</code>
+                  </div>
+                </li>
+                <li>
+                  Ensure Vertex AI is enabled on your Google Cloud Project:
+                  <div class="code-box">
+                    <code class="mono">gcloud services enable aiplatform.googleapis.com</code>
+                  </div>
+                </li>
+                <li>Enter your Project ID and Region above, then click <strong>Test Connection</strong> to verify access.</li>
+              </ol>
+            </div>
+          </div>
+        }
+
+        <!-- Connection Tester Bar -->
+        <div class="connection-tester-bar">
+          <button
+            id="btnTestConnection"
+            type="button"
+            class="btn-secondary btn-test-connection"
+            (click)="testConnection()"
+            [disabled]="testingConnection"
+            tabindex="-1"
+          >
+            @if (testingConnection) {
+              <span class="animate-pulse">Pinging Gemini...</span>
+            } @else {
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              Test Connection
+            }
+          </button>
+
+          @if (testResult) {
+            <div class="test-feedback-banner connection-status-result" [ngClass]="testResult.success ? 'success feedback-success' : 'error feedback-error'">
+              <div class="feedback-icon">
+                @if (testResult.success) {
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                } @else {
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="12" y1="8" x2="12" y2="12"/>
+                    <line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                }
+              </div>
+              <div class="feedback-body">
+                <span class="feedback-text">{{ testResult.message }}</span>
+                @if (testResult.latency_ms) {
+                  <span class="badge badge-success mono text-xs">⚡ {{ testResult.latency_ms }}ms</span>
+                }
+                @if (testResult.error) {
+                  <div class="error-detail text-xs mono">{{ testResult.error }}</div>
+                }
+                @if (testResult.details) {
+                  <div class="guidance-detail text-xs text-muted">{{ testResult.details }}</div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Contact Info Section (OpenAlex) ─── -->
+    <div class="settings-section card glass">
+      <div class="section-header">
+        <div class="section-icon section-icon-email">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+            <polyline points="22,6 12,13 2,6"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="section-title">Literature Provider (OpenAlex)</h2>
+          <p class="section-subtitle text-muted">Used for academic paper retrieval and polite pool rate limits</p>
+        </div>
+      </div>
+
+      <div class="section-body">
         <!-- OpenAlex API Key -->
         <div class="setting-row">
           <div class="setting-info">
@@ -136,6 +335,7 @@
             <div class="input-with-toggle">
               <input
                 id="openalex-key"
+                name="openalexApiKey"
                 [type]="showOpenalexKey ? 'text' : 'password'"
                 placeholder="Enter new OpenAlex API key…"
                 [(ngModel)]="openalexApiKey"
@@ -157,28 +357,13 @@
             </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- ─── Contact Info Section ─── -->
-    <div class="settings-section card glass">
-      <div class="section-header">
-        <div class="section-icon section-icon-email">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-            <polyline points="22,6 12,13 2,6"/>
-          </svg>
-        </div>
-        <div>
-          <h2 class="section-title">Contact Email</h2>
-          <p class="section-subtitle text-muted">Used for OpenAlex polite pool identification</p>
-        </div>
-      </div>
+        <div class="setting-divider"></div>
 
-      <div class="section-body">
+        <!-- Contact Email -->
         <div class="setting-row">
           <div class="setting-info">
-            <div class="setting-label">Email Address</div>
+            <div class="setting-label">Contact Email</div>
             <div class="setting-description text-muted">
               OpenAlex uses your email for polite pool access (better rate limits, no key needed).
             </div>
@@ -186,6 +371,7 @@
           <div class="setting-input">
             <input
               id="openalex-email"
+              name="openalexEmail"
               type="email"
               placeholder="your-email@example.com"
               [(ngModel)]="openalexEmail"
@@ -216,6 +402,10 @@
         <div class="section-body">
           <div class="info-grid">
             <div class="info-item">
+              <span class="info-label">Active Provider</span>
+              <span class="info-value mono">{{ settings.use_vertex_ai ? 'Google Cloud Vertex AI' : 'Google AI Studio' }}</span>
+            </div>
+            <div class="info-item">
               <span class="info-label">Embedding Model</span>
               <span class="info-value mono">{{ settings.embedding_model }}</span>
             </div>
@@ -228,7 +418,7 @@
       </div>
     }
 
-    <!-- ─── Save Button ─── -->
+    <!-- ─── Save Bar ─── -->
     <div class="save-bar">
       <button
         class="btn-primary btn-save"
@@ -247,7 +437,7 @@
         }
       </button>
       <span class="save-hint text-muted text-xs">
-        A server restart may be required for API key changes to take full effect.
+        Credentials are saved to <code class="mono">.env</code> and hot-swapped into runtime memory immediately.
       </span>
     </div>
   }

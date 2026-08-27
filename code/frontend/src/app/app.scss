@@ -144,3 +144,54 @@
   padding: var(--space-8);
   min-height: 100vh;
 }
+
+/* --- Responsive Layout (Mobile / Tablet) --- */
+@media (max-width: 768px) {
+  .app-shell {
+    min-width: 100%;
+    flex-direction: column;
+  }
+
+  .sidebar {
+    position: static;
+    width: 100%;
+    min-height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: var(--space-4);
+  }
+
+  .sidebar-header {
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .nav-group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .nav-group-header {
+    display: none;
+  }
+
+  .sidebar-footer {
+    padding-top: var(--space-2);
+    border-top: none;
+  }
+
+  .main-content {
+    margin-left: 0;
+    padding: var(--space-4);
+    min-height: auto;
+  }
+}
+

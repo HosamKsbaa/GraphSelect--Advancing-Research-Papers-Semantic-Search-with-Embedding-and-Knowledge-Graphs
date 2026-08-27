@@ -35,7 +35,15 @@ def _mock_project_base(page: Page, project_id: str, name: str = "Chat E2E Projec
         "topic": "Graph Neural Networks & Misinformation Detection",
         "target_level": "master"
     }, method="GET")
-    mock_api_route(page, f"**/api/projects/{project_id}/touch*", status_code=200, json_data={"message": "ok"}, method="POST")
+    mock_api_route(page, "**/api/settings/auth*", status_code=200, json_data={
+        "mode": "google_ai_studio",
+        "has_credentials": True,
+        "gemini_api_key_set": True,
+        "gemini_api_key_preview": "••••••••••••1234",
+        "vertex_project": None,
+        "vertex_location": "us-central1",
+        "use_vertex_ai": False,
+    }, method="GET")
     mock_api_route(page, "**/api/settings*", status_code=200, json_data={
         "api_base_url": "http://localhost:8000/api",
         "gemini_api_key_set": True,

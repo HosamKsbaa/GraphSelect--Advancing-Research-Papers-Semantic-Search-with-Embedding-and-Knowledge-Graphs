@@ -10,7 +10,7 @@ class SystemStatusPage(BasePage):
         super().__init__(page, base_url)
         
         # Header
-        self.page_title = page.locator("h1.page-title")
+        self.page_title = page.locator("h1.page-title, h1")
         self.new_search_btn = page.locator(".page-header a:has-text('New Search')")
         
         # Health & Metric Cards
@@ -33,6 +33,7 @@ class SystemStatusPage(BasePage):
         """Navigate to the system status page."""
         self.goto("/system-status")
         self.wait_for_url_match("**/system-status")
+        expect(self.page_title.first).to_be_visible(timeout=15000)
 
     def get_system_health(self) -> str:
         """Return system health status badge text ('healthy', 'degraded', etc.)."""

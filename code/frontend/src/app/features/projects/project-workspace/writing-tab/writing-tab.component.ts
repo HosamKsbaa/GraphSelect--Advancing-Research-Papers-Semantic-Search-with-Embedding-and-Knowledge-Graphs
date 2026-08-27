@@ -11,6 +11,9 @@ import {
 } from '../../../../core/api.service';
 import { MarkdownPreviewComponent } from '../../../../shared/markdown-preview/markdown-preview.component';
 import { LoadingIndicatorComponent } from '../../../../shared/loading-indicator/loading-indicator.component';
+import { EmptyStateComponent } from '../../../../shared/empty-state/empty-state.component';
+import { AuthModalService } from '../../../../core/auth-modal.service';
+import { ToastService } from '../../../../core/toast.service';
 
 export interface SectionDraftState {
   section: OutlineSection;
@@ -19,8 +22,6 @@ export interface SectionDraftState {
   review: ReviewResponse | null;
   revision_count: number;
 }
-
-import { EmptyStateComponent } from '../../../../shared/empty-state/empty-state.component';
 
 @Component({
   selector: 'app-writing-tab',
@@ -32,6 +33,8 @@ import { EmptyStateComponent } from '../../../../shared/empty-state/empty-state.
 export class WritingTabComponent implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
+  private toastService = inject(ToastService);
+  public authModalService = inject(AuthModalService);
 
   projectId: string = '';
   sections: SectionDraftState[] = [];
@@ -42,10 +45,29 @@ export class WritingTabComponent implements OnInit {
   editMode = false;
   editedDraftText = '';
 
+  getEffectiveProjectId(): string {
+    const parentId = this.route.parent?.snapshot.paramMap.get('id');
+    const selfId = this.route.snapshot.paramMap.get('id');
+    if (parentId || selfId) return parentId || selfId || '';
+    if (typeof window !== 'undefined' && window.location) {
+      const parts = window.location.pathname.split('/projects/');
+      if (parts.length > 1) {
+        const id = parts[1].split('/')[0];
+        if (id) return id;
+      }
+    }
+    return '';
+  }
+
   ngOnInit() {
+    this.projectId = this.getEffectiveProjectId();
+    if (this.projectId) {
+      this.loadOutline();
+    }
     this.route.parent?.paramMap.subscribe(params => {
-      this.projectId = params.get('id') || '';
-      if (this.projectId) {
+      const id = params.get('id') || this.getEffectiveProjectId();
+      if (id && id !== this.projectId) {
+        this.projectId = id;
         this.loadOutline();
       }
     });
@@ -96,6 +118,15 @@ export class WritingTabComponent implements OnInit {
   draftSection() {
     if (!this.selectedSection || !this.projectId) return;
 
+    if (!this.authModalService.hasValidCredentials()) {
+      this.toastService.warning(
+        'Credentials Required',
+        'Please configure your Gemini API Key or Vertex AI credentials to draft paper sections.'
+      );
+      this.authModalService.open();
+      return;
+    }
+
     this.isDrafting = true;
     let context = '';
     if (this.selectedSection.review && this.selectedSection.review.feedback.length > 0) {
@@ -123,12 +154,22 @@ export class WritingTabComponent implements OnInit {
       error: (err) => {
         console.error('Failed to draft section', err);
         this.isDrafting = false;
+        this.toastService.error('Draft Failed', err.error?.detail || 'Failed to generate section draft');
       }
     });
   }
 
   reviewSection() {
     if (!this.selectedSection || !this.projectId || !this.selectedSection.draft_text) return;
+
+    if (!this.authModalService.hasValidCredentials()) {
+      this.toastService.warning(
+        'Credentials Required',
+        'Please configure your Gemini API Key or Vertex AI credentials to review section drafts.'
+      );
+      this.authModalService.open();
+      return;
+    }
 
     this.isReviewing = true;
     const req: ReviewRequest = {
@@ -149,6 +190,7 @@ export class WritingTabComponent implements OnInit {
       error: (err) => {
         console.error('Failed to review section', err);
         this.isReviewing = false;
+        this.toastService.error('Review Failed', err.error?.detail || 'Failed to review section');
       }
     });
   }

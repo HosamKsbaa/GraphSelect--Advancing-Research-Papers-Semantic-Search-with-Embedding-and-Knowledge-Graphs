@@ -1,13 +1,15 @@
 """LLM service for ALRS v2 using Google Gemini.
 
-Provides completion and structured JSON output with exponential backoff
-retry logic. Uses the ``google.genai`` client directly.
+Provides completion, structured JSON output, dual-mode client initialization
+(Google AI Studio vs Google Cloud Vertex AI), and live connection testing.
+Uses the ``google.genai`` client directly.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import os
 import time
 from functools import partial
 from typing import Any, TypeVar
@@ -29,45 +31,265 @@ T = TypeVar("T")
 MAX_RETRIES: int = 3
 BASE_BACKOFF_SECONDS: float = 1.0
 
+# Sentinels representing unconfigured / placeholder states
+_PLACEHOLDERS = {"", "your_gemini_api_key_here", "your_project_id_here", "your-gcp-project-id", "Not set", "None", "null"}
+
 
 class LLMService:
-    """Central service for Gemini LLM calls with retry and structured output.
+    """Central service for Gemini LLM calls with retry, structured output, and dual-mode auth.
 
-    Provides prompt completion and JSON-structured output parsing with
-    automatic exponential backoff on transient errors (429, 503).
+    Supports both Google AI Studio (API key) and Google Cloud Vertex AI (Project + Location + ADC).
     """
 
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = "gemini-3.5-flash",
+        vertexai: bool | None = None,
+        project: str | None = None,
+        location: str | None = None,
+        model_name: str | None = None,
         log_service: Any | None = None,
     ) -> None:
-        import os
+        """Initialize the LLM service with explicit parameters or system settings."""
         from config import get_settings
         settings = get_settings()
 
-        effective_key = api_key or os.environ.get("GEMINI_API_KEY") or settings.gemini_api_key
-        # Check if placeholder
-        if effective_key in {"", "your_gemini_api_key_here"}:
-            effective_key = None
-
-        if settings.use_vertex_ai and settings.vertex_project:
-            self._client = genai.Client(
-                vertexai=True,
-                project=settings.vertex_project,
-                location=settings.vertex_location,
-            )
-            logger.info("LLMService initialized via Vertex AI (project=%s, location=%s)", settings.vertex_project, settings.vertex_location)
-        elif effective_key:
-            self._client = genai.Client(api_key=effective_key)
-            logger.info("LLMService initialized via Google AI Studio")
-        else:
-            self._client = None
-            logger.warning("LLMService initialized without credentials (GEMINI_API_KEY not configured)")
-
-        self._model_name = model_name
+        # Determine mode
+        self._use_vertex_ai: bool = vertexai if vertexai is not None else settings.use_vertex_ai
+        self._model_name: str = model_name or settings.adk_model_name or "gemini-3.5-flash"
         self._log_service = log_service
+        self._client: genai.Client | None = None
+        self._init_error: str | None = None
+
+        if self._use_vertex_ai:
+            self._mode = "vertex"
+            self._project = (
+                project or (settings.vertex_project if settings.vertex_project and settings.vertex_project not in _PLACEHOLDERS else None) or os.environ.get("GOOGLE_CLOUD_PROJECT") or ""
+            ).strip()
+            self._location = (
+                location or settings.vertex_location or os.environ.get("GOOGLE_CLOUD_LOCATION") or "us-central1"
+            ).strip()
+            self._api_key = None
+
+            if self._project and self._project not in _PLACEHOLDERS:
+                try:
+                    self._client = genai.Client(
+                        vertexai=True,
+                        project=self._project,
+                        location=self._location,
+                    )
+                    logger.info(
+                        "LLMService initialized via Vertex AI (project=%s, location=%s, model=%s)",
+                        self._project, self._location, self._model_name,
+                    )
+                except Exception as exc:
+                    self._client = None
+                    self._init_error = f"Vertex AI initialization failed: {exc}"
+                    logger.warning("LLMService failed to initialize Vertex AI client: %s", exc)
+            else:
+                self._client = None
+                self._init_error = "Vertex AI project ID not configured"
+                logger.warning("LLMService initialized in Vertex AI mode without a configured GCP project")
+        else:
+            self._mode = "studio"
+            self._project = None
+            self._location = None
+            effective_key = (
+                api_key
+                or (settings.gemini_api_key if settings.gemini_api_key and settings.gemini_api_key not in _PLACEHOLDERS else None)
+                or os.environ.get("GEMINI_API_KEY")
+                or os.environ.get("GOOGLE_API_KEY")
+                or ""
+            ).strip()
+            if effective_key in _PLACEHOLDERS:
+                effective_key = ""
+
+            self._api_key = effective_key or None
+
+
+            if self._api_key:
+                try:
+                    self._client = genai.Client(api_key=self._api_key)
+                    logger.info("LLMService initialized via Google AI Studio (model=%s)", self._model_name)
+                except Exception as exc:
+                    self._client = None
+                    self._init_error = f"Google AI Studio initialization failed: {exc}"
+                    logger.warning("LLMService failed to initialize Google AI Studio client: %s", exc)
+            else:
+                self._client = None
+                self._init_error = "Gemini API key not configured"
+                logger.warning("LLMService initialized without credentials (GEMINI_API_KEY not configured)")
+
+    # ── Inspection Properties ────────────────────────────────────────
+
+    @property
+    def is_configured(self) -> bool:
+        """Return True if a valid genai.Client instance is active."""
+        return self._client is not None
+
+    @property
+    def is_vertex_ai(self) -> bool:
+        """Return True if active auth mode is Vertex AI."""
+        return self._mode == "vertex"
+
+    @property
+    def mode(self) -> str:
+        """Return the active auth mode ('studio' or 'vertex')."""
+        return self._mode
+
+    @property
+    def project(self) -> str | None:
+        """Return the active GCP Project ID when in Vertex AI mode."""
+        return self._project
+
+    @property
+    def location(self) -> str | None:
+        """Return the active GCP Location when in Vertex AI mode."""
+        return self._location
+
+    @property
+    def client(self) -> genai.Client | None:
+        """Return the underlying google.genai.Client instance."""
+        return self._client
+
+    @property
+    def model_name(self) -> str:
+        """Return the active completion model name."""
+        return self._model_name
+
+    # ── Connectivity Test Probe ──────────────────────────────────────
+
+    @classmethod
+    async def test_connection(
+        cls,
+        mode: str = "studio",
+        api_key: str | None = None,
+        project: str | None = None,
+        location: str | None = None,
+        model_name: str | None = None,
+    ) -> dict[str, Any]:
+        """Probe Gemini API connectivity with temporary or configured credentials.
+
+        Executes a minimal test generation ('ping') and records round-trip latency.
+        """
+        is_vertex = str(mode).lower() in ("vertex", "vertex_ai", "vertexai")
+        target_mode = "vertex" if is_vertex else "studio"
+        target_model = model_name or "gemini-3.5-flash"
+
+        # 1. Instantiate probe client
+        try:
+            if is_vertex:
+                if project is not None:
+                    proj = project.strip()
+                else:
+                    proj = (os.environ.get("GOOGLE_CLOUD_PROJECT") or "").strip()
+
+                if not proj or proj in _PLACEHOLDERS:
+                    return {
+                        "success": False,
+                        "error": "Google Cloud Project ID is not configured for Vertex AI",
+                        "message": "Connection failed",
+                        "model": target_model,
+                        "mode": target_mode,
+                        "details": "Enter a valid GCP Project ID.",
+                    }
+                if location is not None and location.strip():
+                    loc = location.strip()
+                else:
+                    loc = (os.environ.get("GOOGLE_CLOUD_LOCATION") or "us-central1").strip()
+
+                probe_client = genai.Client(
+                    vertexai=True,
+                    project=proj,
+                    location=loc,
+                )
+            else:
+                if api_key is not None:
+                    key = api_key.strip()
+                else:
+                    key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
+
+                if not key or key in _PLACEHOLDERS:
+                    return {
+                        "success": False,
+                        "error": "Gemini API key is not configured for Google AI Studio",
+                        "message": "Connection failed",
+                        "model": target_model,
+                        "mode": target_mode,
+                        "details": "Get a free API key at https://aistudio.google.com/",
+                    }
+                probe_client = genai.Client(api_key=key)
+        except Exception as exc:
+            err_msg = str(exc)
+            if "DefaultCredentialsError" in type(exc).__name__ or "credentials" in err_msg.lower():
+                err_msg = "Application Default Credentials (ADC) not found. Run 'gcloud auth application-default login'."
+            return {
+                "success": False,
+                "error": f"Client initialization failed: {err_msg}",
+                "message": "Connection failed",
+                "model": target_model,
+                "mode": target_mode,
+            }
+
+        # 2. Perform live probe ping
+        loop = asyncio.get_running_loop()
+        start_time = time.monotonic()
+        config = types.GenerateContentConfig(
+            max_output_tokens=5,
+            temperature=0.0,
+        )
+
+        try:
+            func = partial(
+                probe_client.models.generate_content,
+                model=target_model,
+                contents="ping",
+                config=config,
+            )
+            await loop.run_in_executor(None, func)
+            latency_ms = round((time.monotonic() - start_time) * 1000, 1)
+            return {
+                "success": True,
+                "message": f"Connection established successfully ({'Vertex AI' if is_vertex else 'Google AI Studio'})",
+                "model": target_model,
+                "latency_ms": latency_ms,
+                "mode": target_mode,
+            }
+        except Exception as exc:
+            latency_ms = round((time.monotonic() - start_time) * 1000, 1)
+            err_str = str(exc)
+            code = getattr(exc, "code", getattr(exc, "status_code", 0))
+
+            if "API_KEY_INVALID" in err_str or "API key not valid" in err_str or code == 400:
+                clean_error = "Invalid Gemini API key. Please check your API key in Google AI Studio."
+                details = "Verify your API key at https://aistudio.google.com/"
+            elif "PERMISSION_DENIED" in err_str or code == 403:
+                clean_error = "Permission denied. Ensure Vertex AI API (aiplatform.googleapis.com) is enabled and you have necessary IAM permissions."
+                details = "Enable the API with 'gcloud services enable aiplatform.googleapis.com'."
+            elif "DefaultCredentialsError" in type(exc).__name__ or "could not automatically determine credentials" in err_str.lower():
+                clean_error = "Missing Google Cloud Application Default Credentials. Run 'gcloud auth application-default login'."
+                details = "Run 'gcloud auth application-default login' to authenticate with Vertex AI."
+            elif "RESOURCE_EXHAUSTED" in err_str or code == 429:
+                clean_error = "Quota exceeded (HTTP 429). Check your billing or rate limits."
+                details = "Check rate limits in Google AI Studio or GCP Console."
+            elif "NOT_FOUND" in err_str or code == 404:
+                clean_error = f"Model '{target_model}' was not found or is unavailable in the specified region/project."
+                details = "Ensure the model is available in your region."
+            else:
+                clean_error = f"Connection failed: {err_str}"
+                details = None
+
+            return {
+                "success": False,
+                "error": clean_error,
+                "message": f"Connection failed: {clean_error}",
+                "model": target_model,
+                "latency_ms": latency_ms,
+                "mode": target_mode,
+                "details": details,
+            }
+
+    # ── Completion Methods ───────────────────────────────────────────
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         """Generate a text completion from the Gemini model.
@@ -81,12 +303,19 @@ class LLMService:
             CompletionResponse with generated text and token usage.
 
         Raises:
-            Exception: After all retries are exhausted or if credentials missing.
+            ValueError: If credentials are missing.
+            Exception: After all retries are exhausted.
         """
         if self._client is None:
-            raise ValueError(
-                "Gemini API key is not configured. Please add your GEMINI_API_KEY in Settings or .env file."
-            )
+            if self._mode == "vertex":
+                raise ValueError(
+                    "Vertex AI is enabled but project ID is missing or Application Default Credentials (ADC) are not set. "
+                    "Please configure GCP_PROJECT_ID in Settings or run 'gcloud auth application-default login'."
+                )
+            else:
+                raise ValueError(
+                    "Gemini API key is not configured. Please add your GEMINI_API_KEY in Settings or .env file."
+                )
 
         loop = asyncio.get_running_loop()
 
@@ -205,3 +434,4 @@ class LLMService:
             ) from e
 
         return StructuredOutput(data=model_instance, raw_text=response.text)
+

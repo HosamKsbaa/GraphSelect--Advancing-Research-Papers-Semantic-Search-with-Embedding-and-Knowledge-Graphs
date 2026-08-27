@@ -1,0 +1,296 @@
+<button
+  id="btnOpenApiKeyModal"
+  type="button"
+  style="position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0;"
+  (click)="authModal.open()"
+  aria-hidden="true"
+  tabindex="-1"
+>
+  Open Credentials
+</button>
+
+@if (authModal.isOpen()) {
+  <div class="modal-backdrop dialog-backdrop animate-fade-in" (click)="onBackdropClick($event)" role="presentation">
+    <div
+      class="card glass modal-dialog animate-slide-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modalTitle"
+      (click)="$event.stopPropagation()"
+    >
+      <!-- Modal Header -->
+      <div class="modal-header">
+        <div class="header-title-group">
+          <div class="header-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+            </svg>
+          </div>
+          <div>
+            <h2 id="modalTitle" class="modal-title">Configure Credentials</h2>
+            <p class="modal-subtitle text-muted">Bring Your Own Key (BYOK) — Dual-Mode Provider</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="badge badge-accent">Dual-Mode BYOK</span>
+          <button class="btn-close btn-ghost" type="button" (click)="close()" aria-label="Close dialog" title="Close">✕</button>
+        </div>
+      </div>
+
+      <!-- Segmented Mode Switcher -->
+      <div class="mode-switcher-container" role="tablist" aria-label="AI Provider Mode">
+        <button
+          id="tabAiStudio"
+          type="button"
+          class="segment-btn"
+          [class.active]="activeTab === 'studio'"
+          (click)="setMode('studio')"
+          role="tab"
+          [attr.aria-selected]="activeTab === 'studio'"
+        >
+          <span class="segment-icon">⚡</span>
+          <span>Google AI Studio</span>
+        </button>
+        <button
+          id="tabVertexAi"
+          type="button"
+          class="segment-btn"
+          [class.active]="activeTab === 'vertex'"
+          (click)="setMode('vertex')"
+          role="tab"
+          [attr.aria-selected]="activeTab === 'vertex'"
+        >
+          <span class="segment-icon">🏢</span>
+          <span>Vertex AI</span>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="modal-body">
+        <!-- OPTION A: Google AI Studio Panel -->
+        @if (activeTab === 'studio') {
+          <div class="provider-panel animate-fade-in">
+            <!-- Active Key Status (if configured) -->
+            @if (authModal.authStatus()?.gemini_api_key_set && authModal.authStatus()?.gemini_api_key_preview) {
+              <div class="key-status-row">
+                <span class="badge badge-success">Configured</span>
+                <span class="mono text-muted">{{ authModal.authStatus()?.gemini_api_key_preview }}</span>
+              </div>
+            }
+
+            <div class="form-group">
+              <label for="geminiApiKeyInput" class="form-label">
+                Gemini API Key
+                <span class="text-accent">*</span>
+              </label>
+              <div class="input-with-toggle">
+                <input
+                  #geminiKeyInput
+                  id="geminiApiKeyInput"
+                  [type]="showGeminiKey ? 'text' : 'password'"
+                  placeholder="AIzaSy... (Enter Gemini API Key)"
+                  [(ngModel)]="geminiApiKey"
+                  name="geminiApiKey"
+                  autocomplete="off"
+                />
+                <button
+                  class="btn-toggle-eye"
+                  id="modal-gemini-key-toggle"
+                  type="button"
+                  (click)="toggleGeminiKey()"
+                  [attr.aria-label]="showGeminiKey ? 'Hide key' : 'Show key'"
+                  title="Toggle password visibility"
+                >
+                  @if (showGeminiKey) {
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  } @else {
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  }
+                </button>
+              </div>
+            </div>
+
+            <!-- Setup Guide Card: Google AI Studio -->
+            <div class="setup-guide guide-card ai-studio-guide card">
+              <div class="guide-header">
+                <span class="guide-icon">⚡</span>
+                <h4 class="guide-title">How to get a Google AI Studio API Key</h4>
+              </div>
+              <ol class="guide-steps">
+                <li>
+                  Sign in to <strong>Google AI Studio</strong> at
+                  <a href="https://aistudio.google.com/" target="_blank" rel="noopener" class="guide-link text-accent">
+                    https://aistudio.google.com/
+                  </a>
+                </li>
+                <li>Click the <strong>"Get API key"</strong> or <strong>"Create API key"</strong> button in the left navigation sidebar.</li>
+                <li>Select an existing Google Cloud project or create a new one with a single click.</li>
+                <li>Copy your generated API key (format: <code class="mono">AIzaSy...</code>) and paste it into the field above.</li>
+              </ol>
+              <div class="guide-callout info">
+                <span class="callout-icon">💡</span>
+                <div class="callout-text">
+                  <strong>Free Tier Limits:</strong> Google AI Studio provides a free quota of up to 15 Requests Per Minute (RPM), 1 Million Tokens Per Minute (TPM), and 1,500 Requests Per Day (RPD) on Gemini 2.5 Flash models with zero credit card required.
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- OPTION B: Vertex AI Panel -->
+        @if (activeTab === 'vertex') {
+          <div class="provider-panel animate-fade-in">
+            <!-- Active Vertex Status (if configured) -->
+            @if (authModal.authStatus()?.use_vertex_ai && authModal.authStatus()?.vertex_project) {
+              <div class="key-status-row">
+                <span class="badge badge-success">Configured</span>
+                <span class="mono text-muted">{{ authModal.authStatus()?.vertex_project }} ({{ authModal.authStatus()?.vertex_location || 'us-central1' }})</span>
+              </div>
+            }
+
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="gcpProjectIdInput" class="form-label">
+                  Google Cloud Project ID
+                  <span class="text-accent">*</span>
+                </label>
+                <input
+                  #vertexProjectInput
+                  id="gcpProjectIdInput"
+                  type="text"
+                  placeholder="your-gcp-project-id"
+                  [(ngModel)]="vertexProject"
+                  name="vertexProject"
+                  autocomplete="off"
+                />
+              </div>
+
+              <div class="form-group">
+                <label for="gcpLocationInput" class="form-label">
+                  Google Cloud Region / Location
+                </label>
+                <input
+                  id="gcpLocationInput"
+                  type="text"
+                  placeholder="us-central1"
+                  [(ngModel)]="vertexLocation"
+                  name="vertexLocation"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
+
+            <!-- Setup Guide Card: Vertex AI -->
+            <div class="setup-guide guide-card vertex-guide card">
+              <div class="guide-header">
+                <span class="guide-icon">🏢</span>
+                <h4 class="guide-title">How to configure Google Cloud Vertex AI</h4>
+              </div>
+              <ol class="guide-steps">
+                <li>
+                  Log into your Google Cloud account via the Google Cloud CLI (gcloud) to generate Application Default Credentials (ADC):
+                  <pre class="code-block"><code class="mono">gcloud auth application-default login</code></pre>
+                </li>
+                <li>
+                  Enable the <strong>Vertex AI API</strong> (<code class="mono">aiplatform.googleapis.com</code>) for your Google Cloud project:
+                  <pre class="code-block"><code class="mono">gcloud services enable aiplatform.googleapis.com</code></pre>
+                </li>
+                <li>Enter your <strong>GCP Project ID</strong> and preferred <strong>Region / Location</strong> in the fields above.</li>
+              </ol>
+              <div class="guide-callout info">
+                <span class="callout-icon">🌍</span>
+                <div class="callout-text">
+                  <strong>Recommended Region:</strong> <code class="mono">us-central1</code> offers highest quota limits, lowest latency, and earliest access to new Gemini model features.
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+
+        <!-- Connection Tester Bar -->
+        <div class="tester-section">
+          <div class="tester-controls">
+            <button
+              id="btnTestConnection"
+              type="button"
+              class="btn btn-secondary btn-test-connection"
+              (click)="testConnection()"
+              [disabled]="isTesting"
+            >
+              @if (isTesting) {
+                <span class="animate-pulse">⚡ Testing connection...</span>
+              } @else {
+                <span>⚡ Test Connection</span>
+              }
+            </button>
+            <span class="tester-hint text-muted text-xs">Pings Gemini model directly to verify credentials</span>
+          </div>
+
+          <!-- Live Feedback Banner -->
+          @if (testResult) {
+            <div
+              class="test-feedback-banner connection-status-result animate-fade-in"
+              [class.success]="testResult.success"
+              [class.error]="!testResult.success"
+              [class.feedback-success]="testResult.success"
+              [class.feedback-error]="!testResult.success"
+              role="status"
+              aria-live="polite"
+            >
+              <div class="feedback-icon">
+                @if (testResult.success) {
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                  </svg>
+                } @else {
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                }
+              </div>
+              <div class="feedback-content">
+                <div class="feedback-main-row">
+                  <span class="feedback-text">{{ testResult.message || testResult.error }}</span>
+                  @if (testResult.latency_ms !== undefined && testResult.latency_ms !== null) {
+                    <span class="badge badge-success mono latency-badge">⚡ {{ testResult.latency_ms }}ms</span>
+                  }
+                </div>
+                @if (!testResult.success && testResult.error && testResult.error !== testResult.message) {
+                  <div class="feedback-error-detail text-xs mono">{{ testResult.error }}</div>
+                }
+                @if (testResult.details) {
+                  <div class="feedback-hint text-xs text-muted">{{ testResult.details }}</div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+        <button class="btn btn-ghost btn-cancel" type="button" (click)="close()">Cancel</button>
+        <button
+          #saveBtn
+          id="btnSaveApply"
+          type="button"
+          class="btn btn-primary btn-save-apply"
+          (click)="saveAndApply()"
+          [disabled]="isSaving"
+        >
+          @if (isSaving) {
+            <span class="animate-pulse">Saving…</span>
+          } @else {
+            <span>Save & Apply</span>
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}

@@ -183,13 +183,33 @@ export class ApiService {
     );
   }
 
-  // --- Settings ---
+  // --- Settings & Auth ---
   getSettings(): Observable<SettingsResponse> {
     return this.http.get<SettingsResponse>(`${this.baseUrl}/settings`);
   }
 
   updateSettings(body: SettingsUpdateRequest): Observable<SettingsUpdateResponse> {
     return this.http.put<SettingsUpdateResponse>(`${this.baseUrl}/settings`, body);
+  }
+
+  getAuthStatus(): Observable<AuthStatusResponse> {
+    return this.http.get<AuthStatusResponse>(`${this.baseUrl}/settings/auth`);
+  }
+
+  getAuthSettings(): Observable<AuthStatusResponse> {
+    return this.getAuthStatus();
+  }
+
+  testConnection(body: TestConnectionRequest): Observable<TestConnectionResponse> {
+    return this.http.post<TestConnectionResponse>(`${this.baseUrl}/settings/test-connection`, body);
+  }
+
+  updateAuth(body: AuthUpdateRequest): Observable<SettingsResponse> {
+    return this.http.post<SettingsResponse>(`${this.baseUrl}/settings/auth`, body);
+  }
+
+  updateAuthSettings(body: AuthUpdateRequest): Observable<SettingsResponse> {
+    return this.updateAuth(body);
   }
 
   // --- Projects ---
@@ -507,7 +527,54 @@ export interface DebugSimilarityResponse {
   error?: string;
 }
 
-// --- Settings interfaces ---
+// --- Settings & Dual-Mode Auth interfaces ---
+export type AuthProviderMode = 'studio' | 'vertex' | 'google_ai_studio' | 'vertex_ai';
+
+export interface AuthStatusResponse {
+  mode: AuthProviderMode;
+  has_credentials: boolean;
+  gemini_api_key_preview?: string | null;
+  gemini_api_key_set?: boolean;
+  vertex_project?: string | null;
+  vertex_location?: string;
+  use_vertex_ai: boolean;
+  openalex_api_key_preview?: string | null;
+  openalex_api_key_set?: boolean;
+  openalex_email?: string;
+}
+
+export type SettingsAuthResponse = AuthStatusResponse;
+
+export interface TestConnectionRequest {
+  mode?: AuthProviderMode;
+  gemini_api_key?: string | null;
+  vertex_project?: string | null;
+  vertex_location?: string | null;
+}
+
+export interface TestConnectionResponse {
+  success: boolean;
+  message: string;
+  model?: string | null;
+  model_name?: string | null;
+  latency_ms?: number | null;
+  mode?: AuthProviderMode | string | null;
+  error?: string | null;
+  details?: string | null;
+}
+
+export interface AuthUpdateRequest {
+  mode?: AuthProviderMode;
+  use_vertex_ai?: boolean;
+  gemini_api_key?: string | null;
+  vertex_project?: string | null;
+  vertex_location?: string | null;
+  openalex_api_key?: string | null;
+  openalex_email?: string;
+}
+
+export type SettingsAuthUpdateRequest = AuthUpdateRequest;
+
 export interface SettingsResponse {
   gemini_api_key_set: boolean;
   gemini_api_key_preview: string;
@@ -516,12 +583,23 @@ export interface SettingsResponse {
   openalex_email: string;
   embedding_model: string;
   embedding_dimensions: number;
+
+  // Dual-mode auth extensions
+  use_vertex_ai?: boolean;
+  mode?: AuthProviderMode;
+  vertex_project?: string | null;
+  vertex_location?: string;
+  has_credentials?: boolean;
 }
 
 export interface SettingsUpdateRequest {
   gemini_api_key?: string;
   openalex_api_key?: string;
   openalex_email?: string;
+  use_vertex_ai?: boolean;
+  vertex_project?: string;
+  vertex_location?: string;
+  mode?: AuthProviderMode;
 }
 
 export interface SettingsUpdateResponse {

@@ -17,6 +17,7 @@ dimensions, so no manual normalization is needed (unlike
 """
 from __future__ import annotations
 
+import os
 import logging
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
     from core.logging.log_service import LogService
 
 logger = logging.getLogger(__name__)
+
+_PLACEHOLDERS = {"", "your_gemini_api_key_here", "your_project_id_here", "your-gcp-project-id", "Not set", "None", "null"}
 
 
 class GeminiEmbeddingProvider(EmbeddingProvider):
@@ -43,6 +46,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     def __init__(
         self,
         api_key: str | None = None,
+        vertexai: bool | None = None,
+        project: str | None = None,
+        location: str | None = None,
         output_dimensionality: int = 768,
         log_service: LogService | None = None,
         model_name: str = "gemini-embedding-2",
@@ -50,20 +56,67 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         from config import get_settings
         settings = get_settings()
 
-        if settings.use_vertex_ai:
-            self._client = genai.Client(
-                vertexai=True,
-                project=settings.vertex_project,
-                location=settings.vertex_location,
-            )
-            logger.info("GeminiEmbeddingProvider initialized via Vertex AI (project=%s, location=%s)", settings.vertex_project, settings.vertex_location)
-        else:
-            self._client = genai.Client(api_key=api_key or settings.gemini_api_key)
-            logger.info("GeminiEmbeddingProvider initialized via Google AI Studio")
-
+        self._use_vertex_ai: bool = vertexai if vertexai is not None else settings.use_vertex_ai
         self._output_dimensionality = output_dimensionality
         self._log_service = log_service
         self._model_name = model_name
+        self._client: genai.Client | None = None
+
+        if self._use_vertex_ai:
+            self._mode = "vertex"
+            self._project = (
+                project or (settings.vertex_project if settings.vertex_project and settings.vertex_project not in _PLACEHOLDERS else None) or os.environ.get("GOOGLE_CLOUD_PROJECT") or ""
+            ).strip()
+            self._location = (
+                location or settings.vertex_location or os.environ.get("GOOGLE_CLOUD_LOCATION") or "us-central1"
+            ).strip()
+            self._api_key = None
+
+            if self._project and self._project not in _PLACEHOLDERS:
+                try:
+                    self._client = genai.Client(
+                        vertexai=True,
+                        project=self._project,
+                        location=self._location,
+                    )
+                    logger.info(
+                        "GeminiEmbeddingProvider initialized via Vertex AI (project=%s, location=%s)",
+                        self._project, self._location,
+                    )
+                except Exception as exc:
+                    self._client = None
+                    logger.warning("GeminiEmbeddingProvider failed to initialize Vertex client: %s", exc)
+            else:
+                self._client = None
+                logger.warning("GeminiEmbeddingProvider: Vertex AI mode active but project is not set")
+        else:
+            self._mode = "studio"
+            self._project = None
+            self._location = None
+            effective_key = (
+                api_key
+                or (settings.gemini_api_key if settings.gemini_api_key and settings.gemini_api_key not in _PLACEHOLDERS else None)
+                or os.environ.get("GEMINI_API_KEY")
+                or os.environ.get("GOOGLE_API_KEY")
+                or ""
+            ).strip()
+            if effective_key in _PLACEHOLDERS:
+                effective_key = ""
+
+            self._api_key = effective_key or None
+
+
+            if self._api_key:
+                try:
+                    self._client = genai.Client(api_key=self._api_key)
+                    logger.info("GeminiEmbeddingProvider initialized via Google AI Studio")
+                except Exception as exc:
+                    self._client = None
+                    logger.warning("GeminiEmbeddingProvider failed to initialize Studio client: %s", exc)
+            else:
+                self._client = None
+                logger.warning("GeminiEmbeddingProvider initialized without credentials (GEMINI_API_KEY not configured)")
+
 
     # ── EmbeddingProvider interface ──────────────────────────────────
 
@@ -155,20 +208,17 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         purpose: str = "document",
         session_id: str | None = None,
     ) -> list[float]:
-        """Internal embedding method with retry logic and logging.
+        """Internal embedding method with retry logic and logging."""
+        if self._client is None:
+            logger.warning("Gemini API credentials not configured; using deterministic fallback embedding.")
+            import hashlib
+            import math
+            h = hashlib.sha256(text.encode("utf-8")).digest()
+            raw = [(b / 255.0) * 2 - 1 for b in h]
+            repeated = (raw * (self._output_dimensionality // len(raw) + 1))[:self._output_dimensionality]
+            norm = math.sqrt(sum(x * x for x in repeated)) or 1.0
+            return [x / norm for x in repeated]
 
-        For ``gemini-embedding-2``, the task is encoded in the prompt text
-        itself (no ``task_type`` config parameter).  The model automatically
-        normalizes truncated dimensions, so no manual normalization is needed.
-
-        Args:
-            text: Pre-formatted text (with task prefix baked in).
-            purpose: Human-readable label for logging (document/query).
-            session_id: Optional session ID for telemetry.
-
-        Returns:
-            Embedding vector as list of floats.
-        """
         import asyncio
         import time
         from functools import partial
@@ -226,7 +276,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 break
             except Exception as exc:
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
-                status_code = getattr(exc, "code", 500)
+                status_code = getattr(exc, "code", getattr(exc, "status_code", 500))
                 if status_code == 429 and attempt < max_retries:
                     await asyncio.sleep(2 ** attempt)
                     continue
@@ -249,17 +299,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                         response_body=None,
                         session_id=session_id,
                     )
-                exc_str = str(exc).lower()
-                if "credentials" in exc_str or "api_key" in exc_str or "api key" in exc_str or "not found" in exc_str:
-                    logger.warning("Gemini API credentials not configured; using deterministic fallback embedding for query.")
-                    import hashlib
-                    import math
-                    h = hashlib.sha256(text.encode("utf-8")).digest()
-                    raw = [(b / 255.0) * 2 - 1 for b in h]
-                    repeated = (raw * (self._output_dimensionality // len(raw) + 1))[:self._output_dimensionality]
-                    norm = math.sqrt(sum(x * x for x in repeated)) or 1.0
-                    return [x / norm for x in repeated]
                 raise exc
+
 
         # Extract embedding values safely
         if hasattr(result, "embeddings") and result.embeddings:

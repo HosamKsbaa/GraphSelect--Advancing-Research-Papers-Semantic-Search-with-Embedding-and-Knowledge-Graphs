@@ -38,6 +38,7 @@ class LogsPage(BasePage):
         """Navigate to the logs & monitoring page."""
         self.goto("/logs")
         self.wait_for_url_match("**/logs")
+        expect(self.page_title).to_be_visible(timeout=15000)
 
     def switch_tab(self, tab_name: str) -> None:
         """Switch logs tab ('app', 'api', 'agent')."""

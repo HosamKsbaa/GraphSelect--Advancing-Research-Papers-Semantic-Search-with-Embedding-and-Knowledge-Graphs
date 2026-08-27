@@ -43,6 +43,7 @@ class ExportTabPage(BasePage):
         """Navigate to the export tab for a project."""
         self.goto(f"/projects/{project_id}/export")
         self.wait_for_url_match(f"**/projects/{project_id}/export")
+        expect(self.export_cards_grid).to_be_visible(timeout=15000)
 
     def open_latex_dialog(self) -> None:
         """Open the LaTeX template selection dialog."""

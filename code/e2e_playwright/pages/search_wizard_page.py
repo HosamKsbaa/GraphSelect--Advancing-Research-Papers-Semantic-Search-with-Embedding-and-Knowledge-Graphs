@@ -65,6 +65,7 @@ class SearchWizardPage(BasePage):
         """Navigate to the literature search page."""
         self.goto("/search")
         self.wait_for_url_match("**/search")
+        expect(self.page.locator("h1.page-title")).to_contain_text("New Literature Search", timeout=15000)
 
     # Step 1 Methods
     def search_seed_title(self, title: str) -> None:

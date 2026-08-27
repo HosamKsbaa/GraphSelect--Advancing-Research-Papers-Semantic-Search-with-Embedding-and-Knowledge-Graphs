@@ -52,6 +52,7 @@ class AnalysisTabPage(BasePage):
         """Navigate to the analysis tab for a project."""
         self.goto(f"/projects/{project_id}/analysis")
         self.wait_for_url_match(f"**/projects/{project_id}/analysis")
+        expect(self.container).to_be_visible(timeout=15000)
 
     def get_coverage_cards_count(self) -> int:
         """Return number of coverage cards."""

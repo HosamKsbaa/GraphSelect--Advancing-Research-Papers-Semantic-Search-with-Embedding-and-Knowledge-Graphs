@@ -42,6 +42,7 @@ class DebugPage(BasePage):
         """Navigate to the debug diagnostics page."""
         self.goto("/debug")
         self.wait_for_url_match("**/debug")
+        expect(self.page_title).to_be_visible(timeout=15000)
 
     def test_paper_retrieval(self, doi: str) -> None:
         """Execute OpenAlex paper retrieval test."""

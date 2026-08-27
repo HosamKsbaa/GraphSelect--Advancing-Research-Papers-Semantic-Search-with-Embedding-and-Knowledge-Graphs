@@ -327,8 +327,8 @@ def test_system_status_header_new_search_navigation(page: Page, base_url: str):
 
 def test_logs_navigation_tabs_switching(page: Page, base_url: str):
     """Test Logs view tab navigation between Application Logs, Scholarly API Requests, and Agent Traces."""
-    mock_api_route(page, "**/api/logs?*", status_code=200, json_data=[])
-    mock_api_route(page, "**/api/logs/api-requests?*", status_code=200, json_data=[])
+    mock_api_route(page, "**/api/logs*", status_code=200, json_data=[])
+    mock_api_route(page, "**/api/logs/api-requests*", status_code=200, json_data=[])
     mock_api_route(page, "**/api/logs/agent-traces*", status_code=200, json_data={"traces": [], "total": 0})
     mock_api_route(page, "**/api/projects*", status_code=200, json_data=[])
 
@@ -405,7 +405,7 @@ def test_logs_application_logs_filtering_and_badges(page: Page, base_url: str):
         }
     ]
 
-    mock_api_route(page, "**/api/logs?*", status_code=200, json_data=mock_logs)
+    mock_api_route(page, "**/api/logs*", status_code=200, json_data=mock_logs)
 
     logs_page = LogsPage(page, base_url)
     logs_page.navigate()
@@ -437,7 +437,7 @@ def test_logs_application_logs_filtering_and_badges(page: Page, base_url: str):
 
     # Test filtering by severity level
     mock_filtered = [mock_logs[3]]
-    mock_api_route(page, "**/api/logs?*level=ERROR*", status_code=200, json_data=mock_filtered)
+    mock_api_route(page, "**/api/logs*level=ERROR*", status_code=200, json_data=mock_filtered)
     logs_page.filter_by_level("ERROR")
     expect(logs_page.log_rows).to_have_count(1)
     expect(logs_page.log_rows.first.locator("td:nth-child(2) .badge")).to_contain_text("ERROR")
@@ -487,7 +487,7 @@ def test_logs_scholarly_api_requests_filtering_and_status_codes(page: Page, base
         }
     ]
 
-    mock_api_route(page, "**/api/logs/api-requests?*", status_code=200, json_data=mock_api_logs)
+    mock_api_route(page, "**/api/logs/api-requests*", status_code=200, json_data=mock_api_logs)
 
     logs_page = LogsPage(page, base_url)
     logs_page.navigate()
@@ -521,7 +521,7 @@ def test_logs_scholarly_api_requests_filtering_and_status_codes(page: Page, base
 
     # Filter by service dropdown
     mock_alex_only = [mock_api_logs[0]]
-    mock_api_route(page, "**/api/logs/api-requests?*service=OpenAlex*", status_code=200, json_data=mock_alex_only)
+    mock_api_route(page, "**/api/logs/api-requests*service=OpenAlex*", status_code=200, json_data=mock_alex_only)
     logs_page.filter_by_service("OpenAlex")
     expect(logs_page.log_rows).to_have_count(1)
     expect(logs_page.log_rows.first.locator("td:nth-child(2) .badge")).to_contain_text("OpenAlex")
@@ -599,7 +599,7 @@ def test_logs_limit_dropdown_and_refresh_action(page: Page, base_url: str):
             body=json.dumps([])
         )
 
-    page.route("**/api/logs?*", handle_logs_route)
+    page.route("**/api/logs*", handle_logs_route)
 
     logs_page = LogsPage(page, base_url)
     logs_page.navigate()
@@ -641,7 +641,7 @@ def test_logs_expandable_json_payload_and_clipboard_copy(page: Page, base_url: s
         }
     ]
 
-    mock_api_route(page, "**/api/logs?*", status_code=200, json_data=mock_log_with_extra)
+    mock_api_route(page, "**/api/logs*", status_code=200, json_data=mock_log_with_extra)
 
     logs_page = LogsPage(page, base_url)
     logs_page.navigate()
@@ -675,8 +675,8 @@ def test_logs_expandable_json_payload_and_clipboard_copy(page: Page, base_url: s
 
 def test_logs_empty_states_across_tabs(page: Page, base_url: str):
     """Test empty states display informative messages across all three tabs."""
-    mock_api_route(page, "**/api/logs?*", status_code=200, json_data=[])
-    mock_api_route(page, "**/api/logs/api-requests?*", status_code=200, json_data=[])
+    mock_api_route(page, "**/api/logs*", status_code=200, json_data=[])
+    mock_api_route(page, "**/api/logs/api-requests*", status_code=200, json_data=[])
     mock_api_route(page, "**/api/logs/agent-traces*", status_code=200, json_data={"traces": [], "total": 0})
     mock_api_route(page, "**/api/projects*", status_code=200, json_data=[])
 
@@ -882,7 +882,7 @@ def test_debug_cosine_similarity_gauge_scores_and_classes(page: Page, base_url: 
 
 def test_settings_initial_load_and_system_info_display(page: Page, base_url: str):
     """Test Settings view initial load: backend connection, key status badges, contact email, and system info."""
-    mock_api_route(page, "**/api/settings", status_code=200, json_data={
+    mock_api_route(page, "**/api/settings*", status_code=200, json_data={
         "gemini_api_key_set": True,
         "gemini_api_key_preview": "AIzaSy...4321",
         "openalex_api_key_set": False,
@@ -919,7 +919,7 @@ def test_settings_initial_load_and_system_info_display(page: Page, base_url: str
 
 def test_settings_api_key_visibility_toggles(page: Page, base_url: str):
     """Test Settings API key password/text masking toggles for Gemini and OpenAlex inputs."""
-    mock_api_route(page, "**/api/settings", status_code=200, json_data={
+    mock_api_route(page, "**/api/settings*", status_code=200, json_data={
         "gemini_api_key_set": True,
         "gemini_api_key_preview": "AIza...",
         "openalex_api_key_set": True,
@@ -949,7 +949,7 @@ def test_settings_api_key_visibility_toggles(page: Page, base_url: str):
 
 def test_settings_save_flow_and_toast_feedback_zero_objects(page: Page, base_url: str):
     """Test Save Settings flow: submit form, verify toast feedback, assert zero [object Object], reset inputs."""
-    mock_api_route(page, "**/api/settings", status_code=200, json_data={
+    mock_api_route(page, "**/api/settings*", status_code=200, json_data={
         "gemini_api_key_set": False,
         "gemini_api_key_preview": None,
         "openalex_api_key_set": False,
@@ -975,7 +975,7 @@ def test_settings_save_flow_and_toast_feedback_zero_objects(page: Page, base_url
         else:
             route.continue_()
 
-    page.route("**/api/settings", handle_save_settings)
+    page.route("**/api/settings*", handle_save_settings)
 
     settings_page = SettingsPage(page, base_url)
     settings_page.navigate()
@@ -1008,7 +1008,7 @@ def test_settings_save_flow_and_toast_feedback_zero_objects(page: Page, base_url
 
 def test_settings_save_failure_error_toast_handling(page: Page, base_url: str):
     """Test Save Settings handles backend error with structured error toast and zero [object Object]."""
-    mock_api_route(page, "**/api/settings", status_code=200, json_data={
+    mock_api_route(page, "**/api/settings*", status_code=200, json_data={
         "gemini_api_key_set": True,
         "gemini_api_key_preview": "AIza...",
         "openalex_api_key_set": False,
@@ -1030,7 +1030,7 @@ def test_settings_save_failure_error_toast_handling(page: Page, base_url: str):
         else:
             route.continue_()
 
-    page.route("**/api/settings", handle_save_error)
+    page.route("**/api/settings*", handle_save_error)
 
     settings_page = SettingsPage(page, base_url)
     settings_page.navigate()
@@ -1055,7 +1055,7 @@ def test_system_tools_sidebar_navigation_flow(page: Page, base_url: str):
     mock_api_route(page, "**/api/health*", status_code=200, json_data={"status": "healthy", "neo4j": "connected", "mysql": "connected"})
     mock_api_route(page, "**/api/version*", status_code=200, json_data={"version": "v3.0.0"})
     mock_api_route(page, "**/api/sessions*", status_code=200, json_data={"sessions": [], "total": 0})
-    mock_api_route(page, "**/api/logs?*", status_code=200, json_data=[])
+    mock_api_route(page, "**/api/logs*", status_code=200, json_data=[])
     mock_api_route(page, "**/api/settings*", status_code=200, json_data={
         "gemini_api_key_set": True, "gemini_api_key_preview": "AIza...", "openalex_api_key_set": False,
         "openalex_api_key_preview": None, "openalex_email": "", "embedding_model": "gemini-embedding-2", "embedding_dimensions": 768

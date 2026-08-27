@@ -35,7 +35,7 @@
                 <span class="badge status-{{ item.status }}">{{ item.status | titlecase }}</span>
               </div>
               <div class="card-meta">
-                <span class="paper-count">{{ item.section.paper_dois?.length || 0 }} assigned papers</span>
+                <span class="paper-count">{{ item.section.paper_dois.length || 0 }} assigned papers</span>
               </div>
             </div>
           }

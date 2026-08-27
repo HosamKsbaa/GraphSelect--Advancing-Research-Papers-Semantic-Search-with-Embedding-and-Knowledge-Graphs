@@ -1,6 +1,6 @@
 /* ===================================================================
    ALRS v2 — Settings Page SCSS
-   Premium dark-themed configuration interface
+   Dark-themed configuration interface with Dual-Mode Auth
    =================================================================== */
 
 .settings-page {
@@ -78,6 +78,73 @@
 /* --- Section Body --- */
 .section-body {
   padding: var(--space-5) var(--space-6);
+}
+
+/* --- Segmented Mode Switcher --- */
+.mode-switcher-container {
+  margin-bottom: var(--space-6);
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+
+  .segment-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+
+    .segment-icon {
+      font-size: 1.1rem;
+    }
+
+    .segment-title {
+      font-weight: 600;
+      color: var(--color-text-primary);
+    }
+
+    .segment-subtitle {
+      color: var(--color-text-muted);
+    }
+
+    &:hover:not(.active) {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--color-text-primary);
+    }
+
+    &.active {
+      background: rgba(99, 102, 241, 0.2);
+      border-color: rgba(99, 102, 241, 0.4);
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(99, 102, 241, 0.2);
+
+      .segment-title {
+        color: #ffffff;
+      }
+      .segment-subtitle {
+        color: #c7d2fe;
+      }
+    }
+  }
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* --- Setting Row --- */
@@ -158,6 +225,136 @@
     &:hover {
       color: var(--color-text-primary);
       background: rgba(255, 255, 255, 0.05);
+    }
+  }
+}
+
+/* --- Setup Guide Cards --- */
+.setup-guide {
+  margin-top: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  background: rgba(99, 102, 241, 0.04);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  border-radius: var(--radius-md);
+
+  .guide-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+
+    .guide-icon {
+      font-size: 1.1rem;
+    }
+
+    .guide-title {
+      font-size: var(--text-xs);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #a5b4fc;
+    }
+  }
+
+  .guide-steps {
+    margin: 0;
+    padding-left: var(--space-4);
+    font-size: var(--text-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.6;
+
+    li {
+      margin-bottom: var(--space-2);
+      &:last-child {
+        margin-bottom: 0;
+      }
+    }
+  }
+
+  .code-box {
+    margin-top: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    color: #818cf8;
+    overflow-x: auto;
+  }
+}
+
+/* --- Connection Tester Bar --- */
+.connection-tester-bar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+
+  .btn-test-connection {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+}
+
+/* --- Test Feedback Banner --- */
+.test-feedback-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  width: 100%;
+
+  .feedback-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .feedback-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .feedback-text {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  .error-detail {
+    color: #fca5a5;
+    font-family: var(--font-mono);
+  }
+
+  .guidance-detail {
+    font-size: 0.75rem;
+  }
+
+  &.success {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #34d399;
+
+    .feedback-icon {
+      color: #34d399;
+    }
+  }
+
+  &.error {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #f87171;
+
+    .feedback-icon {
+      color: #f87171;
     }
   }
 }

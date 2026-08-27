@@ -1,8 +1,9 @@
-import { Component, OnInit, inject, HostListener } from '@angular/core';
+import { Component, OnInit, inject, HostListener, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule, ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../../core/api.service';
 import { ToastService } from '../../../core/toast.service';
+import { AuthModalService } from '../../../core/auth-modal.service';
 
 @Component({
   selector: 'app-project-workspace',
@@ -15,19 +16,34 @@ export class ProjectWorkspacePage implements OnInit {
   private api = inject(ApiService);
   private route = inject(ActivatedRoute);
   private toastService = inject(ToastService);
+  public authModalService = inject(AuthModalService);
 
   projectId: string = '';
-  hasApiKey = true;
+  hasApiKey = computed(() => this.authModalService.hasValidCredentials());
+
+  openCredentialsModal(): void {
+    this.authModalService.open();
+  }
+
+  openAuthModal(): void {
+    this.authModalService.open();
+  }
 
   ngOnInit() {
     this.projectId = this.route.snapshot.paramMap.get('id') || '';
-    this.api.getSettings().subscribe({
-      next: (settings) => {
-        this.hasApiKey = !!settings.gemini_api_key_set;
-      },
-      error: () => {
-        this.hasApiKey = false;
+    this.route.paramMap.subscribe(params => {
+      const id = params.get('id');
+      if (id) {
+        this.projectId = id;
+        this.projectPath = '';
+        this.api.touchProject(this.projectId).subscribe({
+          error: (err) => console.error('Failed to update last accessed time:', err)
+        });
       }
+    });
+
+    this.authModalService.refreshAuthStatus().subscribe({
+      error: () => {}
     });
 
     if (this.projectId) {

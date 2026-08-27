@@ -8,6 +8,7 @@
 .alert-banner {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-6);
   background: var(--color-warning);
@@ -24,6 +25,47 @@
       text-decoration: underline;
       font-weight: 600;
     }
+  }
+
+  .banner-content {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex: 1;
+
+    svg {
+      flex-shrink: 0;
+      stroke: #eab308;
+    }
+  }
+
+  .banner-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-shrink: 0;
+  }
+
+  .btn-warning {
+    background: #f59e0b;
+    color: #0f172a;
+    font-weight: 600;
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+
+    &:hover {
+      background: #fbbf24;
+      transform: translateY(-1px);
+    }
+  }
+
+  .settings-link {
+    font-size: var(--text-xs);
   }
 }
 

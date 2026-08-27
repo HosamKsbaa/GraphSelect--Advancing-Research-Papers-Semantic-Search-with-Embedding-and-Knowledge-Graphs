@@ -44,6 +44,8 @@ class PlanningTabPage(BasePage):
         """Navigate to the planning tab for a project."""
         self.goto(f"/projects/{project_id}/planning")
         self.wait_for_url_match(f"**/projects/{project_id}/planning")
+        expect(self.container).to_be_visible(timeout=15000)
+        expect(self.readiness_card).to_be_visible(timeout=15000)
 
     def open_outline_dialog(self) -> None:
         """Open outline configuration dialog."""

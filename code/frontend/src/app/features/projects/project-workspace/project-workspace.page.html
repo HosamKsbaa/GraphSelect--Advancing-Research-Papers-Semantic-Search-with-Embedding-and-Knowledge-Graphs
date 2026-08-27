@@ -1,15 +1,31 @@
 <div class="workspace-layout">
-  <!-- API Key Alert Banner -->
-  <div *ngIf="!hasApiKey" class="alert-banner warning">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-      <line x1="12" y1="9" x2="12" y2="13"/>
-      <line x1="12" y1="17" x2="12.01" y2="17"/>
-    </svg>
-    <span>
-      <strong>Configuration Missing:</strong> Gemini API key is not configured. Please add it in 
-      <a routerLink="/settings">Settings</a> to use LLM-powered features.
-    </span>
+  <!-- Workspace Credentials Alert Banner -->
+  <div 
+    *ngIf="!hasApiKey()" 
+    class="workspace-banner alert-banner warning header-alert animate-fade-in"
+    role="alert"
+  >
+    <div class="banner-content">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <span>
+        <strong>Configuration Missing:</strong> LLM provider credentials are not configured. Configure Google AI Studio or Vertex AI to unlock AI research synthesis, drafting, and chat.
+      </span>
+    </div>
+    <div class="banner-actions">
+      <button 
+        type="button" 
+        class="btn btn-warning btn-xs" 
+        data-testid="workspace-configure-credentials-btn" 
+        (click)="authModalService.open()"
+      >
+        🔑 Configure Credentials
+      </button>
+      <a routerLink="/settings" class="settings-link">Settings</a>
+    </div>
   </div>
 
   <nav class="workspace-nav" aria-label="Project Workspace">

@@ -307,3 +307,28 @@
     color: var(--color-green-700, #047857);
   }
 }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .split-layout {
+    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .draft-workspace {
+    min-height: 400px;
+  }
+
+  .workspace-content.has-feedback {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .feedback-panel {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--border-color, #e5e7eb);
+  }
+}
+

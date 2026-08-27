@@ -30,7 +30,7 @@ class WritingTabPage(BasePage):
         
         # Action Buttons
         self.draft_section_btn = page.locator(".workspace-header button:has-text('Draft Section')")
-        self.review_section_btn = page.locator(".workspace-header button:has-text('Review')")
+        self.review_section_btn = page.locator(".workspace-header button.btn-secondary")
         self.toggle_edit_btn = page.locator(".workspace-header button.btn-outline")
         
         # Editor & Preview
@@ -50,6 +50,7 @@ class WritingTabPage(BasePage):
         """Navigate to the writing tab for a project."""
         self.goto(f"/projects/{project_id}/writing")
         self.wait_for_url_match(f"**/projects/{project_id}/writing")
+        expect(self.container).to_be_visible(timeout=15000)
 
     def select_section(self, index: int = 0) -> None:
         """Select a section from the left panel list."""

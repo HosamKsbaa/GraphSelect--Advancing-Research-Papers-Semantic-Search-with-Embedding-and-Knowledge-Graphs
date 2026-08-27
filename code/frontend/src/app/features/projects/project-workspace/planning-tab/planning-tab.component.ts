@@ -29,11 +29,32 @@ export class PlanningTabComponent implements OnInit {
   configStyle = 'academic';
   configNumSections = 5;
 
+  getEffectiveProjectId(): string {
+    const parentId = this.route.parent?.snapshot.paramMap.get('id');
+    const selfId = this.route.snapshot.paramMap.get('id');
+    if (parentId || selfId) return parentId || selfId || '';
+    if (typeof window !== 'undefined' && window.location) {
+      const parts = window.location.pathname.split('/projects/');
+      if (parts.length > 1) {
+        const id = parts[1].split('/')[0];
+        if (id) return id;
+      }
+    }
+    return '';
+  }
+
   ngOnInit() {
-    this.projectId = this.route.parent?.snapshot.paramMap.get('id') || '';
+    this.projectId = this.getEffectiveProjectId();
     if (this.projectId) {
       this.loadSummary();
     }
+    this.route.parent?.paramMap.subscribe(params => {
+      const id = params.get('id') || this.getEffectiveProjectId();
+      if (id && id !== this.projectId) {
+        this.projectId = id;
+        this.loadSummary();
+      }
+    });
   }
 
   loadSummary() {

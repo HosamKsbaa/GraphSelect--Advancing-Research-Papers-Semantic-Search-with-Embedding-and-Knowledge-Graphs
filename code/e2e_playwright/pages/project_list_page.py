@@ -42,6 +42,7 @@ class ProjectListPage(BasePage):
         """Navigate to the /projects route."""
         self.goto("/projects")
         self.wait_for_url_match("**/projects")
+        expect(self.page_header).to_be_visible(timeout=15000)
 
     def is_empty_state_visible(self) -> bool:
         """Check if empty state is visible."""
