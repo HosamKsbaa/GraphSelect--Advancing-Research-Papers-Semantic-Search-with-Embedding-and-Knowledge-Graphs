@@ -226,8 +226,10 @@ export class ApiService {
   }
 
   // --- Research ---
-  addQuestion(projectId: string, body: AddQuestionRequest): Observable<AddQuestionResponse> {
-    return this.http.post<AddQuestionResponse>(`${this.baseUrl}/research/${projectId}/questions`, body);
+  addQuestion(projectId: string, body: AddQuestionRequest | { text: string } | { question_text: string }): Observable<AddQuestionResponse> {
+    const textVal = (body as any).question_text || (body as any).text || '';
+    const payload = { question_text: textVal, text: textVal };
+    return this.http.post<AddQuestionResponse>(`${this.baseUrl}/research/${projectId}/questions`, payload);
   }
 
   listQuestions(projectId: string): Observable<ResearchQuestion[]> {
@@ -542,7 +544,8 @@ export interface ResearchQuestion {
 }
 
 export interface AddQuestionRequest {
-  text: string;
+  question_text?: string;
+  text?: string;
 }
 
 export interface AddQuestionResponse {

@@ -33,10 +33,26 @@ export const apiInterceptor: HttpInterceptorFn = (req, next) => {
           toastService.error('Backend Unreachable', 'Unable to connect to the server. Please check if the backend is running.');
         } else {
           let errorMsg = error.message;
-          if (error.error && error.error.detail) {
-            errorMsg = error.error.detail;
-          } else if (error.error && error.error.message) {
-            errorMsg = error.error.message;
+          if (error.error) {
+            const raw = error.error.detail ?? error.error.message ?? error.error;
+            if (typeof raw === 'string') {
+              errorMsg = raw;
+            } else if (Array.isArray(raw)) {
+              errorMsg = raw
+                .map((item: any) => {
+                  if (typeof item === 'string') return item;
+                  if (item?.msg) {
+                    const field = item.loc && Array.isArray(item.loc) && item.loc.length > 0
+                      ? `${item.loc[item.loc.length - 1]}: `
+                      : '';
+                    return `${field}${item.msg}`;
+                  }
+                  return JSON.stringify(item);
+                })
+                .join('; ');
+            } else if (typeof raw === 'object' && raw !== null) {
+              errorMsg = JSON.stringify(raw);
+            }
           }
           toastService.error(`API Error (${error.status})`, errorMsg);
         }

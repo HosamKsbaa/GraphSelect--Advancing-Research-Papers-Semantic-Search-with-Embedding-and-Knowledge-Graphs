@@ -84,14 +84,22 @@ export class ResearchTabComponent implements OnInit {
   addQuestion() {
     const text = this.newQuestionText().trim();
     if (!text || !this.projectId) return;
-    this.apiService.addQuestion(this.projectId, { text }).subscribe({
-      next: res => {
-        this.questions.update(qs => [...qs, res.question]);
+    this.apiService.addQuestion(this.projectId, { text, question_text: text }).subscribe({
+      next: (res: any) => {
+        const newQ: ResearchQuestion = res.question || {
+          id: res.question_id || res.id,
+          question_id: res.question_id || res.id,
+          text: res.text || text,
+          question_text: res.text || text,
+          embedding_status: 'embedded',
+          created_at: new Date().toISOString()
+        };
+        this.questions.update(qs => [...qs, newQ]);
         this.newQuestionText.set('');
         this.toastService.success('Success', 'Research question added');
         this.loadInitialData(); // reload papers to trigger similarity calculations
       },
-      error: err => this.toastService.error('Error', 'Failed to add question')
+      error: err => console.error('Add question error:', err)
     });
   }
 

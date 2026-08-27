@@ -39,6 +39,8 @@ def test_add_research_question_success() -> None:
         assert data["question_id"] == "q-123"
         assert data["text"] == "What are the latest GNN architectures?"
         assert data["project_id"] == "project-123"
+        assert "question" in data
+        assert data["question"]["question_id"] == "q-123"
 
         mock_neo4j.create_research_question.assert_called_once_with(
             question_id=ANY,
@@ -47,6 +49,36 @@ def test_add_research_question_success() -> None:
             project_id="project-123",
         )
         mock_provider_instance.embed_query.assert_called_once()
+
+
+def test_add_research_question_with_text_alias_success() -> None:
+    """Test adding a research question using 'text' field."""
+    mock_neo4j = AsyncMock()
+    mock_neo4j.create_research_question.return_value = {
+        "question_id": "q-456",
+        "text": "asd",
+    }
+    app.state.neo4j_service = mock_neo4j
+
+    mock_provider_instance = AsyncMock()
+    mock_provider_instance.embed_query.return_value = [0.2] * 768
+
+    with patch(
+        "features.embedding.providers.gemini_provider.GeminiEmbeddingProvider",
+        return_value=mock_provider_instance,
+    ):
+        client = TestClient(app)
+        response = client.post(
+            "/api/research/project-123/questions",
+            json={"text": "asd"},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["status"] == "created"
+        assert data["question_id"] == "q-456"
+        assert data["text"] == "asd"
+        assert data["question"]["text"] == "asd"
 
 
 def test_list_research_questions_success() -> None:

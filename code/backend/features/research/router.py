@@ -16,7 +16,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from core.dependencies import (
     get_embedding_provider,
@@ -36,7 +36,25 @@ router = APIRouter(prefix="/api/research", tags=["research"])
 class AddQuestionBody(BaseModel):
     """Body for the add-research-question endpoint."""
 
-    question_text: str = Field(..., min_length=5, description="The research question text.")
+    question_text: str = Field(default="", description="The research question text.")
+    text: str | None = Field(default=None, description="Alternative field name for research question text.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def unify_question_text(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            val = data.get("question_text") or data.get("text") or ""
+            val_str = str(val).strip()
+            if not val_str:
+                raise ValueError("Research question text is required and cannot be empty.")
+            data["question_text"] = val_str
+            data["text"] = val_str
+        elif isinstance(data, str):
+            val_str = data.strip()
+            if not val_str:
+                raise ValueError("Research question text is required and cannot be empty.")
+            data = {"question_text": val_str, "text": val_str}
+        return data
 
 
 class DecomposeQueryRequest(BaseModel):
@@ -82,12 +100,19 @@ async def add_research_question_endpoint(
     )
 
     try:
-        return await research_svc.add_research_question(
+        res = await research_svc.add_research_question(
             project_id=project_id,
             question_text=body.question_text,
             neo4j=neo4j,
             embedding_provider=embedding_provider,
         )
+        res["question"] = {
+            "question_id": res.get("question_id"),
+            "id": res.get("question_id"),
+            "text": res.get("text"),
+            "question_text": res.get("text"),
+        }
+        return res
     except Exception as exc:
         logger.exception("add_research_question_endpoint failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
