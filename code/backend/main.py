@@ -93,6 +93,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from core.logging.progress_service import ProgressService
     app.state.progress_service = ProgressService()
 
+    from core.llm.service import LLMService
+    try:
+        app.state.llm_service = LLMService(api_key=settings.gemini_api_key)
+        logger.info("LLMService initialized successfully in app.state")
+    except Exception as exc:
+        logger.warning("LLMService initialization deferred or warning: %s", exc)
+        app.state.llm_service = None
+
     logger.info("ALRS v2 backend started successfully")
 
     yield
@@ -166,6 +174,7 @@ from features.analysis.router import router as analysis_router
 from features.planning.router import router as planning_router
 from features.writing.router import router as writing_router
 from features.export.router import router as export_router
+from features.chat.router import router as chat_router
 from projects.router import router as projects_router
 
 app.include_router(search_router)
@@ -179,6 +188,7 @@ app.include_router(analysis_router)
 app.include_router(planning_router)
 app.include_router(writing_router)
 app.include_router(export_router)
+app.include_router(chat_router)
 app.include_router(projects_router)
 
 

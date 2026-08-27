@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from features.ranking.service import RankingService
     from features.search.graph_search_service import GraphSearchService
     from features.search.session_service import SearchSessionService
+    from features.chat.service import ChatService
 
 
 # ── Core infrastructure ──────────────────────────────────────────────
@@ -213,3 +214,18 @@ def get_search_session_service(
     """Create the session lifecycle service (create → enqueue → stream)."""
     from features.search.session_service import SearchSessionService
     return SearchSessionService(neo4j=neo4j, mysql=mysql, openalex=openalex)
+
+
+# ── Feature services: Chat ───────────────────────────────────────────
+
+def get_chat_service(
+    request: Request,
+    mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+) -> ChatService:
+    """Create the project-scoped ChatService wired to MySQL, Neo4j, and LLMService."""
+    from features.chat.service import ChatService
+    llm_service = getattr(request.app.state, "llm_service", None)
+    return ChatService(mysql_service=mysql, neo4j_service=neo4j, llm_service=llm_service)
+
+
