@@ -103,3 +103,29 @@ async def generate_outline(
         )
 
     return result
+
+
+@router.get("/{project_id}/outline")
+async def get_outline(
+    project_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    """Retrieve an existing generated outline or return empty sections."""
+    from features.planning.service import PlanningService
+    from config import get_settings
+
+    settings = get_settings()
+    neo4j = getattr(request.app.state, "neo4j_service", None)
+    llm = getattr(request.app.state, "llm_service", None)
+    service = PlanningService(
+        neo4j=neo4j,
+        llm=llm,
+        projects_dir=settings.projects_dir,
+    )
+    import pathlib
+    outline_path = pathlib.Path(settings.projects_dir) / project_id / "outline.json"
+    if outline_path.exists():
+        import json
+        with open(outline_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"project_id": project_id, "sections": []}

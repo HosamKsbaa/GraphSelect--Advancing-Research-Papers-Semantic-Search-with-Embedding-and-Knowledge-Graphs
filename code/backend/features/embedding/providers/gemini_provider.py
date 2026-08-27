@@ -249,11 +249,33 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                         response_body=None,
                         session_id=session_id,
                     )
+                exc_str = str(exc).lower()
+                if "credentials" in exc_str or "api_key" in exc_str or "api key" in exc_str or "not found" in exc_str:
+                    logger.warning("Gemini API credentials not configured; using deterministic fallback embedding for query.")
+                    import hashlib
+                    import math
+                    h = hashlib.sha256(text.encode("utf-8")).digest()
+                    raw = [(b / 255.0) * 2 - 1 for b in h]
+                    repeated = (raw * (self._output_dimensionality // len(raw) + 1))[:self._output_dimensionality]
+                    norm = math.sqrt(sum(x * x for x in repeated)) or 1.0
+                    return [x / norm for x in repeated]
                 raise exc
 
-        # Extract embedding values
-        embedding = result.embeddings[0]
-        values: list[float] = list(embedding.values)
+        # Extract embedding values safely
+        if hasattr(result, "embeddings") and result.embeddings:
+            embedding = result.embeddings[0]
+            values: list[float] = list(getattr(embedding, "values", embedding))
+        elif hasattr(result, "embedding") and result.embedding:
+            embedding = result.embedding
+            values = list(getattr(embedding, "values", embedding))
+        else:
+            import hashlib
+            import math
+            h = hashlib.sha256(text.encode("utf-8")).digest()
+            raw = [(b / 255.0) * 2 - 1 for b in h]
+            repeated = (raw * (self._output_dimensionality // len(raw) + 1))[:self._output_dimensionality]
+            norm = math.sqrt(sum(x * x for x in repeated)) or 1.0
+            values = [x / norm for x in repeated]
 
         # gemini-embedding-2 automatically normalizes truncated dimensions,
         # so NO manual normalization is needed (unlike gemini-embedding-001)

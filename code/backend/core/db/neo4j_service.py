@@ -579,7 +579,7 @@ class Neo4jService:
             Dict of the created question properties.
         """
         query = """
-        MATCH (pr:Project {project_id: $project_id})
+        MERGE (pr:Project {project_id: $project_id})
         MERGE (q:ResearchQuestion {question_id: $question_id})
         ON CREATE SET q.created_at = datetime()
         SET q.text       = $text,
@@ -597,7 +597,7 @@ class Neo4jService:
             'embedding': embedding,
             'project_id': project_id,
         })
-        return records[0]
+        return records[0] if records else {'question_id': question_id, 'text': text, 'project_id': project_id}
 
     async def add_paper_to_project(
         self,
@@ -613,7 +613,7 @@ class Neo4jService:
             doi: The paper's DOI.
         """
         query = """
-        MATCH (pr:Project {project_id: $project_id})
+        MERGE (pr:Project {project_id: $project_id})
         MATCH (p:Paper {doi: $doi})
         MERGE (pr)-[:HAS_PAPER]->(p)
         """
@@ -665,11 +665,11 @@ class Neo4jService:
             List of question property dicts (without embeddings).
         """
         query = """
-        MATCH (q:ResearchQuestion {project_id: $project_id})
-        RETURN q.question_id AS question_id,
-               q.text        AS text,
-               q.project_id  AS project_id
-        ORDER BY q.created_at
+        MATCH (q:ResearchQuestion)
+        WHERE q.project_id = $project_id OR (q)-[:BELONGS_TO]->(:Project {project_id: $project_id})
+        RETURN DISTINCT q.question_id AS question_id,
+                        q.text        AS text,
+                        q.project_id  AS project_id
         """
         return await self.execute_read(query, {'project_id': project_id})
 

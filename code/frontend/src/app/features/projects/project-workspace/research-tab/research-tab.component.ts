@@ -49,6 +49,7 @@ export class ResearchTabComponent implements OnInit {
   topAuthors = signal<TopAuthor[]>([]);
   topVenues = signal<TopVenue[]>([]);
   
+  questionInputText: string = '';
   showConfirmDialog = signal<{isOpen: boolean, questionId?: string}>({isOpen: false});
 
   private apiService = inject(ApiService);
@@ -56,22 +57,48 @@ export class ResearchTabComponent implements OnInit {
   private toastService = inject(ToastService);
   projectId: string | null = null;
 
+  getEffectiveProjectId(): string | null {
+    if (this.projectId) return this.projectId;
+    const parentId = this.route.parent?.snapshot.paramMap.get('id');
+    const selfId = this.route.snapshot.paramMap.get('id');
+    if (parentId || selfId) return parentId || selfId;
+    if (typeof window !== 'undefined' && window.location) {
+      const parts = window.location.pathname.split('/projects/');
+      if (parts.length > 1) {
+        const id = parts[1].split('/')[0];
+        if (id) return id;
+      }
+    }
+    return null;
+  }
+
   ngOnInit() {
+    this.projectId = this.getEffectiveProjectId();
+    if (this.projectId) {
+      this.loadInitialData();
+    }
     this.route.parent?.paramMap.subscribe(params => {
-      this.projectId = params.get('id');
-      if (this.projectId) {
+      const id = params.get('id') || this.getEffectiveProjectId();
+      if (id && id !== this.projectId) {
+        this.projectId = id;
         this.loadInitialData();
       }
     });
   }
 
   loadInitialData() {
-    if (!this.projectId) return;
-    this.apiService.listQuestions(this.projectId).subscribe({
-      next: qs => this.questions.set(qs),
+    const pid = this.getEffectiveProjectId();
+    if (!pid) return;
+    this.projectId = pid;
+    this.apiService.listQuestions(pid).subscribe({
+      next: qs => {
+        if (qs && qs.length > 0) {
+          this.questions.set(qs);
+        }
+      },
       error: err => console.error(err)
     });
-    this.apiService.getRankedPapers(this.projectId).subscribe({
+    this.apiService.getRankedPapers(pid).subscribe({
       next: ps => this.papers.set(ps),
       error: err => console.error(err)
     });
@@ -82,24 +109,35 @@ export class ResearchTabComponent implements OnInit {
   }
 
   addQuestion() {
-    const text = this.newQuestionText().trim();
-    if (!text || !this.projectId) return;
-    this.apiService.addQuestion(this.projectId, { text, question_text: text }).subscribe({
+    let text = (this.questionInputText || '').trim();
+    if (!text && typeof document !== 'undefined') {
+      const el = document.querySelector('#inputQuestion') as HTMLInputElement;
+      if (el && el.value) text = el.value.trim();
+    }
+    const pid = this.getEffectiveProjectId();
+    if (!text || !pid) return;
+    this.projectId = pid;
+
+    // Optimistically update UI so the question appears immediately
+    const optimisticQ: ResearchQuestion = {
+      id: String(Date.now()),
+      text: text,
+      embedding_status: 'embedded',
+      coverage_score: 0,
+      created_at: new Date().toISOString()
+    };
+    this.questions.update(qs => [optimisticQ, ...qs]);
+    this.questionInputText = '';
+    if (typeof document !== 'undefined') {
+      const el = document.querySelector('#inputQuestion') as HTMLInputElement;
+      if (el) el.value = '';
+    }
+
+    this.apiService.addQuestion(pid, { text, question_text: text }).subscribe({
       next: (res: any) => {
-        const newQ: ResearchQuestion = res.question || {
-          id: res.question_id || res.id,
-          question_id: res.question_id || res.id,
-          text: res.text || text,
-          question_text: res.text || text,
-          embedding_status: 'embedded',
-          created_at: new Date().toISOString()
-        };
-        this.questions.update(qs => [...qs, newQ]);
-        this.newQuestionText.set('');
         this.toastService.success('Success', 'Research question added');
-        this.loadInitialData(); // reload papers to trigger similarity calculations
       },
-      error: err => console.error('Add question error:', err)
+      error: err => console.error('Add question backend error:', err)
     });
   }
 

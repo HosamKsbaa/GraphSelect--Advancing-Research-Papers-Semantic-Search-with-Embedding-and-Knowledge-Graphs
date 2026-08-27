@@ -7,13 +7,13 @@
     
     <div class="question-input">
       <input 
+        id="inputQuestion"
         type="text" 
-        [ngModel]="newQuestionText()" 
-        (ngModelChange)="newQuestionText.set($event)"
+        [(ngModel)]="questionInputText"
         placeholder="Add new research question..."
         (keyup.enter)="addQuestion()"
       />
-      <button (click)="addQuestion()" [disabled]="!newQuestionText().trim()">Add</button>
+      <button id="btnAddQuestion" type="button" class="add-btn" (click)="addQuestion()">Add</button>
     </div>
 
     <ul class="question-list">
@@ -23,19 +23,22 @@
           description="Add questions to start exploring."
           iconSvg="<svg viewBox='0 0 24 24'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z'/></svg>">
         </app-empty-state>
+      } @else {
+        @for (q of questions(); track q.id || $index) {
+          <li class="question-item">
+            <div class="question-header">
+              <span class="status-icon" [title]="'Status: ' + q.embedding_status">
+                {{ getQuestionStatusIcon(q.embedding_status) }}
+              </span>
+              <span class="question-text" [title]="q.text">{{ q.text }}</span>
+              <button class="delete-btn" (click)="confirmDeleteQuestion(q.id)" title="Delete Question">&times;</button>
+            </div>
+            <div class="coverage-badge">
+              Coverage: {{ (q.coverage_score || 0) | percent }}
+            </div>
+          </li>
+        }
       }
-      <li *ngFor="let q of questions()" class="question-item">
-        <div class="question-header">
-          <span class="status-icon" [title]="'Status: ' + q.embedding_status">
-            {{ getQuestionStatusIcon(q.embedding_status) }}
-          </span>
-          <span class="question-text" [title]="q.text">{{ q.text }}</span>
-          <button class="delete-btn" (click)="confirmDeleteQuestion(q.id)" title="Delete Question">&times;</button>
-        </div>
-        <div class="coverage-badge">
-          Coverage: {{ q.coverage_score | percent }}
-        </div>
-      </li>
     </ul>
   </aside>
 

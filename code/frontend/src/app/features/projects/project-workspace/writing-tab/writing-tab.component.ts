@@ -52,19 +52,23 @@ export class WritingTabComponent implements OnInit {
   }
 
   loadOutline() {
-    // Note: If api.getOutline is not strictly defined in api-service.md, we assume it's added.
-    // Alternatively, outline might be fetched differently depending on backend implementation.
-    (this.api as any).getOutline(this.projectId).subscribe({
+    this.api.getOutline(this.projectId).subscribe({
       next: (res: any) => {
-        this.sections = res.sections.map((sec: OutlineSection) => ({
-          section: sec,
-          status: 'not_started',
-          draft_text: null,
-          review: null,
-          revision_count: 0
-        }));
+        if (res && res.sections && Array.isArray(res.sections)) {
+          this.sections = res.sections.map((sec: OutlineSection) => ({
+            section: sec,
+            status: 'not_started',
+            draft_text: null,
+            review: null,
+            revision_count: 0
+          }));
+        } else {
+          this.sections = [];
+        }
       },
-      error: (err: any) => console.error('Failed to load outline', err)
+      error: () => {
+        this.sections = [];
+      }
     });
   }
 

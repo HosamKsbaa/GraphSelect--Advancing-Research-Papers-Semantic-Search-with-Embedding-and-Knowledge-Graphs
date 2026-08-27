@@ -234,7 +234,13 @@ export class ApiService {
 
   listQuestions(projectId: string): Observable<ResearchQuestion[]> {
     return this.http.get<{questions: ResearchQuestion[]}>(`${this.baseUrl}/research/${projectId}/questions`).pipe(
-      map(res => res.questions || [])
+      map(res => (res.questions || []).map((q: any) => ({
+        id: q.question_id || q.id || String(Date.now()),
+        text: q.text || q.question_text || '',
+        embedding_status: q.embedding_status || 'embedded',
+        coverage_score: q.coverage_score || 0,
+        created_at: q.created_at || new Date().toISOString()
+      })))
     );
   }
 
@@ -328,6 +334,10 @@ export class ApiService {
 
   generateOutline(projectId: string, body: OutlineRequest): Observable<OutlineResponse> {
     return this.http.post<OutlineResponse>(`${this.baseUrl}/planning/${projectId}/outline`, body);
+  }
+
+  getOutline(projectId: string): Observable<OutlineResponse> {
+    return this.http.get<OutlineResponse>(`${this.baseUrl}/planning/${projectId}/outline`);
   }
 
   // --- Writing ---
