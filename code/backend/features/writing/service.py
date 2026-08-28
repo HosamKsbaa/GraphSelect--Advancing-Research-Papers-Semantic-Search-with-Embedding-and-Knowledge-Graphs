@@ -206,12 +206,12 @@ Description: {section_description}
         # Determine which DOIs were actually cited
         cited_dois: list[str] = [doi for doi in paper_dois if doi in markdown]
 
-        # Save to disk
+        # Save to disk with cross-platform fallback
+        from core.storage_utils import get_safe_project_dir, safe_write_text
         slug = re.sub(r"[^a-z0-9]+", "_", section_title.lower()).strip("_")[:60]
-        draft_dir = Path(self._projects_dir) / project_id / "drafts"
-        draft_dir.mkdir(parents=True, exist_ok=True)
+        draft_dir = get_safe_project_dir(project_id, subfolder="drafts", primary_base=self._projects_dir)
         draft_path = draft_dir / f"{slug}.md"
-        draft_path.write_text(markdown, encoding="utf-8")
+        actual_path, _ = safe_write_text(draft_path, markdown, encoding="utf-8")
 
         # Log trace
         if self._log_service:
@@ -233,7 +233,7 @@ Description: {section_description}
             "markdown": markdown,
             "word_count": word_count,
             "cited_dois": cited_dois,
-            "saved_path": str(draft_path),
+            "saved_path": str(actual_path),
         }
 
     # ------------------------------------------------------------------

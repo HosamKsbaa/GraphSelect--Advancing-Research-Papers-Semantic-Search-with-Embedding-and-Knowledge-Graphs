@@ -221,15 +221,15 @@ outline for a literature review using a **{style}** organisation style.
         except json.JSONDecodeError:
             return {"error": "LLM returned invalid JSON for outline.", "raw": raw_text[:1000]}
 
-        # Persist to disk
-        project_dir = Path(self._projects_dir) / project_id / "outlines"
-        project_dir.mkdir(parents=True, exist_ok=True)
+        # Persist to disk with cross-platform fallback
+        from core.storage_utils import get_safe_project_dir, safe_write_text
+        project_dir = get_safe_project_dir(project_id, subfolder="outlines", primary_base=self._projects_dir)
         outline_path = project_dir / "outline.json"
-        outline_path.write_text(json.dumps(outline_data, indent=2, ensure_ascii=False))
+        actual_path, _ = safe_write_text(outline_path, json.dumps(outline_data, indent=2, ensure_ascii=False))
 
         return {
             "sections": outline_data.get("sections", []),
             "narrative_arc": outline_data.get("narrative_arc", ""),
             "style": style,
-            "saved_path": str(outline_path),
+            "saved_path": str(actual_path),
         }
