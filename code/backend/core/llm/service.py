@@ -388,6 +388,33 @@ class LLMService:
                     )
                     await asyncio.sleep(backoff)
                     continue
+
+                if status_code == 429 and self._model_name != "gemini-3.5-flash-lite":
+                    logger.warning(
+                        "LLM call 429 Quota Exceeded on %s; attempting automatic fallback to gemini-3.5-flash-lite...",
+                        self._model_name,
+                    )
+                    try:
+                        fallback_func = partial(
+                            self._client.models.generate_content,
+                            model="gemini-3.5-flash-lite",
+                            contents=request.prompt,
+                            config=config,
+                        )
+                        result = await loop.run_in_executor(None, fallback_func)
+                        text = result.text or ""
+                        usage = TokenUsage()
+                        if hasattr(result, "usage_metadata") and result.usage_metadata:
+                            meta = result.usage_metadata
+                            usage = TokenUsage(
+                                prompt_tokens=getattr(meta, "prompt_token_count", 0) or 0,
+                                completion_tokens=getattr(meta, "candidates_token_count", 0) or 0,
+                                total_tokens=getattr(meta, "total_token_count", 0) or 0,
+                            )
+                        return CompletionResponse(text=text, usage=usage)
+                    except Exception as fb_exc:
+                        logger.warning("Fallback to gemini-3.5-flash-lite failed: %s", fb_exc)
+
                 raise
 
         # Should be unreachable, but satisfy type checker
