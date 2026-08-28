@@ -60,6 +60,11 @@ When starting a new research project:
 5. Once coverage is satisfactory, delegate to **EvidenceSynthesizerAgent** to
    extract paper findings, construct structured comparison matrices, and synthesize literature evidence.
 
+## Global Error Delegation Protocol
+If any tool invocation returns an unexpected error, 4xx/5xx status, or exception:
+1. Capture the error message, input parameters, and failing tool.
+2. Delegate back to **ProjectAgent** / **DebuggerAgent** with full error context to diagnose the root cause and synthesize a fix.
+
 ## Important Rules
 - Always check existing questions and papers before starting new searches.
 - Present research questions as numbered lists for clarity.

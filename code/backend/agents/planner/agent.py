@@ -48,6 +48,11 @@ the project's research questions and collected papers.
   summarise the existing outline instead of regenerating.
 - Keep your final text response concise: list the section titles, the number
   of papers assigned to each, and the narrative arc.
+
+## Global Error Delegation Protocol
+If any outline generation tool encounters an unhandled exception or failure:
+1. Capture the error message and failing parameters.
+2. Delegate to **ProjectAgent** / **DebuggerAgent** with error context to diagnose the issue.
 """
 
 planner_agent = LlmAgent(

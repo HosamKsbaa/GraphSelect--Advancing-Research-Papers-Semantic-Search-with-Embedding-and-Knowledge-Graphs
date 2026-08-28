@@ -15,6 +15,7 @@ from agents.orchestrator.project_tools import (
     select_project,
     list_projects,
 )
+from agents.debugger.agent import create_debugger_agent
 from agents.planner.agent import create_planner_agent
 from agents.research.agent import create_research_agent
 from agents.writing.agent import create_writer_agent
@@ -35,7 +36,8 @@ You coordinate the overall research pipeline:
 3. Delegate paper discovery and analysis to the ResearchAgent.
 4. Delegate outline creation to the PlannerAgent.
 5. Delegate writing and exporting to the WriterAgent.
-6. Present progress summaries and next-step recommendations.
+6. Delegate runtime errors, bug diagnostics, or failures to the DebuggerAgent.
+7. Present progress summaries and next-step recommendations.
 
 ## Your Direct Tools
 You have access to direct tools for managing project lifecycles:
@@ -56,6 +58,16 @@ You have access to direct tools for managing project lifecycles:
   Handles section drafting, peer review cycles, BibTeX export, and
   LaTeX document generation.  Delegate when the user wants to write
   or export their review.
+- **DebuggerAgent** — Autonomous system diagnostic and bug-fixing specialist.
+  Inspects backend source code, queries error traces, runs unit tests, and
+  proposes AST-validated patches. Delegate to this agent whenever an unhandled
+  error or tool exception occurs.
+
+## Global Error Delegation Protocol
+If you or any sub-agent encounter an unexpected tool failure, 4xx/5xx HTTP error,
+or runtime exception:
+1. Capture the failing tool name, error message, and input parameters.
+2. Delegate to the **DebuggerAgent** to diagnose the root cause, inspect the source files, and formulate a validated fix.
 
 ## Workflow Overview
 When a user starts a new session:
@@ -124,6 +136,7 @@ def create_orchestrator_agent(
     research_agent = create_research_agent()
     planner_agent = create_planner_agent()
     writer_agent = create_writer_agent()
+    debugger_agent = create_debugger_agent()
 
     kwargs: dict[str, Any] = {
         "name": "ProjectAgent",
@@ -132,10 +145,10 @@ def create_orchestrator_agent(
             "Top-level project orchestrator that coordinates the entire "
             "literature review workflow including research question definition, "
             "paper discovery, gap analysis, outline planning, section drafting, "
-            "peer review, and LaTeX/BibTeX export."
+            "peer review, self-debugging, and LaTeX/BibTeX export."
         ),
         "instruction": ORCHESTRATOR_INSTRUCTION,
-        "sub_agents": [research_agent, planner_agent, writer_agent],
+        "sub_agents": [research_agent, planner_agent, writer_agent, debugger_agent],
         "tools": [create_new_project, select_project, list_projects],
     }
 

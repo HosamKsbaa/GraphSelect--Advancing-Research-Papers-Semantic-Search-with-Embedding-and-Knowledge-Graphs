@@ -60,6 +60,11 @@ The session state should contain:
    count, export file paths, and any sections that were not fully
    approved.
 
+## Global Error Delegation Protocol
+If drafting, loop iteration, or document export encounters an unhandled exception or 4xx/5xx error:
+1. Capture the failing section, tool name, and traceback.
+2. Delegate to **ProjectAgent** / **DebuggerAgent** with full error context to diagnose the issue and synthesize a fix.
+
 ## Notes
 - If the outline is not available in session state, ask the user to
   run the PlannerAgent first.

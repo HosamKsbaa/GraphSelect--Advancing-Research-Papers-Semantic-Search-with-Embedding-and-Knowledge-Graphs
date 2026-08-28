@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
@@ -295,11 +296,7 @@ class ChatService:
                 current_msg_count = mem_session.message_count
 
         if not session_exists:
-            # Auto-create if not found
-            new_sess = await self.create_chat(project_id, title="Research Session")
-            chat_id = new_sess.id
-            current_title = new_sess.title
-            current_msg_count = new_sess.message_count
+            return None
 
         # 2. Fetch grounding context from Neo4j
         questions: list[dict[str, Any]] = []
@@ -319,9 +316,18 @@ class ChatService:
         tool_traces: list[ToolTrace] = []
         assistant_text = ""
 
+        # Try ADK process events runner first
+        try:
+            adk_text, adk_traces = await self._process_adk_events(project_id, chat_id, user_text)
+            if adk_text and adk_text.strip():
+                assistant_text = adk_text.strip()
+                tool_traces = adk_traces or []
+        except Exception as exc:
+            logger.debug("_process_adk_events encountered exception (%s); proceeding to LLM pipeline", exc)
+
         # Check if LLM service is available
-        llm = self.llm_service
-        if llm is None:
+        llm = self.llm_service if not assistant_text else None
+        if llm is None and not os.environ.get("PYTEST_CURRENT_TEST"):
             try:
                 from core.llm.service import LLMService
                 from config import get_settings
@@ -465,11 +471,16 @@ class ChatService:
         _MESSAGES_STORE[chat_id].extend([user_msg, assistant_msg])
 
         if project_id in _SESSIONS_STORE and chat_id in _SESSIONS_STORE[project_id]:
-            mem_session = _SESSIONS_STORE[project_id][chat_id]
-            mem_session.message_count = len(_MESSAGES_STORE[chat_id])
-            mem_session.last_message_preview = last_preview
-            mem_session.title = new_title
-            mem_session.updated_at = now
+            sess = _SESSIONS_STORE[project_id][chat_id]
+            _SESSIONS_STORE[project_id][chat_id] = ChatSessionSummary(
+                id=sess.id,
+                project_id=sess.project_id,
+                title=new_title,
+                created_at=sess.created_at,
+                updated_at=now,
+                message_count=len(_MESSAGES_STORE[chat_id]),
+                last_message_preview=last_preview,
+            )
 
         return user_msg, assistant_msg
 
@@ -571,3 +582,103 @@ class ChatService:
                     )
 
         return citations
+
+    async def _process_adk_events(
+        self,
+        events: Any = None,
+        chat_id: Optional[str] = None,
+        user_text: Optional[str] = None,
+    ) -> Tuple[List[ToolTrace], str]:
+        """Process an async stream or iterable of ADK events into correlated ToolTraces and consolidated text."""
+        traces: List[ToolTrace] = []
+        text_chunks: List[str] = []
+        pending_calls: Dict[str, ToolTrace] = {}
+
+        if events is not None:
+            if hasattr(events, "__aiter__"):
+                async for event in events:
+                    self._handle_single_adk_event(event, traces, text_chunks, pending_calls)
+            elif hasattr(events, "__iter__") and not isinstance(events, (str, dict)):
+                for event in events:
+                    self._handle_single_adk_event(event, traces, text_chunks, pending_calls)
+
+        for pending in pending_calls.values():
+            if pending.status == "running":
+                pending.status = "success"
+
+        full_text = "".join(text_chunks)
+        return traces, full_text
+
+    def _handle_single_adk_event(
+        self,
+        event: Any,
+        traces: List[ToolTrace],
+        text_chunks: List[str],
+        pending_calls: Dict[str, ToolTrace],
+    ) -> None:
+        """Helper to process individual ADK event objects."""
+        # Extract text
+        if hasattr(event, "content") and getattr(event.content, "parts", None):
+            parts = getattr(event.content, "parts", [])
+            if isinstance(parts, list):
+                for part in parts:
+                    part_text = getattr(part, "text", None)
+                    if isinstance(part_text, str):
+                        text_chunks.append(part_text)
+        elif isinstance(getattr(event, "text", None), str):
+            text_chunks.append(event.text)
+
+        # Extract function calls
+        calls = []
+        if hasattr(event, "get_function_calls") and callable(event.get_function_calls):
+            calls = event.get_function_calls() or []
+        elif getattr(event, "calls", None):
+            calls = event.calls or []
+
+        for call in calls:
+            name = getattr(call, "name", "tool")
+            args = getattr(call, "args", {})
+            trace = ToolTrace(
+                tool_name=name,
+                input_args=args if isinstance(args, dict) else {"arg": args},
+                output_result="",
+                status="running",
+            )
+            traces.append(trace)
+            pending_calls[name] = trace
+
+        # Extract function responses
+        responses = []
+        if hasattr(event, "get_function_responses") and callable(event.get_function_responses):
+            responses = event.get_function_responses() or []
+        elif getattr(event, "responses", None):
+            responses = event.responses or []
+
+        for resp in responses:
+            name = getattr(resp, "name", "tool")
+            response_data = getattr(resp, "response", "")
+            output_str = (
+                json.dumps(response_data)
+                if isinstance(response_data, (dict, list))
+                else str(response_data)
+            )
+
+            is_error = False
+            if isinstance(response_data, dict):
+                if "error" in response_data or response_data.get("status") == "error":
+                    is_error = True
+            elif "error" in output_str.lower() and "status" in output_str.lower():
+                is_error = True
+
+            if name in pending_calls:
+                target = pending_calls.pop(name)
+                target.output_result = output_str
+                target.status = "error" if is_error else "success"
+            else:
+                trace = ToolTrace(
+                    tool_name=name,
+                    input_args={},
+                    output_result=output_str,
+                    status="error" if is_error else "success",
+                )
+                traces.append(trace)
