@@ -435,16 +435,25 @@ async def update_auth(body: AuthUpdateRequest, request: Request) -> SettingsResp
 
 
 @router.get("/models", response_model=AvailableModelsResponse)
-async def list_available_models_endpoint() -> AvailableModelsResponse:
+async def list_available_models_endpoint(
+    gemini_api_key: Optional[str] = None,
+    vertex_project: Optional[str] = None,
+    vertex_location: Optional[str] = None,
+    mode: Optional[str] = None,
+) -> AvailableModelsResponse:
     """Fetch live available Gemini models directly from Google API, or return fallback."""
+    import httpx
     from google import genai
 
     settings = get_settings()
-    gemini_key = _get_env_value("GEMINI_API_KEY") or settings.gemini_api_key
-    vertex_project = _get_env_value("VERTEX_PROJECT") or settings.vertex_project
-    vertex_location = _get_env_value("VERTEX_LOCATION") or settings.vertex_location or "us-central1"
+    gemini_key = gemini_api_key or _get_env_value("GEMINI_API_KEY") or settings.gemini_api_key
+    v_project = vertex_project or _get_env_value("VERTEX_PROJECT") or settings.vertex_project
+    v_location = vertex_location or _get_env_value("VERTEX_LOCATION") or settings.vertex_location or "us-central1"
+    
     use_vertex_raw = _get_env_value("USE_VERTEX_AI")
-    is_vertex = use_vertex_raw.lower() in ("true", "1", "yes") if use_vertex_raw else settings.use_vertex_ai
+    is_vertex = (mode == "vertex") if mode else (
+        use_vertex_raw.lower() in ("true", "1", "yes") if use_vertex_raw else settings.use_vertex_ai
+    )
 
     fallback_models = [
         "gemini-2.5-flash",
@@ -454,11 +463,55 @@ async def list_available_models_endpoint() -> AvailableModelsResponse:
         "gemini-3.1-flash-lite",
     ]
 
+    # Strategy 1: Google AI Studio via direct HTTPS (Fastest & Most Reliable)
+    if _is_real_key(gemini_key) and not (is_vertex and _is_real_project(v_project)):
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as http_client:
+                url = "https://generativelanguage.googleapis.com/v1beta/models"
+                res = await http_client.get(url, params={"key": gemini_key.strip()})
+                if res.status_code == 200:
+                    data = res.json()
+                    models = []
+                    model_details = []
+                    for m in data.get("models", []):
+                        raw_name = m.get("name", "")
+                        clean_name = raw_name.replace("models/", "")
+                        methods = m.get("supportedGenerationMethods", [])
+
+                        if "generateContent" not in methods:
+                            continue
+                        
+                        # Filter out TTS / audio / vision / robotics preview variants to keep list clean
+                        if any(skip in clean_name.lower() for skip in ["tts", "embedding", "transcribe", "robotics", "live", "veo", "lyria"]):
+                            continue
+
+                        models.append(clean_name)
+                        model_details.append(
+                            ModelInfo(
+                                name=clean_name,
+                                display_name=m.get("displayName", clean_name),
+                                description=m.get("description", ""),
+                                supported_actions=methods,
+                            )
+                        )
+
+                    unique_models = list(dict.fromkeys(models))
+                    if unique_models:
+                        return AvailableModelsResponse(
+                            models=unique_models,
+                            model_details=model_details,
+                            source="google_api",
+                            total=len(unique_models),
+                        )
+        except Exception as exc:
+            logger.warning("Direct Google API model fetch failed: %s; trying SDK fallback", exc)
+
+    # Strategy 2: Google GenAI SDK (Vertex AI or Studio fallback)
     try:
-        if is_vertex and _is_real_project(vertex_project):
-            client = genai.Client(vertexai=True, project=vertex_project, location=vertex_location)
+        if is_vertex and _is_real_project(v_project):
+            client = genai.Client(vertexai=True, project=v_project, location=v_location)
         elif _is_real_key(gemini_key):
-            client = genai.Client(api_key=gemini_key.strip())
+            client = genai.Client(api_key=gemini_key.strip(), vertexai=False)
         else:
             return AvailableModelsResponse(
                 models=fallback_models,
@@ -472,8 +525,7 @@ async def list_available_models_endpoint() -> AvailableModelsResponse:
             raw_name = getattr(m, "name", "")
             clean_name = raw_name.replace("models/", "").replace("publishers/google/models/", "")
 
-            # Filter for reasoning/content generation models (skip embedding/audio/vision-only)
-            if not clean_name or "embedding" in clean_name.lower() or "aqa" in clean_name.lower() or "imagen" in clean_name.lower():
+            if not clean_name or any(skip in clean_name.lower() for skip in ["tts", "embedding", "transcribe", "robotics", "live", "veo", "lyria", "aqa", "imagen"]):
                 continue
 
             supported = getattr(m, "supported_actions", []) or []
@@ -490,7 +542,6 @@ async def list_available_models_endpoint() -> AvailableModelsResponse:
                 )
             )
 
-        # Deduplicate and sort
         unique_models = list(dict.fromkeys(live_models))
         if not unique_models:
             unique_models = fallback_models

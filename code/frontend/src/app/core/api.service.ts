@@ -188,8 +188,12 @@ export class ApiService {
     return this.http.get<SettingsResponse>(`${this.baseUrl}/settings`);
   }
 
-  getAvailableModels(): Observable<AvailableModelsResponse> {
-    return this.http.get<AvailableModelsResponse>(`${this.baseUrl}/settings/models`);
+  getAvailableModels(apiKey?: string, mode?: string): Observable<AvailableModelsResponse> {
+    const params: string[] = [];
+    if (apiKey) params.push(`gemini_api_key=${encodeURIComponent(apiKey)}`);
+    if (mode) params.push(`mode=${encodeURIComponent(mode)}`);
+    const query = params.length > 0 ? `?${params.join('&')}` : '';
+    return this.http.get<AvailableModelsResponse>(`${this.baseUrl}/settings/models${query}`);
   }
 
   updateSettings(body: SettingsUpdateRequest): Observable<SettingsUpdateResponse> {

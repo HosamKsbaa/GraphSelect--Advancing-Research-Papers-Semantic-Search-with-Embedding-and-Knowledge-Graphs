@@ -99,6 +99,22 @@ export class SettingsPage implements OnInit {
         this.detectPreset();
 
         this.loading = false;
+
+        // Auto-fetch live models if credentials exist
+        if (settings.gemini_api_key_set || settings.has_credentials) {
+          this.api.getAvailableModels().subscribe({
+            next: (modelRes) => {
+              if (modelRes.models && modelRes.models.length > 0) {
+                this.availableModels = modelRes.models;
+                this.modelsSource = modelRes.source;
+                this.liveModelsCount = modelRes.total || modelRes.models.length;
+              }
+            },
+            error: () => {
+              // Silently fallback to defaults
+            },
+          });
+        }
       },
       error: (err) => {
         this.toast.error(
@@ -151,7 +167,8 @@ export class SettingsPage implements OnInit {
 
   fetchLiveModels(): void {
     this.refreshingModels = true;
-    this.api.getAvailableModels().subscribe({
+    const keyToUse = this.geminiApiKey?.trim() || undefined;
+    this.api.getAvailableModels(keyToUse, this.authMode).subscribe({
       next: (res) => {
         this.refreshingModels = false;
         this.availableModels = res.models || [];
@@ -166,7 +183,7 @@ export class SettingsPage implements OnInit {
         } else {
           this.toast.info(
             'Default Models Loaded',
-            'Using curated model list. Configure and test your Google API credentials to fetch live models.'
+            'Using curated model list. Configure your Gemini API key and click Save Settings or Test Connection.'
           );
         }
       },
