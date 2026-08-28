@@ -108,7 +108,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
             if self._api_key:
                 try:
-                    self._client = genai.Client(api_key=self._api_key)
+                    self._client = genai.Client(api_key=self._api_key, vertexai=False)
                     logger.info("GeminiEmbeddingProvider initialized via Google AI Studio")
                 except Exception as exc:
                     self._client = None

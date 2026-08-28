@@ -69,9 +69,10 @@ def create_gap_finder_agent() -> LlmAgent:
     Returns:
         Configured LlmAgent for gap analysis and paper ranking.
     """
+    settings = get_settings()
     return LlmAgent(
         name="GapFinderAgent",
-        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
+        model=getattr(settings, "adk_tier2_model", settings.adk_model_name),
         description=(
             "Analyzes the project's paper library coverage against research "
             "questions, identifies gaps, suggests targeted search queries to "

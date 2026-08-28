@@ -65,9 +65,10 @@ def create_evidence_synthesizer_agent() -> LlmAgent:
     Returns:
         Configured LlmAgent for literature evidence extraction and matrix synthesis.
     """
+    settings = get_settings()
     return LlmAgent(
         name="EvidenceSynthesizerAgent",
-        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
+        model=getattr(settings, "adk_tier2_model", settings.adk_model_name),
         description=(
             "Inspects retrieved paper abstracts, extracts methodologies, empirical findings, "
             "datasets, and limitations, constructs structured multi-dimensional comparison matrices, "

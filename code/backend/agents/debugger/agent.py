@@ -51,9 +51,10 @@ or unexpected tool exception, your role is to:
 
 def create_debugger_agent() -> LlmAgent:
     """Create and return the DebuggerAgent instance."""
+    settings = get_settings()
     return LlmAgent(
         name="DebuggerAgent",
-        model=getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
+        model=getattr(settings, "adk_tier1_model", settings.adk_model_name),
         description=(
             "Autonomous code diagnostic and bug-fixing specialist. "
             "Inspects backend source code, queries error traces, runs unit tests, "

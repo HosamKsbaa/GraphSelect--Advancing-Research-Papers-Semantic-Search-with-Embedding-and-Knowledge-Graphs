@@ -109,7 +109,7 @@ class LLMService:
 
             if self._api_key:
                 try:
-                    self._client = genai.Client(api_key=self._api_key)
+                    self._client = genai.Client(api_key=self._api_key, vertexai=False)
                     logger.info("LLMService initialized via Google AI Studio (model=%s)", self._model_name)
                 except Exception as exc:
                     self._client = None
@@ -218,7 +218,7 @@ class LLMService:
                         "mode": target_mode,
                         "details": "Get a free API key at https://aistudio.google.com/",
                     }
-                probe_client = genai.Client(api_key=key)
+                probe_client = genai.Client(api_key=key, vertexai=False)
         except Exception as exc:
             err_msg = str(exc)
             if "DefaultCredentialsError" in type(exc).__name__ or "credentials" in err_msg.lower():
@@ -279,7 +279,10 @@ class LLMService:
                     details = None
             else:
                 # Google AI Studio Error Mapping
-                if "API_KEY_INVALID" in err_str or "API key not valid" in err_str or code == 400:
+                if "ACCESS_TOKEN_TYPE_UNSUPPORTED" in err_str or code == 401 or "UNAUTHENTICATED" in err_str:
+                    clean_error = "Invalid Gemini API key format. Google AI Studio keys start with 'AIzaSy...'. Please ensure you copied your key from https://aistudio.google.com/apikey (not an OpenAlex key)."
+                    details = "Generate a free Gemini API key at https://aistudio.google.com/apikey"
+                elif "API_KEY_INVALID" in err_str or "API key not valid" in err_str or code == 400:
                     clean_error = "Invalid Gemini API key. Please check your API key in Google AI Studio."
                     details = "Verify your API key at https://aistudio.google.com/"
                 elif "PERMISSION_DENIED" in err_str or code == 403:

@@ -61,9 +61,10 @@ If any outline generation tool (`get_project_summary`, `get_ranked_papers`, `gen
 
 def create_planner_agent() -> LlmAgent:
     """Create and return a new PlannerAgent instance."""
+    settings = get_settings()
     return LlmAgent(
         name="PlannerAgent",
-        model=getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
+        model=getattr(settings, "adk_tier1_model", settings.adk_model_name),
         description=(
             "Generates structured literature review outlines from "
             "ranked papers and research questions."

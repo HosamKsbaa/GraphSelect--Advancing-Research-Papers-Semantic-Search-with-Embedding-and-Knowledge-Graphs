@@ -332,7 +332,9 @@ class ChatService:
                 from core.llm.service import LLMService
                 from config import get_settings
                 settings = get_settings()
-                if settings.gemini_api_key:
+                if settings.gemini_api_key and settings.gemini_api_key not in ("none", "", "dev-dummy-gemini-key"):
+                    os.environ["GEMINI_API_KEY"] = settings.gemini_api_key
+                    os.environ["GOOGLE_API_KEY"] = settings.gemini_api_key
                     llm = LLMService(api_key=settings.gemini_api_key)
             except Exception:
                 llm = None

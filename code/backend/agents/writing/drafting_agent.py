@@ -63,9 +63,10 @@ If abstract retrieval or section drafting (`get_paper_abstracts`, `draft_section
 
 def create_drafting_agent() -> LlmAgent:
     """Create and return a new DraftingAgent instance."""
+    settings = get_settings()
     return LlmAgent(
         name="DraftingAgent",
-        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
+        model=getattr(settings, "adk_tier2_model", settings.adk_model_name),
         description=(
             "Drafts individual literature review sections from the outline, "
             "using paper abstracts as source material."

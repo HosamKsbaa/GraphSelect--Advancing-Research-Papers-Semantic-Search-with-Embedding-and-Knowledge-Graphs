@@ -81,7 +81,7 @@ def test_llm_service_initialization_ai_studio() -> None:
 
         with patch("core.llm.service.genai.Client") as mock_client:
             service = LLMService(api_key="AIzaSy_Studio_Secret")
-            mock_client.assert_called_once_with(api_key="AIzaSy_Studio_Secret")
+            mock_client.assert_called_once_with(api_key="AIzaSy_Studio_Secret", vertexai=False)
             assert service._client is not None
 
 
@@ -111,7 +111,7 @@ def test_gemini_embedding_provider_initialization_ai_studio() -> None:
 
         with patch("features.embedding.providers.gemini_provider.genai.Client") as mock_client:
             provider = GeminiEmbeddingProvider(api_key="AIzaSy_EmbeddingKey", output_dimensionality=768)
-            mock_client.assert_called_once_with(api_key="AIzaSy_EmbeddingKey")
+            mock_client.assert_called_once_with(api_key="AIzaSy_EmbeddingKey", vertexai=False)
             assert provider.dimensions == 768
 
 

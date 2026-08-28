@@ -141,9 +141,10 @@ def create_orchestrator_agent(
     writer_agent = create_writer_agent()
     debugger_agent = create_debugger_agent()
 
+    current_settings = get_settings()
     kwargs: dict[str, Any] = {
         "name": "ProjectAgent",
-        "model": getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
+        "model": getattr(current_settings, "adk_tier1_model", current_settings.adk_model_name),
         "description": (
             "Top-level project orchestrator that coordinates the entire "
             "literature review workflow including research question definition, "

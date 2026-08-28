@@ -85,9 +85,10 @@ If section review (`review_section`) or loop exit (`exit_loop`) encounters an un
 
 def create_reviewer_agent() -> LlmAgent:
     """Create and return a new ReviewerAgent instance."""
+    settings = get_settings()
     return LlmAgent(
         name="ReviewerAgent",
-        model=getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
+        model=getattr(settings, "adk_tier1_model", settings.adk_model_name),
         description=(
             "Reviews drafted sections for citation coverage, coherence, "
             "synthesis quality, and academic standards."
