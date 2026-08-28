@@ -286,7 +286,7 @@ class LLMService:
                     clean_error = "Permission denied for Google AI Studio API key. Ensure the key is active and has permission to access the Gemini API."
                     details = "Check API key restrictions in Google AI Studio or Google Cloud Console (https://aistudio.google.com/)."
                 elif "RESOURCE_EXHAUSTED" in err_str or code == 429:
-                    clean_error = "Google AI Studio rate limit or quota exceeded (HTTP 429)."
+                    clean_error = "Quota exceeded (HTTP 429). Google AI Studio rate limit or quota exceeded."
                     details = "Check your rate limits and quotas at https://aistudio.google.com/"
                 elif "NOT_FOUND" in err_str or code == 404:
                     clean_error = f"Model '{target_model}' was not found in Google AI Studio."
