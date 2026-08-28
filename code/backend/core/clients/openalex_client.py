@@ -31,8 +31,21 @@ class OpenAlexService:
         log_service: LogService | None = None,
     ) -> None:
         # Detect placeholder keys and treat them as "no key"
-        _placeholder_keys = {"", "your_openalex_api_key_here", "dev-dummy-openalex-key"}
-        self._api_key = api_key if api_key not in _placeholder_keys else ""
+        _placeholder_keys = {
+            "",
+            "your_openalex_api_key_here",
+            "dev-dummy-openalex-key",
+            "test-openalex-key",
+            "test_openalex_key",
+        }
+        is_placeholder = (
+            not api_key
+            or api_key in _placeholder_keys
+            or api_key.startswith("test-")
+            or api_key.startswith("dev-")
+            or api_key == "none"
+        )
+        self._api_key = "" if is_placeholder else api_key.strip()
         self._rate_limiter = rate_limiter
         self._log_service = log_service
 
@@ -119,6 +132,13 @@ class OpenAlexService:
                         response_body=resp_text,
                         session_id=session_id,
                     )
+
+                if response.status_code == 401 and "api_key" in params:
+                    logger.warning("OpenAlex rejected api_key with 401 Unauthorized; falling back to polite pool and retrying...")
+                    self._api_key = ""
+                    params.pop("api_key", None)
+                    response = await self._client.request(method, path, params=params)
+                    elapsed_ms = int(time.monotonic() * 1000) - start_ms
 
                 if response.status_code == 429:
                     if self._rate_limiter is not None:

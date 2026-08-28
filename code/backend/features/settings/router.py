@@ -34,8 +34,8 @@ ENV_FILE = find_env_file()
 _ENV_WRITE_LOCK = asyncio.Lock()
 
 # Sentinel values that ship in default configuration
-_PLACEHOLDER_KEYS = {"", "your_gemini_api_key_here", "your_openalex_api_key_here"}
-_PLACEHOLDER_PROJECTS = {"", "your-gcp-project-id", "your_project_id_here"}
+_PLACEHOLDER_KEYS = {"", "your_gemini_api_key_here", "your_openalex_api_key_here", "test-openalex-key", "test_openalex_key", "dev-dummy-openalex-key", "none"}
+_PLACEHOLDER_PROJECTS = {"", "your-gcp-project-id", "your_project_id_here", "test-project", "none"}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
