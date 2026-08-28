@@ -61,9 +61,13 @@ When starting a new research project:
    extract paper findings, construct structured comparison matrices, and synthesize literature evidence.
 
 ## Global Error Delegation Protocol
-If any tool invocation returns an unexpected error, 4xx/5xx status, or exception:
-1. Capture the error message, input parameters, and failing tool.
-2. Delegate back to **ProjectAgent** / **DebuggerAgent** with full error context to diagnose the root cause and synthesize a fix.
+If any research tool (`add_research_question`, `list_research_questions`, `get_project_papers`, `get_top_authors`, `get_top_venues`) or delegated sub-agent encounters an unexpected tool error, 4xx/5xx status, or unhandled exception:
+1. Do NOT silently ignore or conceal the error.
+2. Capture the structured error details:
+   - Failing tool name & input parameters
+   - Error message & traceback
+   - Execution context (project_id, current research operation)
+3. Escalate the error payload to **ProjectAgent** or delegate directly to **DebuggerAgent** for automated root-cause analysis, code inspection, and AST patch generation.
 
 ## Important Rules
 - Always check existing questions and papers before starting new searches.
@@ -88,7 +92,7 @@ def create_research_agent() -> LlmAgent:
 
     return LlmAgent(
         name="ResearchAgent",
-        model=_settings.adk_model_name,
+        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
         description=(
             "Coordinates literature review activities including research "
             "question management, paper discovery (via ALRSAgent), "

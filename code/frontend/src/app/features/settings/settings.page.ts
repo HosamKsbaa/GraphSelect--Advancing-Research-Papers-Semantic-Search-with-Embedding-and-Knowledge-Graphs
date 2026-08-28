@@ -34,6 +34,20 @@ export class SettingsPage implements OnInit {
   openalexApiKey = '';
   openalexEmail = '';
 
+  // Tiered Multi-Agent Architecture
+  tier1Model = 'gemini-2.5-flash';
+  tier2Model = 'gemini-3.5-flash-lite';
+  availableModels: string[] = [
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-3.5-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-3.1-flash-lite',
+  ];
+
+  // Active Architecture Preset
+  activePreset: 'speed' | 'balanced' | 'quality' | 'custom' = 'balanced';
+
   // Toggle visibility for API key inputs
   showGeminiKey = false;
   showOpenalexKey = false;
@@ -67,6 +81,18 @@ export class SettingsPage implements OnInit {
         this.vertexProject = settings.vertex_project || '';
         this.vertexLocation = settings.vertex_location || 'us-central1';
 
+        // Sync tiered models
+        if (settings.adk_tier1_model) {
+          this.tier1Model = settings.adk_tier1_model;
+        }
+        if (settings.adk_tier2_model) {
+          this.tier2Model = settings.adk_tier2_model;
+        }
+        if (settings.available_models && settings.available_models.length > 0) {
+          this.availableModels = settings.available_models;
+        }
+        this.detectPreset();
+
         this.loading = false;
       },
       error: (err) => {
@@ -77,6 +103,45 @@ export class SettingsPage implements OnInit {
         this.loading = false;
       },
     });
+  }
+
+  detectPreset(): void {
+    if (
+      this.tier1Model === 'gemini-3.5-flash-lite' &&
+      this.tier2Model === 'gemini-3.5-flash-lite'
+    ) {
+      this.activePreset = 'speed';
+    } else if (
+      this.tier1Model === 'gemini-2.5-flash' &&
+      this.tier2Model === 'gemini-3.5-flash-lite'
+    ) {
+      this.activePreset = 'balanced';
+    } else if (
+      this.tier1Model === 'gemini-2.5-pro' &&
+      this.tier2Model === 'gemini-2.5-flash'
+    ) {
+      this.activePreset = 'quality';
+    } else {
+      this.activePreset = 'custom';
+    }
+  }
+
+  applyPreset(preset: 'speed' | 'balanced' | 'quality'): void {
+    this.activePreset = preset;
+    if (preset === 'speed') {
+      this.tier1Model = 'gemini-3.5-flash-lite';
+      this.tier2Model = 'gemini-3.5-flash-lite';
+    } else if (preset === 'balanced') {
+      this.tier1Model = 'gemini-2.5-flash';
+      this.tier2Model = 'gemini-3.5-flash-lite';
+    } else if (preset === 'quality') {
+      this.tier1Model = 'gemini-2.5-pro';
+      this.tier2Model = 'gemini-2.5-flash';
+    }
+  }
+
+  onTierModelChange(): void {
+    this.detectPreset();
   }
 
   setMode(mode: 'studio' | 'vertex'): void {
@@ -157,6 +222,8 @@ export class SettingsPage implements OnInit {
       mode: this.authMode,
       use_vertex_ai: this.authMode === 'vertex',
       openalex_email: this.openalexEmail.trim(),
+      adk_tier1_model: this.tier1Model,
+      adk_tier2_model: this.tier2Model,
     };
 
     if (this.authMode === 'studio') {

@@ -113,7 +113,9 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8000, ge=1, le=65535)
 
     # --- ADK / Agent Configuration ---
-    adk_model_name: str = Field(default="gemini-3.7-flash", description="Model for reasoning agents")
+    adk_model_name: str = Field(default="gemini-2.5-flash", description="Legacy default model for agents")
+    adk_tier1_model: str = Field(default="gemini-2.5-flash", description="Tier 1 model for Orchestration & Reasoning agents (ProjectAgent, Planner, Reviewer, Debugger)")
+    adk_tier2_model: str = Field(default="gemini-3.5-flash-lite", description="Tier 2 model for Specialized Worker agents (ALRSAgent, GapFinder, Synthesizer, Drafting)")
     token_budget_default: int = Field(default=500000, ge=1000, description="Default token budget per pipeline run")
     token_budget_warn_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Warn at this fraction of budget")
     max_research_questions: int = Field(default=6, ge=1, le=20, description="Max questions per project")

@@ -72,16 +72,31 @@ The session state contains:
 - Always check for missing citations — all assigned DOIs should appear.
 - If scores are borderline (3-4), lean towards requesting improvement
   unless the overall quality is strong.
+
+## Global Error Delegation Protocol
+If section review (`review_section`) or loop exit (`exit_loop`) encounters an unhandled exception or runtime failure:
+1. Do NOT approve or drop unreviewed sections silently.
+2. Capture the structured error details:
+   - Failing tool name & input parameters (section title, draft snippet, assigned DOIs)
+   - Error message & traceback
+   - Execution context (project_id, review iteration)
+3. Escalate the error payload to parent **WriterAgent** / **DebuggerAgent** for automated diagnostics and corrective action.
 """
 
-reviewer_agent = LlmAgent(
-    name="ReviewerAgent",
-    model=_settings.adk_model_name,
-    description=(
-        "Reviews drafted sections for citation coverage, coherence, "
-        "synthesis quality, and academic standards."
-    ),
-    instruction=REVIEWER_INSTRUCTION,
-    tools=[review_section, exit_loop],
-    output_key="review_result",
-)
+def create_reviewer_agent() -> LlmAgent:
+    """Create and return a new ReviewerAgent instance."""
+    return LlmAgent(
+        name="ReviewerAgent",
+        model=getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
+        description=(
+            "Reviews drafted sections for citation coverage, coherence, "
+            "synthesis quality, and academic standards."
+        ),
+        instruction=REVIEWER_INSTRUCTION,
+        tools=[review_section, exit_loop],
+        output_key="review_result",
+    )
+
+
+reviewer_agent = create_reviewer_agent()
+

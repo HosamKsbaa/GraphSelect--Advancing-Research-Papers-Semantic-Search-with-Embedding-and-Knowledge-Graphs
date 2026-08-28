@@ -51,6 +51,15 @@ When asked to analyze the project:
 - For rankings, show the top papers with their hybrid scores.
 - Always include actionable recommendations (e.g., "Search for X to fill gap in Q3").
 - Use precise numbers (scores, counts, percentages).
+
+## Global Error Delegation Protocol
+If any similarity, ranking, or coverage tool (`compute_similarity`, `get_citation_stats`, `analyze_coverage`, `suggest_gap_queries`, `rank_papers`) fails or returns an error:
+1. Do NOT silently ignore or drop the failure.
+2. Capture the structured error details:
+   - Failing tool name & input parameters
+   - Error message & traceback
+   - Execution context (project_id, active research question or DOI)
+3. Escalate the error payload to parent **ResearchAgent** / **DebuggerAgent** for automated diagnosis, AST-validated correction, and test verification.
 """
 
 
@@ -62,7 +71,7 @@ def create_gap_finder_agent() -> LlmAgent:
     """
     return LlmAgent(
         name="GapFinderAgent",
-        model=_settings.adk_model_name,
+        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
         description=(
             "Analyzes the project's paper library coverage against research "
             "questions, identifies gaps, suggests targeted search queries to "

@@ -123,3 +123,119 @@ def test_debugger_agent_creation():
     assert "fetch_error_logs" in tool_names
     assert "run_agent_tests" in tool_names
     assert "validate_and_propose_patch" in tool_names
+
+
+def test_debugger_agent_exports():
+    """Verify DebuggerAgent exports in agents, agents.agent, and agents.debugger."""
+    import agents
+    import agents.agent
+    import agents.debugger
+
+    assert hasattr(agents, "DebuggerAgent")
+    assert hasattr(agents, "create_debugger_agent")
+    assert hasattr(agents, "debugger_agent")
+
+    assert hasattr(agents.agent, "DebuggerAgent")
+    assert hasattr(agents.agent, "create_debugger_agent")
+    assert hasattr(agents.agent, "debugger_agent")
+
+    assert hasattr(agents.debugger, "DebuggerAgent")
+    assert hasattr(agents.debugger, "create_debugger_agent")
+    assert hasattr(agents.debugger, "debugger_agent")
+
+    assert agents.debugger.debugger_agent.name == "DebuggerAgent"
+
+
+def test_orchestrator_debugger_registration():
+    """Verify DebuggerAgent is registered inside ProjectAgent and root_agent sub-agents."""
+    from agents.agent import root_agent
+
+    root_sub_agent_names = [a.name for a in root_agent.sub_agents]
+    assert "ResearchAgent" in root_sub_agent_names
+    assert "PlannerAgent" in root_sub_agent_names
+    assert "WriterAgent" in root_sub_agent_names
+    assert "DebuggerAgent" in root_sub_agent_names
+
+
+def test_swarm_wide_global_error_delegation_protocol():
+    """Verify that all 9 ALRS swarm agents have ## Global Error Delegation Protocol configured."""
+    from agents.orchestrator.agent import ORCHESTRATOR_INSTRUCTION
+    from agents.research.agent import RESEARCH_AGENT_INSTRUCTION
+    from agents.research.alrs_agent import ALRS_AGENT_INSTRUCTION
+    from agents.research.gap_finder import GAP_FINDER_INSTRUCTION
+    from agents.research.evidence_synthesizer import EVIDENCE_SYNTHESIZER_INSTRUCTION
+    from agents.planner.agent import PLANNER_INSTRUCTION
+    from agents.writing.agent import WRITER_INSTRUCTION
+    from agents.writing.drafting_agent import DRAFTING_INSTRUCTION
+    from agents.writing.reviewer_agent import REVIEWER_INSTRUCTION
+
+    instructions = {
+        "ProjectAgent": ORCHESTRATOR_INSTRUCTION,
+        "ResearchAgent": RESEARCH_AGENT_INSTRUCTION,
+        "ALRSAgent": ALRS_AGENT_INSTRUCTION,
+        "GapFinderAgent": GAP_FINDER_INSTRUCTION,
+        "EvidenceSynthesizerAgent": EVIDENCE_SYNTHESIZER_INSTRUCTION,
+        "PlannerAgent": PLANNER_INSTRUCTION,
+        "WriterAgent": WRITER_INSTRUCTION,
+        "DraftingAgent": DRAFTING_INSTRUCTION,
+        "ReviewerAgent": REVIEWER_INSTRUCTION,
+    }
+
+    for agent_name, inst in instructions.items():
+        assert "## Global Error Delegation Protocol" in inst, f"{agent_name} missing '## Global Error Delegation Protocol'"
+        assert "DebuggerAgent" in inst, f"{agent_name} does not reference DebuggerAgent"
+        assert "failing" in inst.lower(), f"{agent_name} does not specify failing tool/parameter capture"
+        assert "project_id" in inst or "project" in inst.lower(), f"{agent_name} missing project context"
+
+
+def test_repeated_factory_instantiation():
+    """Verify that create_root_agent and create_orchestrator_agent can be invoked multiple times without ValidationError."""
+    from agents.agent import create_root_agent
+    from agents.orchestrator.agent import create_orchestrator_agent
+    from agents.planner.agent import create_planner_agent
+    from agents.writing.agent import create_writer_agent
+    from agents.writing.drafting_agent import create_drafting_agent
+    from agents.writing.reviewer_agent import create_reviewer_agent
+    from agents.research.agent import create_research_agent
+    from agents.debugger.agent import create_debugger_agent
+
+    roots = []
+    orchestrators = []
+    for i in range(5):
+        root = create_root_agent()
+        orch = create_orchestrator_agent(project_id=f"proj-test-{i}")
+        planner = create_planner_agent()
+        writer = create_writer_agent()
+        drafting = create_drafting_agent()
+        reviewer = create_reviewer_agent()
+        research = create_research_agent()
+        debugger = create_debugger_agent()
+
+        assert root.name == "ProjectAgent"
+        assert orch.name == "ProjectAgent"
+        assert planner.name == "PlannerAgent"
+        assert writer.name == "WriterAgent"
+        assert drafting.name == "DraftingAgent"
+        assert reviewer.name == "ReviewerAgent"
+        assert research.name == "ResearchAgent"
+        assert debugger.name == "DebuggerAgent"
+
+        # Check sub-agents hierarchy
+        sub_names = [sa.name for sa in orch.sub_agents]
+        assert "ResearchAgent" in sub_names
+        assert "PlannerAgent" in sub_names
+        assert "WriterAgent" in sub_names
+        assert "DebuggerAgent" in sub_names
+
+        roots.append(root)
+        orchestrators.append(orch)
+
+    # Verify each iteration constructed fresh, distinct instances
+    for i in range(len(roots)):
+        for j in range(i + 1, len(roots)):
+            assert roots[i] is not roots[j]
+            assert orchestrators[i] is not orchestrators[j]
+
+
+
+

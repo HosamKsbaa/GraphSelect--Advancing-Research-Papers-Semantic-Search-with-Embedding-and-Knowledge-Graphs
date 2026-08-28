@@ -64,10 +64,13 @@ You have access to direct tools for managing project lifecycles:
   error or tool exception occurs.
 
 ## Global Error Delegation Protocol
-If you or any sub-agent encounter an unexpected tool failure, 4xx/5xx HTTP error,
-or runtime exception:
-1. Capture the failing tool name, error message, and input parameters.
-2. Delegate to the **DebuggerAgent** to diagnose the root cause, inspect the source files, and formulate a validated fix.
+If you or any sub-agent encounter an unexpected tool failure, 4xx/5xx HTTP error, or runtime exception:
+1. Do NOT silently ignore, mask, or drop the error.
+2. Capture the structured error details:
+   - Failing tool name & input parameters
+   - Error message & traceback
+   - Execution context (project_id, operation)
+3. Delegate directly to the **DebuggerAgent** to diagnose the root cause with `fetch_error_logs` and `read_agent_code`, execute reproducing tests with `run_agent_tests`, and formulate an AST-validated fix with `validate_and_propose_patch`.
 
 ## Workflow Overview
 When a user starts a new session:
@@ -140,7 +143,7 @@ def create_orchestrator_agent(
 
     kwargs: dict[str, Any] = {
         "name": "ProjectAgent",
-        "model": _settings.adk_model_name,
+        "model": getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
         "description": (
             "Top-level project orchestrator that coordinates the entire "
             "literature review workflow including research question definition, "
@@ -165,3 +168,9 @@ def create_orchestrator_agent(
         kwargs["after_tool_callback"] = callbacks["after_tool_callback"]
 
     return LlmAgent(**kwargs)
+
+
+__all__ = [
+    "ORCHESTRATOR_INSTRUCTION",
+    "create_orchestrator_agent",
+]

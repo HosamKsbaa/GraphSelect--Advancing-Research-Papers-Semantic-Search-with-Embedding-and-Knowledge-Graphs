@@ -12,28 +12,29 @@ Usage:
 """
 from __future__ import annotations
 
-from google.adk.agents import LlmAgent, LoopAgent
+from typing import Any
 
-from agents.writing.drafting_agent import drafting_agent
-from agents.writing.reviewer_agent import reviewer_agent
+from google.adk.agents import BaseAgent, LlmAgent, LoopAgent
+
+from agents.writing.drafting_agent import create_drafting_agent, drafting_agent
+from agents.writing.reviewer_agent import create_reviewer_agent, reviewer_agent
 from agents.writing.tools.export_tools import export_bibtex, export_latex, export_citation_graph
 from config import get_settings
 
 _settings = get_settings()
 
-# ------------------------------------------------------------------
-# Writer-Reviewer Loop (LoopAgent)
-# ------------------------------------------------------------------
 
-writer_reviewer_loop = LoopAgent(
-    name="WriterReviewerLoop",
-    sub_agents=[drafting_agent, reviewer_agent],
-    max_iterations=3,
-)
+def _safe_agent_eq(self: BaseAgent, other: Any) -> bool:
+    """Cycle-safe equality for ADK agent instances."""
+    if self is other:
+        return True
+    if not isinstance(other, BaseAgent):
+        return False
+    return self.name == other.name and type(self) is type(other)
 
-# ------------------------------------------------------------------
-# WriterAgent (LlmAgent wrapping the loop + export tools)
-# ------------------------------------------------------------------
+
+BaseAgent.__eq__ = _safe_agent_eq
+
 
 WRITER_INSTRUCTION = """\
 You are the **WriterAgent** for an Automated Literature Review System.
@@ -61,9 +62,13 @@ The session state should contain:
    approved.
 
 ## Global Error Delegation Protocol
-If drafting, loop iteration, or document export encounters an unhandled exception or 4xx/5xx error:
-1. Capture the failing section, tool name, and traceback.
-2. Delegate to **ProjectAgent** / **DebuggerAgent** with full error context to diagnose the issue and synthesize a fix.
+If drafting, review loop iteration, or document export (`export_bibtex`, `export_latex`, `export_citation_graph`) encounters an unhandled exception or runtime error:
+1. Do NOT silently fail or produce corrupted export artifacts.
+2. Capture the structured error details:
+   - Failing tool name & input parameters (section title, export format, paths)
+   - Error message & traceback
+   - Execution context (project_id, export or loop operation)
+3. Escalate the error payload to **ProjectAgent** or delegate directly to **DebuggerAgent** for automated diagnostic inspection and AST-validated resolution.
 
 ## Notes
 - If the outline is not available in session state, ask the user to
@@ -74,21 +79,31 @@ If drafting, loop iteration, or document export encounters an unhandled exceptio
   are deterministic and do not require LLM calls.
 """
 
-writer_agent = LlmAgent(
-    name="WriterAgent",
-    model=_settings.adk_model_name,
-    description=(
-        "Orchestrates the full writing pipeline: iterative draft-review "
-        "cycles for each section, then BibTeX and LaTeX export."
-    ),
-    instruction=WRITER_INSTRUCTION,
-    sub_agents=[writer_reviewer_loop],
-    tools=[export_bibtex, export_latex, export_citation_graph],
-    output_key="writer_result",
-)
-
 
 def create_writer_agent() -> LlmAgent:
-    """Create and return the WriterAgent instance."""
-    return writer_agent
+    """Create and return a new WriterAgent instance with fresh sub-agents."""
+    drafting = create_drafting_agent()
+    reviewer = create_reviewer_agent()
+    loop = LoopAgent(
+        name="WriterReviewerLoop",
+        sub_agents=[drafting, reviewer],
+        max_iterations=3,
+    )
+    return LlmAgent(
+        name="WriterAgent",
+        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
+        description=(
+            "Orchestrates the full writing pipeline: iterative draft-review "
+            "cycles for each section, then BibTeX and LaTeX export."
+        ),
+        instruction=WRITER_INSTRUCTION,
+        sub_agents=[loop],
+        tools=[export_bibtex, export_latex, export_citation_graph],
+        output_key="writer_result",
+    )
+
+
+writer_agent = create_writer_agent()
+writer_reviewer_loop = writer_agent.sub_agents[0]
+
 

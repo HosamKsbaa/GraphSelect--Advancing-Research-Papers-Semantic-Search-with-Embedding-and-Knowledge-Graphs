@@ -50,6 +50,11 @@ graph TB
   ReviewerAgent["🤖 <b>ReviewerAgent</b>"]:::specialist
   ReviewerAgent_t_0["🔧 review_section"]:::tool
   ReviewerAgent_t_1["🔧 exit_loop"]:::tool
+  DebuggerAgent["🤖 <b>DebuggerAgent</b>"]:::specialist
+  DebuggerAgent_t_0["🔧 read_agent_code"]:::tool
+  DebuggerAgent_t_1["🔧 fetch_error_logs"]:::tool
+  DebuggerAgent_t_2["🔧 run_agent_tests"]:::tool
+  DebuggerAgent_t_3["🔧 validate_and_propose_patch"]:::tool
 
   ProjectAgent -.->|tool| ProjectAgent_t_0
   ProjectAgent -.->|tool| ProjectAgent_t_1
@@ -94,3 +99,8 @@ graph TB
   WriterReviewerLoop -->|delegates to| ReviewerAgent
   ReviewerAgent -.->|tool| ReviewerAgent_t_0
   ReviewerAgent -.->|tool| ReviewerAgent_t_1
+  ProjectAgent -->|delegates to| DebuggerAgent
+  DebuggerAgent -.->|tool| DebuggerAgent_t_0
+  DebuggerAgent -.->|tool| DebuggerAgent_t_1
+  DebuggerAgent -.->|tool| DebuggerAgent_t_2
+  DebuggerAgent -.->|tool| DebuggerAgent_t_3

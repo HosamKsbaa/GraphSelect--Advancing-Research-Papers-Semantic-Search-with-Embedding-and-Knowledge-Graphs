@@ -115,8 +115,7 @@ def create_alrs_agent() -> LlmAgent:
     """
     return LlmAgent(
         name="ALRSAgent",
-        
-        model=_settings.adk_model_name,
+        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
         description=(
             "Handles academic paper discovery through OpenAlex searches "
             "(keyword, title, DOI, author, venue) and deep paper exploration "

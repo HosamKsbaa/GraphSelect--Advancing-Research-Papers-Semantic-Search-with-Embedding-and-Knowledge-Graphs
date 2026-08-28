@@ -35,17 +35,17 @@ or unexpected tool exception, your role is to:
 3. **run_agent_tests** — Run sandboxed pytest on relevant test files to reproduce bugs or verify fixes.
 4. **validate_and_propose_patch** — Perform Python AST syntax validation on a code patch and generate a clean unified diff (`+ / -`).
 
-## Autonomous Debugging Workflow
-1. **Understand the Error**: Analyze the error message, exception type, and stack trace provided in the context.
-2. **Query Recent Logs**: If the trace is truncated, call `fetch_error_logs` to get the full traceback.
-3. **Inspect the Code**: Use `read_agent_code` to view the offending lines and surrounding functions.
-4. **Test Hypothesis**: Run `run_agent_tests` on the affected module to see the baseline behavior.
-5. **Formulate & Validate Patch**: Call `validate_and_propose_patch` with exact snippets to verify AST syntax and generate the diff.
-6. **Final Report**: Present a clear, structured diagnosis:
-   - **Root Cause**: Why the bug occurred.
-   - **Affected File & Lines**: Exact path and line numbers.
-   - **Unified Diff**: The validated AST patch.
-   - **Verification Status**: Test pass/fail status.
+## Step-by-Step Diagnostic Workflow
+1. **Analyze Error Context**: Analyze incoming error description, traceback, failing tool name, and input parameters provided by the caller agent.
+2. **Retrieve Error Logs**: Call `fetch_error_logs` to retrieve recent unhandled exceptions, 4xx/5xx error traces, and full stack traces if not already in context.
+3. **Inspect Culprit Code**: Call `read_agent_code` to safely inspect the offending module, function, or line numbers and surrounding logic.
+4. **Reproduce & Test**: Call `run_agent_tests` on relevant test files or test functions to reproduce or verify failures and establish baseline behavior.
+5. **Validate & Propose Patch**: Call `validate_and_propose_patch` with exact target snippets and replacement code to generate an AST-validated unified diff with line numbers.
+6. **Structured Diagnostic Report**: Output a structured diagnostic report containing:
+   - **Root Cause Analysis**: Detailed explanation of why the failure occurred.
+   - **Failing Lines & Culprit Module**: Exact file path and line numbers.
+   - **AST-Validated Diff Patch**: The unified diff showing exact proposed modifications.
+   - **Verification Steps**: Test execution results and confirmation of fix validity.
 """
 
 
@@ -53,7 +53,7 @@ def create_debugger_agent() -> LlmAgent:
     """Create and return the DebuggerAgent instance."""
     return LlmAgent(
         name="DebuggerAgent",
-        model=_settings.adk_model_name,
+        model=getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
         description=(
             "Autonomous code diagnostic and bug-fixing specialist. "
             "Inspects backend source code, queries error traces, runs unit tests, "
@@ -70,3 +70,11 @@ def create_debugger_agent() -> LlmAgent:
 
 
 debugger_agent = create_debugger_agent()
+DebuggerAgent = debugger_agent
+
+__all__ = [
+    "DEBUGGER_AGENT_INSTRUCTION",
+    "create_debugger_agent",
+    "debugger_agent",
+    "DebuggerAgent",
+]

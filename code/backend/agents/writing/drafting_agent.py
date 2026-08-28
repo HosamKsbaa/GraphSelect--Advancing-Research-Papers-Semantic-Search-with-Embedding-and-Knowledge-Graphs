@@ -50,16 +50,31 @@ The session state contains:
 - Include inline citations in ``(Author, Year)`` format.
 - Aim for 400-800 words per section.
 - Ensure smooth transitions between paragraphs.
+
+## Global Error Delegation Protocol
+If abstract retrieval or section drafting (`get_paper_abstracts`, `draft_section`) fails or encounters an unhandled error:
+1. Do NOT output partial or fabricated draft content.
+2. Capture the structured error details:
+   - Failing tool name & input parameters (section title, assigned DOIs, target_level)
+   - Error message & traceback
+   - Execution context (project_id, section index)
+3. Escalate the error payload to parent **WriterAgent** / **DebuggerAgent** for automated root-cause analysis and patch proposal.
 """
 
-drafting_agent = LlmAgent(
-    name="DraftingAgent",
-    model=_settings.adk_model_name,
-    description=(
-        "Drafts individual literature review sections from the outline, "
-        "using paper abstracts as source material."
-    ),
-    instruction=DRAFTING_INSTRUCTION,
-    tools=[get_paper_abstracts, draft_section],
-    output_key="draft_result",
-)
+def create_drafting_agent() -> LlmAgent:
+    """Create and return a new DraftingAgent instance."""
+    return LlmAgent(
+        name="DraftingAgent",
+        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
+        description=(
+            "Drafts individual literature review sections from the outline, "
+            "using paper abstracts as source material."
+        ),
+        instruction=DRAFTING_INSTRUCTION,
+        tools=[get_paper_abstracts, draft_section],
+        output_key="draft_result",
+    )
+
+
+drafting_agent = create_drafting_agent()
+

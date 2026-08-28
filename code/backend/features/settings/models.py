@@ -23,6 +23,20 @@ class SettingsResponse(BaseModel):
     vertex_location: Optional[str] = Field(default="us-central1", description="GCP location for Vertex AI")
     has_credentials: bool = Field(default=False, description="Whether active mode has valid credentials configured")
 
+    # Tiered Model Architecture extensions
+    adk_tier1_model: str = Field(default="gemini-2.5-flash", description="Model for Tier 1 Orchestration & Reasoning agents")
+    adk_tier2_model: str = Field(default="gemini-3.5-flash-lite", description="Model for Tier 2 Specialized Worker agents")
+    available_models: list[str] = Field(
+        default_factory=lambda: [
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
+            "gemini-3.1-flash-lite",
+        ],
+        description="List of selectable models for agent tiers",
+    )
+
 
 class SettingsUpdateRequest(BaseModel):
     """Request body for updating settings."""
@@ -34,6 +48,8 @@ class SettingsUpdateRequest(BaseModel):
     vertex_project: Optional[str] = Field(None, description="Google Cloud project ID for Vertex AI")
     vertex_location: Optional[str] = Field(None, description="Vertex AI location region")
     mode: Optional[Literal["studio", "vertex"]] = Field(None, description="Auth mode ('studio' or 'vertex')")
+    adk_tier1_model: Optional[str] = Field(None, description="Model for Tier 1 Orchestration agents")
+    adk_tier2_model: Optional[str] = Field(None, description="Model for Tier 2 Worker agents")
 
     @field_validator(
         "gemini_api_key", "vertex_project", "vertex_location",

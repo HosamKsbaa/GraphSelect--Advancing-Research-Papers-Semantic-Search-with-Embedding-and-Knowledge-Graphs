@@ -1,4 +1,11 @@
-"""Debugger agent package."""
-from .agent import create_debugger_agent, debugger_agent
+"""Debugger agent package for autonomous diagnostics and code repair."""
+from __future__ import annotations
 
-__all__ = ["create_debugger_agent", "debugger_agent"]
+from agents.debugger.agent import (
+    DebuggerAgent,
+    create_debugger_agent,
+    debugger_agent,
+)
+
+__all__ = ["DebuggerAgent", "create_debugger_agent", "debugger_agent"]
+

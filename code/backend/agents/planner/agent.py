@@ -50,25 +50,30 @@ the project's research questions and collected papers.
   of papers assigned to each, and the narrative arc.
 
 ## Global Error Delegation Protocol
-If any outline generation tool encounters an unhandled exception or failure:
-1. Capture the error message and failing parameters.
-2. Delegate to **ProjectAgent** / **DebuggerAgent** with error context to diagnose the issue.
+If any outline generation tool (`get_project_summary`, `get_ranked_papers`, `generate_outline`) encounters an unhandled exception or runtime failure:
+1. Do NOT produce broken or hallucinated outlines.
+2. Capture the structured error details:
+   - Failing tool name & input parameters (style, paper count)
+   - Error message & traceback
+   - Execution context (project_id, outline generation step)
+3. Escalate the error payload to **ProjectAgent** or delegate directly to **DebuggerAgent** for automated diagnosis, test verification, and patch proposal.
 """
 
-planner_agent = LlmAgent(
-    name="PlannerAgent",
-    model=_settings.adk_model_name,
-    description=(
-        "Generates structured literature review outlines from "
-        "ranked papers and research questions."
-    ),
-    instruction=PLANNER_INSTRUCTION,
-    tools=[get_project_summary, get_ranked_papers, generate_outline],
-    output_key="planner_result",
-)
-
-
 def create_planner_agent() -> LlmAgent:
-    """Create and return the PlannerAgent instance."""
-    return planner_agent
+    """Create and return a new PlannerAgent instance."""
+    return LlmAgent(
+        name="PlannerAgent",
+        model=getattr(_settings, "adk_tier1_model", _settings.adk_model_name),
+        description=(
+            "Generates structured literature review outlines from "
+            "ranked papers and research questions."
+        ),
+        instruction=PLANNER_INSTRUCTION,
+        tools=[get_project_summary, get_ranked_papers, generate_outline],
+        output_key="planner_result",
+    )
+
+
+planner_agent = create_planner_agent()
+
 

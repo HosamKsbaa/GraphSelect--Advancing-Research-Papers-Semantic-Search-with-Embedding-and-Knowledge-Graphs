@@ -47,6 +47,15 @@ When asked to synthesize literature:
 - Present comparison dimensions showing which papers take which stances.
 - Highlight explicit consensus (shared findings) and divergences (contradictions, trade-offs).
 - Provide a coherent 200-400 word synthesis narrative summarizing the state-of-the-art.
+
+## Global Error Delegation Protocol
+If any literature matrix generation or synthesis tool (`get_project_papers`, `extract_paper_findings`, `generate_comparison_matrix`, `synthesize_evidence`) encounters an error or unhandled exception:
+1. Do NOT suppress the error or return incomplete/hallucinated matrices.
+2. Capture the structured error details:
+   - Failing tool name & input parameters (assigned DOIs, comparison dimensions)
+   - Error message & traceback
+   - Execution context (project_id, synthesis operation)
+3. Escalate the error payload to parent **ResearchAgent** / **DebuggerAgent** for automated diagnosis and resolution.
 """
 
 
@@ -58,7 +67,7 @@ def create_evidence_synthesizer_agent() -> LlmAgent:
     """
     return LlmAgent(
         name="EvidenceSynthesizerAgent",
-        model=_settings.adk_model_name,
+        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
         description=(
             "Inspects retrieved paper abstracts, extracts methodologies, empirical findings, "
             "datasets, and limitations, constructs structured multi-dimensional comparison matrices, "

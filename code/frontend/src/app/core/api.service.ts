@@ -590,6 +590,11 @@ export interface SettingsResponse {
   vertex_project?: string | null;
   vertex_location?: string;
   has_credentials?: boolean;
+
+  // Tiered Model Architecture
+  adk_tier1_model?: string;
+  adk_tier2_model?: string;
+  available_models?: string[];
 }
 
 export interface SettingsUpdateRequest {
@@ -600,6 +605,8 @@ export interface SettingsUpdateRequest {
   vertex_project?: string;
   vertex_location?: string;
   mode?: AuthProviderMode;
+  adk_tier1_model?: string;
+  adk_tier2_model?: string;
 }
 
 export interface SettingsUpdateResponse {

@@ -451,6 +451,8 @@ async def get_settings_endpoint() -> SettingsResponse:
         use_vertex = settings.use_vertex_ai
 
     has_creds = _is_real_project(vertex_project) if use_vertex else _is_real_key(gemini_key)
+    tier1_model = _get_env_value("ADK_TIER1_MODEL") or settings.adk_tier1_model
+    tier2_model = _get_env_value("ADK_TIER2_MODEL") or settings.adk_tier2_model
 
     return SettingsResponse(
         gemini_api_key_set=_is_real_key(gemini_key),
@@ -465,6 +467,8 @@ async def get_settings_endpoint() -> SettingsResponse:
         vertex_project=vertex_project if _is_real_project(vertex_project) else None,
         vertex_location=vertex_location,
         has_credentials=has_creds,
+        adk_tier1_model=tier1_model,
+        adk_tier2_model=tier2_model,
     )
 
 
@@ -507,6 +511,17 @@ async def update_settings(body: SettingsUpdateRequest, request: Request) -> Sett
             _, clean_val = _clean_key_value("VERTEX_LOCATION", body.vertex_location)
             updates["VERTEX_LOCATION"] = clean_val
             changes.append("Vertex location")
+
+        if body.adk_tier1_model is not None and body.adk_tier1_model.strip():
+            _, clean_val = _clean_key_value("ADK_TIER1_MODEL", body.adk_tier1_model)
+            updates["ADK_TIER1_MODEL"] = clean_val
+            updates["ADK_MODEL_NAME"] = clean_val
+            changes.append(f"Tier 1 model ({clean_val})")
+
+        if body.adk_tier2_model is not None and body.adk_tier2_model.strip():
+            _, clean_val = _clean_key_value("ADK_TIER2_MODEL", body.adk_tier2_model)
+            updates["ADK_TIER2_MODEL"] = clean_val
+            changes.append(f"Tier 2 model ({clean_val})")
 
         if not updates:
             return SettingsUpdateResponse(

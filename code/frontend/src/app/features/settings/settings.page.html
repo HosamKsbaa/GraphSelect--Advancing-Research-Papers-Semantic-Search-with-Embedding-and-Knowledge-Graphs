@@ -297,6 +297,135 @@
       </div>
     </div>
 
+    <!-- ─── Multi-Agent Tiered Architecture Section ─── -->
+    <div class="settings-section card glass">
+      <div class="section-header">
+        <div class="section-icon section-icon-swarm">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 3v6m0 6v6M3 12h6m6 0h6"/>
+            <circle cx="12" cy="3" r="1.5"/>
+            <circle cx="12" cy="21" r="1.5"/>
+            <circle cx="3" cy="12" r="1.5"/>
+            <circle cx="21" cy="12" r="1.5"/>
+          </svg>
+        </div>
+        <div>
+          <h2 class="section-title">Multi-Agent Tiered Model Architecture</h2>
+          <p class="section-subtitle text-muted">Assign dedicated Gemini models to Orchestrators vs. Specialized Worker agents</p>
+        </div>
+      </div>
+
+      <div class="section-body">
+        <!-- Preset Architecture Buttons -->
+        <div class="architecture-presets">
+          <div class="preset-label text-xs text-muted">Quick Architecture Presets:</div>
+          <div class="preset-btn-group">
+            <button
+              type="button"
+              class="btn-preset"
+              [class.active]="activePreset === 'speed'"
+              (click)="applyPreset('speed')"
+            >
+              <span class="preset-emoji">⚡</span>
+              <div class="preset-info">
+                <span class="preset-name">High Speed</span>
+                <span class="preset-desc">Flash Lite across all agents</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              class="btn-preset"
+              [class.active]="activePreset === 'balanced'"
+              (click)="applyPreset('balanced')"
+            >
+              <span class="preset-emoji">⚖️</span>
+              <div class="preset-info">
+                <span class="preset-name">Balanced (Recommended)</span>
+                <span class="preset-desc">Flash (Tier 1) + Flash Lite (Tier 2)</span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              class="btn-preset"
+              [class.active]="activePreset === 'quality'"
+              (click)="applyPreset('quality')"
+            >
+              <span class="preset-emoji">🏆</span>
+              <div class="preset-info">
+                <span class="preset-name">Maximum Rigor</span>
+                <span class="preset-desc">Pro (Tier 1) + Flash (Tier 2)</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div class="tier-cards-grid">
+          <!-- Tier 1 Card -->
+          <div class="tier-card card">
+            <div class="tier-card-header">
+              <div class="tier-badge badge-tier1">Tier 1: Orchestration & Reasoning</div>
+              <span class="tier-tag text-xs">Deep Synthesis</span>
+            </div>
+            <p class="tier-description text-muted text-xs">
+              Directs overall workflow orchestration, narrative outlines, multi-turn peer review, and autonomous code self-debugging.
+            </p>
+            <div class="agent-pills">
+              <span class="agent-pill">ProjectAgent</span>
+              <span class="agent-pill">PlannerAgent</span>
+              <span class="agent-pill">ReviewerAgent</span>
+              <span class="agent-pill">DebuggerAgent</span>
+            </div>
+            <div class="tier-select-wrapper">
+              <label class="setting-label text-xs" for="tier1-model-select">Selected Model:</label>
+              <select
+                id="tier1-model-select"
+                class="tier-select"
+                [(ngModel)]="tier1Model"
+                (ngModelChange)="onTierModelChange()"
+              >
+                @for (model of availableModels; track model) {
+                  <option [value]="model">{{ model }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          <!-- Tier 2 Card -->
+          <div class="tier-card card">
+            <div class="tier-card-header">
+              <div class="tier-badge badge-tier2">Tier 2: Specialized Workers</div>
+              <span class="tier-tag text-xs">High Throughput</span>
+            </div>
+            <p class="tier-description text-muted text-xs">
+              Executes high-frequency tool calls: OpenAlex paper search, vector similarity ranking, evidence extraction, and drafting.
+            </p>
+            <div class="agent-pills">
+              <span class="agent-pill">ALRSAgent</span>
+              <span class="agent-pill">GapFinderAgent</span>
+              <span class="agent-pill">EvidenceSynthesizer</span>
+              <span class="agent-pill">DraftingAgent</span>
+            </div>
+            <div class="tier-select-wrapper">
+              <label class="setting-label text-xs" for="tier2-model-select">Selected Model:</label>
+              <select
+                id="tier2-model-select"
+                class="tier-select"
+                [(ngModel)]="tier2Model"
+                (ngModelChange)="onTierModelChange()"
+              >
+                @for (model of availableModels; track model) {
+                  <option [value]="model">{{ model }}</option>
+                }
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ─── Contact Info Section (OpenAlex) ─── -->
     <div class="settings-section card glass">
       <div class="section-header">
