@@ -1,0 +1,96 @@
+graph TB
+  %% Styling Definitions
+  classDef orchestrator fill:#4f46e5,stroke:#818cf8,stroke-width:2px,color:#ffffff,font-weight:bold;
+  classDef swarm fill:#2563eb,stroke:#60a5fa,stroke-width:2px,color:#ffffff,font-weight:bold;
+  classDef specialist fill:#0d9488,stroke:#2dd4bf,stroke-width:2px,color:#ffffff,font-weight:bold;
+  classDef loop fill:#d97706,stroke:#fbbf24,stroke-width:2px,color:#ffffff,font-weight:bold;
+  classDef tool fill:#1e293b,stroke:#475569,stroke-width:1px,color:#38bdf8,font-size:12px;
+
+  ProjectAgent["👑 <b>ProjectAgent</b>"]:::orchestrator
+  ProjectAgent_t_0["🔧 create_new_project"]:::tool
+  ProjectAgent_t_1["🔧 select_project"]:::tool
+  ProjectAgent_t_2["🔧 list_projects"]:::tool
+  ResearchAgent["🔬 <b>ResearchAgent</b>"]:::swarm
+  ResearchAgent_t_0["🔧 add_research_question"]:::tool
+  ResearchAgent_t_1["🔧 list_research_questions"]:::tool
+  ResearchAgent_t_2["🔧 get_project_papers"]:::tool
+  ResearchAgent_t_3["🔧 get_top_authors"]:::tool
+  ResearchAgent_t_4["🔧 get_top_venues"]:::tool
+  ALRSAgent["🤖 <b>ALRSAgent</b>"]:::specialist
+  ALRSAgent_t_0["🔧 search_papers_by_keyword"]:::tool
+  ALRSAgent_t_1["🔧 search_papers_by_title"]:::tool
+  ALRSAgent_t_2["🔧 search_papers_by_doi"]:::tool
+  ALRSAgent_t_3["🔧 search_papers_by_author"]:::tool
+  ALRSAgent_t_4["🔧 search_papers_by_venue"]:::tool
+  ALRSAgent_t_5["🔧 explore_paper"]:::tool
+  ALRSAgent_t_6["🔧 add_paper_to_project"]:::tool
+  GapFinderAgent["🤖 <b>GapFinderAgent</b>"]:::specialist
+  GapFinderAgent_t_0["🔧 compute_similarity"]:::tool
+  GapFinderAgent_t_1["🔧 get_citation_stats"]:::tool
+  GapFinderAgent_t_2["🔧 analyze_coverage"]:::tool
+  GapFinderAgent_t_3["🔧 suggest_gap_queries"]:::tool
+  GapFinderAgent_t_4["🔧 rank_papers"]:::tool
+  EvidenceSynthesizerAgent["🤖 <b>EvidenceSynthesizerAgent</b>"]:::specialist
+  EvidenceSynthesizerAgent_t_0["🔧 get_project_papers"]:::tool
+  EvidenceSynthesizerAgent_t_1["🔧 extract_paper_findings"]:::tool
+  EvidenceSynthesizerAgent_t_2["🔧 generate_comparison_matrix"]:::tool
+  EvidenceSynthesizerAgent_t_3["🔧 synthesize_evidence"]:::tool
+  PlannerAgent["📐 <b>PlannerAgent</b>"]:::swarm
+  PlannerAgent_t_0["🔧 get_project_summary"]:::tool
+  PlannerAgent_t_1["🔧 get_ranked_papers"]:::tool
+  PlannerAgent_t_2["🔧 generate_outline"]:::tool
+  WriterAgent["✍️ <b>WriterAgent</b>"]:::swarm
+  WriterAgent_t_0["🔧 export_bibtex"]:::tool
+  WriterAgent_t_1["🔧 export_latex"]:::tool
+  WriterAgent_t_2["🔧 export_citation_graph"]:::tool
+  WriterReviewerLoop["🔄 <b>WriterReviewerLoop</b>"]:::loop
+  DraftingAgent["🤖 <b>DraftingAgent</b>"]:::specialist
+  DraftingAgent_t_0["🔧 get_paper_abstracts"]:::tool
+  DraftingAgent_t_1["🔧 draft_section"]:::tool
+  ReviewerAgent["🤖 <b>ReviewerAgent</b>"]:::specialist
+  ReviewerAgent_t_0["🔧 review_section"]:::tool
+  ReviewerAgent_t_1["🔧 exit_loop"]:::tool
+
+  ProjectAgent -.->|tool| ProjectAgent_t_0
+  ProjectAgent -.->|tool| ProjectAgent_t_1
+  ProjectAgent -.->|tool| ProjectAgent_t_2
+  ProjectAgent -->|delegates to| ResearchAgent
+  ResearchAgent -.->|tool| ResearchAgent_t_0
+  ResearchAgent -.->|tool| ResearchAgent_t_1
+  ResearchAgent -.->|tool| ResearchAgent_t_2
+  ResearchAgent -.->|tool| ResearchAgent_t_3
+  ResearchAgent -.->|tool| ResearchAgent_t_4
+  ResearchAgent -->|delegates to| ALRSAgent
+  ALRSAgent -.->|tool| ALRSAgent_t_0
+  ALRSAgent -.->|tool| ALRSAgent_t_1
+  ALRSAgent -.->|tool| ALRSAgent_t_2
+  ALRSAgent -.->|tool| ALRSAgent_t_3
+  ALRSAgent -.->|tool| ALRSAgent_t_4
+  ALRSAgent -.->|tool| ALRSAgent_t_5
+  ALRSAgent -.->|tool| ALRSAgent_t_6
+  ResearchAgent -->|delegates to| GapFinderAgent
+  GapFinderAgent -.->|tool| GapFinderAgent_t_0
+  GapFinderAgent -.->|tool| GapFinderAgent_t_1
+  GapFinderAgent -.->|tool| GapFinderAgent_t_2
+  GapFinderAgent -.->|tool| GapFinderAgent_t_3
+  GapFinderAgent -.->|tool| GapFinderAgent_t_4
+  ResearchAgent -->|delegates to| EvidenceSynthesizerAgent
+  EvidenceSynthesizerAgent -.->|tool| EvidenceSynthesizerAgent_t_0
+  EvidenceSynthesizerAgent -.->|tool| EvidenceSynthesizerAgent_t_1
+  EvidenceSynthesizerAgent -.->|tool| EvidenceSynthesizerAgent_t_2
+  EvidenceSynthesizerAgent -.->|tool| EvidenceSynthesizerAgent_t_3
+  ProjectAgent -->|delegates to| PlannerAgent
+  PlannerAgent -.->|tool| PlannerAgent_t_0
+  PlannerAgent -.->|tool| PlannerAgent_t_1
+  PlannerAgent -.->|tool| PlannerAgent_t_2
+  ProjectAgent -->|delegates to| WriterAgent
+  WriterAgent -.->|tool| WriterAgent_t_0
+  WriterAgent -.->|tool| WriterAgent_t_1
+  WriterAgent -.->|tool| WriterAgent_t_2
+  WriterAgent -->|delegates to| WriterReviewerLoop
+  WriterReviewerLoop -->|delegates to| DraftingAgent
+  DraftingAgent -.->|tool| DraftingAgent_t_0
+  DraftingAgent -.->|tool| DraftingAgent_t_1
+  WriterReviewerLoop -->|delegates to| ReviewerAgent
+  ReviewerAgent -.->|tool| ReviewerAgent_t_0
+  ReviewerAgent -.->|tool| ReviewerAgent_t_1

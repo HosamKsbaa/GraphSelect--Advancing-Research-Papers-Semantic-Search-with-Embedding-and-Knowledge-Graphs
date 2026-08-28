@@ -260,24 +260,40 @@ class LLMService:
             err_str = str(exc)
             code = getattr(exc, "code", getattr(exc, "status_code", 0))
 
-            if "API_KEY_INVALID" in err_str or "API key not valid" in err_str or code == 400:
-                clean_error = "Invalid Gemini API key. Please check your API key in Google AI Studio."
-                details = "Verify your API key at https://aistudio.google.com/"
-            elif "PERMISSION_DENIED" in err_str or code == 403:
-                clean_error = "Permission denied. Ensure Vertex AI API (aiplatform.googleapis.com) is enabled and you have necessary IAM permissions."
-                details = "Enable the API with 'gcloud services enable aiplatform.googleapis.com'."
-            elif "DefaultCredentialsError" in type(exc).__name__ or "could not automatically determine credentials" in err_str.lower():
-                clean_error = "Missing Google Cloud Application Default Credentials. Run 'gcloud auth application-default login'."
-                details = "Run 'gcloud auth application-default login' to authenticate with Vertex AI."
-            elif "RESOURCE_EXHAUSTED" in err_str or code == 429:
-                clean_error = "Quota exceeded (HTTP 429). Check your billing or rate limits."
-                details = "Check rate limits in Google AI Studio or GCP Console."
-            elif "NOT_FOUND" in err_str or code == 404:
-                clean_error = f"Model '{target_model}' was not found or is unavailable in the specified region/project."
-                details = "Ensure the model is available in your region."
+            if is_vertex:
+                # Vertex AI Error Mapping
+                if "DefaultCredentialsError" in type(exc).__name__ or "could not automatically determine credentials" in err_str.lower():
+                    clean_error = "Missing Google Cloud Application Default Credentials. Run 'gcloud auth application-default login'."
+                    details = "Run 'gcloud auth application-default login' to authenticate with Vertex AI."
+                elif "PERMISSION_DENIED" in err_str or code == 403:
+                    clean_error = "Permission denied. Ensure Vertex AI API (aiplatform.googleapis.com) is enabled and you have necessary IAM permissions."
+                    details = "Enable the API with 'gcloud services enable aiplatform.googleapis.com'."
+                elif "RESOURCE_EXHAUSTED" in err_str or code == 429:
+                    clean_error = "Vertex AI quota exceeded (HTTP 429). Check your Google Cloud quotas in the GCP Console."
+                    details = "Check quotas and billing at https://console.cloud.google.com/iam-admin/quotas"
+                elif "NOT_FOUND" in err_str or code == 404:
+                    clean_error = f"Model '{target_model}' was not found or is unavailable in the specified GCP region/project."
+                    details = "Ensure the model is available in your Vertex AI region."
+                else:
+                    clean_error = f"Vertex AI connection failed: {err_str}"
+                    details = None
             else:
-                clean_error = f"Connection failed: {err_str}"
-                details = None
+                # Google AI Studio Error Mapping
+                if "API_KEY_INVALID" in err_str or "API key not valid" in err_str or code == 400:
+                    clean_error = "Invalid Gemini API key. Please check your API key in Google AI Studio."
+                    details = "Verify your API key at https://aistudio.google.com/"
+                elif "PERMISSION_DENIED" in err_str or code == 403:
+                    clean_error = "Permission denied for Google AI Studio API key. Ensure the key is active and has permission to access the Gemini API."
+                    details = "Check API key restrictions in Google AI Studio or Google Cloud Console (https://aistudio.google.com/)."
+                elif "RESOURCE_EXHAUSTED" in err_str or code == 429:
+                    clean_error = "Google AI Studio rate limit or quota exceeded (HTTP 429)."
+                    details = "Check your rate limits and quotas at https://aistudio.google.com/"
+                elif "NOT_FOUND" in err_str or code == 404:
+                    clean_error = f"Model '{target_model}' was not found in Google AI Studio."
+                    details = "Ensure you are using a supported model like 'gemini-3.5-flash' or 'gemini-2.5-flash'."
+                else:
+                    clean_error = f"Google AI Studio connection failed: {err_str}"
+                    details = None
 
             return {
                 "success": False,
