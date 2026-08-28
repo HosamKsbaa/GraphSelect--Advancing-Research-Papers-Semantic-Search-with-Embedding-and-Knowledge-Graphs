@@ -41,6 +41,12 @@ _ALIAS_MAP = {
     "export": "export_service",
     "progress_service": "progress_service",
     "progress": "progress_service",
+    "graph_search_service": "graph_search_service",
+    "graph_search": "graph_search_service",
+    "crawler_service": "crawler_service",
+    "crawler": "crawler_service",
+    "ranking_service": "ranking_service",
+    "ranking": "ranking_service",
 }
 
 
@@ -51,12 +57,11 @@ class ServiceRegistryMeta(type):
         if name in _ALIAS_MAP:
             canonical = _ALIAS_MAP[name]
             attr_name = f"_{canonical}"
-            if attr_name in cls.__dict__ and cls.__dict__[attr_name] is not None:
-                return cls.__dict__[attr_name]
+            val = getattr(cls, attr_name, None)
+            if val is not None:
+                return val
             cls._ensure_initialized()
-            if hasattr(cls, attr_name):
-                return getattr(cls, attr_name)
-            return None
+            return getattr(cls, attr_name, None)
         raise AttributeError(f"type object '{cls.__name__}' has no attribute '{name}'")
 
     def __setattr__(cls, name: str, value: Any) -> None:
@@ -261,8 +266,33 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
                 log_service=log_service,
                 projects_dir=settings.projects_dir,
             )
-            from core.logging.progress_service import ProgressService
-            cls._progress_service = ProgressService()
+            from features.search.crawler_service import CrawlerService
+            from features.ranking.service import RankingService
+            from features.search.graph_search_service import GraphSearchService
+            from core.clients.rate_limiter import AdaptiveRateLimiter
+
+            rate_limiter = AdaptiveRateLimiter(
+                initial_rate=getattr(settings, "rate_limit_requests_per_second", 10.0),
+                min_rate=1.0,
+            )
+            crawler = CrawlerService(
+                neo4j=neo4j,
+                openalex=openalex,
+                rate_limiter=rate_limiter,
+                log_service=log_service,
+            )
+            ranking = RankingService(neo4j=neo4j, mysql=mysql)
+            cls._graph_search_service = GraphSearchService(
+                neo4j=neo4j,
+                openalex=openalex,
+                gemini=embedding_provider,
+                crawler=crawler,
+                ranking=ranking,
+                rate_limiter=rate_limiter,
+                log_service=log_service,
+            )
+            cls._crawler_service = crawler
+            cls._ranking_service = ranking
 
             logger.info("ServiceRegistry: on-demand initialization complete")
         except Exception as e:

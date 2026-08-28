@@ -15,6 +15,7 @@ from agents.research.tools.retrieval_tools import (
     add_paper_to_project,
     explore_paper,
     get_project_papers,
+    run_graphselect_traversal,
 )
 from agents.research.tools.search_tools import (
     add_research_question,
@@ -41,6 +42,7 @@ __all__ = [
     "explore_paper",
     "add_paper_to_project",
     "get_project_papers",
+    "run_graphselect_traversal",
     "compute_similarity",
     "get_citation_stats",
     "analyze_coverage",

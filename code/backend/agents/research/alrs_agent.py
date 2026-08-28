@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from google.adk.agents import LlmAgent
 
-from agents.research.tools.retrieval_tools import add_paper_to_project, explore_paper
+from agents.research.tools.retrieval_tools import (
+    add_paper_to_project,
+    explore_paper,
+    run_graphselect_traversal,
+)
 from agents.research.tools.search_tools import (
     search_papers_by_author,
     search_papers_by_doi,
@@ -23,11 +27,18 @@ _settings = get_settings()
 ALRS_AGENT_INSTRUCTION = """\
 You are the **ALRS Agent** (Automated Literature Review Search), an expert
 academic paper discovery assistant. Your role is to help researchers find
-relevant papers for their literature review using the OpenAlex scientific knowledge graph.
+relevant papers for their literature review using the OpenAlex scientific knowledge graph and GraphSelect BFS citation traversal.
 
 ## Your Capabilities & Tools
 You have access to these tools:
-1. **search_papers_by_keyword** — Broad keyword search across OpenAlex (/works?search=...).
+1. **run_graphselect_traversal** — Execute the recursive GraphSelect BFS Citation Traversal algorithm (ALRS). Starts from a seed paper DOI, traverses forward and backward citations layer by layer (1 to 3 hops), extracts paper metadata, builds vector embeddings, constructs the Neo4j citation graph, and computes PageRank + semantic similarity relevance rankings.
+2. **search_papers_by_keyword** — Broad keyword search across OpenAlex (/works?search=...).
+3. **search_papers_by_title** — Title search across OpenAlex.
+4. **search_papers_by_doi** — Direct lookup by DOI.
+5. **search_papers_by_author** — Search by author name or OpenAlex author ID.
+6. **search_papers_by_venue** — Search by journal/conference name or OpenAlex source ID.
+7. **explore_paper** — Deep exploration of a specific paper (abstract, authors, citations, embedding, and relevance scoring).
+8. **add_paper_to_project** — Manually add a paper to the project's permanent collection.
    Use when the user describes a topic in general terms.
 2. **search_papers_by_title** — Search by paper title or title fragment.
    Use when the user knows a specific paper title.
@@ -84,11 +95,14 @@ Note: This specification is optimized for LLM agents and AI applications.
 
 ## Search Strategy
 When asked to find papers on a topic:
-1. Start with a broad keyword search or targeted topic filter to get an overview.
-2. Explore the most promising results in detail using `explore_paper`.
-3. If the user mentions specific authors, institutions, or venues, resolve IDs and execute specialized searches.
-4. After exploring papers, report their similarity scores against the project's research questions.
-5. Suggest adding highly relevant papers to the project library with `add_paper_to_project`.
+1. When asked to "collect more papers", "run ALRS algorithm", "traverse citations", "expand citation graph", or "run BFS crawl":
+   - If a seed paper DOI is provided or exists in the project library, call `run_graphselect_traversal` to execute the multi-hop BFS citation crawl (GraphSelect).
+   - If no seed DOI exists yet, run `search_papers_by_keyword` to discover top candidate seed papers, then execute `run_graphselect_traversal`.
+2. Start with a broad keyword search or targeted topic filter to get an overview.
+3. Explore the most promising results in detail using `explore_paper`.
+4. If the user mentions specific authors, institutions, or venues, resolve IDs and execute specialized searches.
+5. After exploring papers, report their similarity scores against the project's research questions.
+6. Suggest adding highly relevant papers to the project library with `add_paper_to_project`.
 
 ## Response Format
 - Present search results as a concise list with DOI, title, year, authors, and citation count.
@@ -97,7 +111,7 @@ When asked to find papers on a topic:
 - If no results are found, suggest alternative search terms or expanded corpus queries.
 
 ## Global Error Delegation Protocol
-If any search or retrieval tool (`search_papers_by_keyword`, `search_papers_by_title`, `search_papers_by_doi`, `search_papers_by_author`, `search_papers_by_venue`, `explore_paper`, `add_paper_to_project`) returns an error or encounters an API failure:
+If any search or retrieval tool (`run_graphselect_traversal`, `search_papers_by_keyword`, `search_papers_by_title`, `search_papers_by_doi`, `search_papers_by_author`, `search_papers_by_venue`, `explore_paper`, `add_paper_to_project`) returns an error or encounters an API failure:
 1. Do NOT silently ignore or conceal the error.
 2. Capture the structured error details:
    - Failing tool name & input parameters
@@ -118,12 +132,12 @@ def create_alrs_agent() -> LlmAgent:
         name="ALRSAgent",
         model=getattr(settings, "adk_tier2_model", settings.adk_model_name),
         description=(
-            "Handles academic paper discovery through OpenAlex searches "
-            "(keyword, title, DOI, author, venue) and deep paper exploration "
-            "with automatic embedding and citation graph construction."
+            "Handles academic paper discovery through OpenAlex searches, "
+            "deep exploration, and the recursive GraphSelect BFS citation traversal algorithm."
         ),
         instruction=ALRS_AGENT_INSTRUCTION,
         tools=[
+            run_graphselect_traversal,
             search_papers_by_keyword,
             search_papers_by_title,
             search_papers_by_doi,

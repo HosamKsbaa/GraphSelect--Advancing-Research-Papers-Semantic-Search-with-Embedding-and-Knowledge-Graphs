@@ -72,26 +72,7 @@ async def explore_paper(
         if hasattr(neo4j, "get_paper_by_doi"):
             existing_paper = await neo4j.get_paper_by_doi(actual_doi)
 
-        if hasattr(ServiceRegistry, "paper_retrieval") and ServiceRegistry.paper_retrieval:
-            full_paper = await ServiceRegistry.paper_retrieval.retrieve_paper(
-                doi=actual_doi,
-                project_id=project_id,
-            )
-            meta = full_paper.metadata
-            already_existed = full_paper.already_existed or (existing_paper is not None)
-            result: dict[str, object] = {
-                "doi": meta.doi,
-                "title": meta.title,
-                "abstract_snippet": (meta.abstract or "")[:500],
-                "year": meta.year,
-                "authors": meta.authors[:10],
-                "venue": meta.venue,
-                "references_count": len(meta.references),
-                "citations_count": len(meta.citations),
-                "already_existed": already_existed,
-                "already_in_graph": already_existed,
-            }
-        elif existing_paper:
+        if existing_paper:
             result = {
                 "doi": existing_paper.get("doi", actual_doi),
                 "title": existing_paper.get("title", ""),
@@ -105,18 +86,38 @@ async def explore_paper(
                 "already_in_graph": True,
             }
         else:
-            result = {
-                "doi": actual_doi,
-                "title": "",
-                "abstract_snippet": "",
-                "year": None,
-                "authors": [],
-                "venue": None,
-                "references_count": 0,
-                "citations_count": 0,
-                "already_existed": False,
-                "already_in_graph": False,
-            }
+            paper_retrieval_svc = getattr(ServiceRegistry, "_paper_retrieval", None)
+            if paper_retrieval_svc is not None:
+                full_paper = await paper_retrieval_svc.retrieve_paper(
+                    doi=actual_doi,
+                    project_id=project_id,
+                )
+                meta = full_paper.metadata
+                result = {
+                    "doi": meta.doi,
+                    "title": meta.title,
+                    "abstract_snippet": (meta.abstract or "")[:500],
+                    "year": meta.year,
+                    "authors": meta.authors[:10],
+                    "venue": meta.venue,
+                    "references_count": len(meta.references),
+                    "citations_count": len(meta.citations),
+                    "already_existed": full_paper.already_existed,
+                    "already_in_graph": full_paper.already_existed,
+                }
+            else:
+                result = {
+                    "doi": actual_doi,
+                    "title": "",
+                    "abstract_snippet": "",
+                    "year": None,
+                    "authors": [],
+                    "venue": None,
+                    "references_count": 0,
+                    "citations_count": 0,
+                    "already_existed": False,
+                    "already_in_graph": False,
+                }
 
         if project_id and neo4j:
             try:
@@ -241,3 +242,111 @@ async def get_project_papers(
     except Exception as exc:
         logger.error("get_project_papers failed: %s", exc)
         return {"error": str(exc), "papers": [], "total": 0}
+
+
+async def run_graphselect_traversal(
+    *args: Any,
+    seed_doi: str = "",
+    max_depth: int = 2,
+    similarity_threshold: float = 0.5,
+    mode: str = "automated",
+    tool_context: ToolContext | None = None,
+    **kwargs: Any,
+) -> dict[str, object]:
+    """Execute the recursive GraphSelect BFS citation traversal algorithm (ALRS).
+
+    Crawls forward and backward citations layer by layer from a seed DOI,
+    embeds discovered papers with gemini-embedding-2, constructs the citation
+    graph in Neo4j, and calculates PageRank + semantic similarity relevance rankings.
+
+    Args:
+        seed_doi: Starting seed paper DOI (e.g. '10.1145/3613904.3642697').
+        max_depth: Citation network traversal depth (1 to 3 hops, default 2).
+        similarity_threshold: Cosine similarity cutoff for ranking against RQs.
+        mode: Search mode ('automated' or 'interactive').
+    """
+    ctx = _resolve_context(args, kwargs, tool_context)
+    actual_doi = seed_doi if seed_doi else (kwargs.get("seed_doi") or "")
+    if not actual_doi and args:
+        for a in args:
+            if isinstance(a, str) and not hasattr(a, "state"):
+                actual_doi = a
+                break
+
+    project_id = _get_project_id(ctx)
+    if not project_id:
+        return {"error": "No project_id in session state. Please create or select a project first."}
+
+    if not actual_doi:
+        # If no seed DOI was explicitly provided, try to find a seed paper already in the project library
+        try:
+            papers = await ServiceRegistry.neo4j.get_project_papers(project_id=project_id, limit=1)
+            if papers and papers[0].get("doi"):
+                actual_doi = papers[0]["doi"]
+        except Exception:
+            pass
+
+    if not actual_doi:
+        return {
+            "error": "seed_doi is required to start GraphSelect BFS traversal. Please provide a seed paper DOI (e.g. 10.1145/3613904.3642697) or search for seed papers first."
+        }
+
+    try:
+        depth = int(kwargs.get("max_depth", max_depth))
+        depth = max(1, min(depth, 3))
+        sim_thresh = float(kwargs.get("similarity_threshold", similarity_threshold))
+        search_mode = str(kwargs.get("mode", mode))
+
+        # Retrieve project research questions for relevance ranking
+        rq_texts: list[str] = []
+        try:
+            questions = await ServiceRegistry.neo4j.get_research_questions(project_id)
+            for q in (questions or []):
+                q_text = q.get("question_text") or q.get("text") or q.get("question")
+                if q_text:
+                    rq_texts.append(q_text)
+        except Exception as q_exc:
+            logger.warning("Failed to retrieve research questions for project %s: %s", project_id, q_exc)
+
+        graph_service = ServiceRegistry.graph_search
+        events_summary: list[str] = []
+        total_discovered = 0
+
+        async for event in graph_service.run_full_search(
+            session_id=project_id,
+            seed_doi=actual_doi,
+            research_questions=rq_texts,
+            similarity_threshold=sim_thresh,
+            max_depth=depth,
+            mode=search_mode,
+        ):
+            if event.message:
+                events_summary.append(event.message)
+            if event.data and "total_papers" in event.data:
+                total_discovered = event.data["total_papers"]
+
+        # Fetch top ranked papers after BFS traversal
+        ranked_papers: list[dict[str, Any]] = []
+        try:
+            papers = await ServiceRegistry.neo4j.get_project_papers(project_id=project_id, limit=10)
+            for p in (papers or []):
+                ranked_papers.append({
+                    "doi": p.get("doi"),
+                    "title": p.get("title"),
+                    "year": p.get("year"),
+                    "cited_by_count": p.get("cited_by_count"),
+                })
+        except Exception:
+            pass
+
+        return {
+            "status": "completed",
+            "seed_doi": actual_doi,
+            "max_depth": depth,
+            "total_papers_in_graph": total_discovered or len(ranked_papers),
+            "top_ranked_papers": ranked_papers,
+            "traversal_summary": events_summary[-5:] if events_summary else ["BFS traversal completed successfully."],
+        }
+    except Exception as exc:
+        logger.exception("run_graphselect_traversal failed for DOI %s: %s", actual_doi, exc)
+        return {"error": f"GraphSelect traversal failed: {exc}", "seed_doi": actual_doi}

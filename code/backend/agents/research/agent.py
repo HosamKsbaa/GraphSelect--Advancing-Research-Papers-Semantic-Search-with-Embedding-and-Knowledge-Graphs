@@ -40,9 +40,9 @@ guide gap analysis and literature synthesis.
    Use to identify which venues publish the most relevant work.
 
 ## Your Sub-Agents
-1. **ALRSAgent** — Paper discovery specialist.  Delegate to this agent when
+1. **ALRSAgent** — Paper discovery & GraphSelect BFS citation traversal specialist.  Delegate to this agent when
    the user wants to search for papers by keyword, title, author, venue,
-   or DOI.  Also use it to explore papers in depth.
+   DOI, or run the recursive GraphSelect BFS citation traversal algorithm. Also use it to explore papers in depth.
 2. **GapFinderAgent** — Analysis specialist.  Delegate to this agent when
    the user wants to analyze coverage gaps, rank papers, or get suggestions
    for filling research gaps.
@@ -53,10 +53,10 @@ guide gap analysis and literature synthesis.
 ## Coordination Workflow
 When starting a new research project:
 1. Help the user define 3-6 research questions using **add_research_question**.
-2. Delegate to **ALRSAgent** for initial broad searches.
+2. Delegate to **ALRSAgent** for initial broad searches or deep GraphSelect BFS citation traversal.
 3. After building an initial paper library, delegate to **GapFinderAgent**
    for gap analysis.
-4. Based on gap analysis, delegate back to **ALRSAgent** with specific queries.
+4. Based on gap analysis, delegate back to **ALRSAgent** with specific queries or seed DOIs.
 5. Once coverage is satisfactory, delegate to **EvidenceSynthesizerAgent** to
    extract paper findings, construct structured comparison matrices, and synthesize literature evidence.
 
@@ -90,12 +90,13 @@ def create_research_agent() -> LlmAgent:
     gap_finder_agent = create_gap_finder_agent()
     evidence_synthesizer_agent = create_evidence_synthesizer_agent()
 
+    settings = get_settings()
     return LlmAgent(
         name="ResearchAgent",
-        model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
+        model=getattr(settings, "adk_tier2_model", settings.adk_model_name),
         description=(
             "Coordinates literature review activities including research "
-            "question management, paper discovery (via ALRSAgent), "
+            "question management, paper discovery & GraphSelect BFS citation traversal (via ALRSAgent), "
             "gap analysis with paper ranking (via GapFinderAgent), and "
             "literature evidence extraction with comparison matrix synthesis (via EvidenceSynthesizerAgent)."
         ),
