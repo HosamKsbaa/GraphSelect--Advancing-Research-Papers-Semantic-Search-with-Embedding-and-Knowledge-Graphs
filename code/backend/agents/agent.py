@@ -24,6 +24,11 @@ from __future__ import annotations
 
 from google.adk.agents import LlmAgent
 
+from features.settings.router import sync_os_environ_from_env
+
+# Ensure .env credentials and provider settings are exported to os.environ for Google ADK
+sync_os_environ_from_env()
+
 from agents.debugger.agent import (
     DebuggerAgent,
     create_debugger_agent,

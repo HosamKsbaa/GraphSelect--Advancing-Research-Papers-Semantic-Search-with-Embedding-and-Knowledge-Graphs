@@ -188,8 +188,10 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
                 try:
                     await mysql.connect()
                     await mysql.initialize_schema()
+                except asyncio.CancelledError:
+                    pass
                 except Exception as e:
-                    logger.error("ServiceRegistry: Failed to connect or init MySQL: %s", e)
+                    logger.warning("ServiceRegistry: Failed to connect or init MySQL: %s", e)
 
             if loop.is_running():
                 loop.create_task(init_mysql_pool())

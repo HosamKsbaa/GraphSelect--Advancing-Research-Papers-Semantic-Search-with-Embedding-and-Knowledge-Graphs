@@ -34,6 +34,11 @@ accessed through the ``_service_registry.ServiceRegistry`` singleton.
 """
 from __future__ import annotations
 
+from features.settings.router import sync_os_environ_from_env
+
+# Sync credentials & flags into os.environ for Google ADK runtime
+sync_os_environ_from_env()
+
 from agents.agent import (
     DebuggerAgent,
     create_debugger_agent,
