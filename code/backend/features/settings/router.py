@@ -17,6 +17,8 @@ from config import find_env_file, get_settings
 from features.settings.models import (
     AuthStatusResponse,
     AuthUpdateRequest,
+    AvailableModelsResponse,
+    ModelInfo,
     SettingsResponse,
     SettingsUpdateRequest,
     SettingsUpdateResponse,
@@ -430,6 +432,82 @@ async def update_auth(body: AuthUpdateRequest, request: Request) -> SettingsResp
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to write settings: {exc}",
             )
+
+
+@router.get("/models", response_model=AvailableModelsResponse)
+async def list_available_models_endpoint() -> AvailableModelsResponse:
+    """Fetch live available Gemini models directly from Google API, or return fallback."""
+    from google import genai
+
+    settings = get_settings()
+    gemini_key = _get_env_value("GEMINI_API_KEY") or settings.gemini_api_key
+    vertex_project = _get_env_value("VERTEX_PROJECT") or settings.vertex_project
+    vertex_location = _get_env_value("VERTEX_LOCATION") or settings.vertex_location or "us-central1"
+    use_vertex_raw = _get_env_value("USE_VERTEX_AI")
+    is_vertex = use_vertex_raw.lower() in ("true", "1", "yes") if use_vertex_raw else settings.use_vertex_ai
+
+    fallback_models = [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+    ]
+
+    try:
+        if is_vertex and _is_real_project(vertex_project):
+            client = genai.Client(vertexai=True, project=vertex_project, location=vertex_location)
+        elif _is_real_key(gemini_key):
+            client = genai.Client(api_key=gemini_key.strip())
+        else:
+            return AvailableModelsResponse(
+                models=fallback_models,
+                source="fallback",
+                total=len(fallback_models),
+            )
+
+        live_models = []
+        model_details = []
+        for m in client.models.list():
+            raw_name = getattr(m, "name", "")
+            clean_name = raw_name.replace("models/", "").replace("publishers/google/models/", "")
+
+            # Filter for reasoning/content generation models (skip embedding/audio/vision-only)
+            if not clean_name or "embedding" in clean_name.lower() or "aqa" in clean_name.lower() or "imagen" in clean_name.lower():
+                continue
+
+            supported = getattr(m, "supported_actions", []) or []
+            display = getattr(m, "display_name", clean_name)
+            desc = getattr(m, "description", "")
+
+            live_models.append(clean_name)
+            model_details.append(
+                ModelInfo(
+                    name=clean_name,
+                    display_name=display,
+                    description=desc,
+                    supported_actions=list(supported) if supported else [],
+                )
+            )
+
+        # Deduplicate and sort
+        unique_models = list(dict.fromkeys(live_models))
+        if not unique_models:
+            unique_models = fallback_models
+
+        return AvailableModelsResponse(
+            models=unique_models,
+            model_details=model_details,
+            source="google_api",
+            total=len(unique_models),
+        )
+    except Exception as exc:
+        logger.warning("Failed to fetch live models from Google API: %s; using fallback", exc)
+        return AvailableModelsResponse(
+            models=fallback_models,
+            source="fallback",
+            total=len(fallback_models),
+        )
 
 
 @router.get("", response_model=SettingsResponse)

@@ -188,6 +188,10 @@ export class ApiService {
     return this.http.get<SettingsResponse>(`${this.baseUrl}/settings`);
   }
 
+  getAvailableModels(): Observable<AvailableModelsResponse> {
+    return this.http.get<AvailableModelsResponse>(`${this.baseUrl}/settings/models`);
+  }
+
   updateSettings(body: SettingsUpdateRequest): Observable<SettingsUpdateResponse> {
     return this.http.put<SettingsUpdateResponse>(`${this.baseUrl}/settings`, body);
   }
@@ -595,6 +599,20 @@ export interface SettingsResponse {
   adk_tier1_model?: string;
   adk_tier2_model?: string;
   available_models?: string[];
+}
+
+export interface ModelInfo {
+  name: string;
+  display_name?: string;
+  description?: string;
+  supported_actions?: string[];
+}
+
+export interface AvailableModelsResponse {
+  models: string[];
+  model_details: ModelInfo[];
+  source: 'google_api' | 'fallback';
+  total: number;
 }
 
 export interface SettingsUpdateRequest {

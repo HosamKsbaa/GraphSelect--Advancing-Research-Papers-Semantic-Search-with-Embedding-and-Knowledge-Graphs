@@ -48,6 +48,11 @@ export class SettingsPage implements OnInit {
   // Active Architecture Preset
   activePreset: 'speed' | 'balanced' | 'quality' | 'custom' = 'balanced';
 
+  // Live Model Fetching
+  refreshingModels = false;
+  modelsSource: 'google_api' | 'fallback' | null = null;
+  liveModelsCount = 0;
+
   // Toggle visibility for API key inputs
   showGeminiKey = false;
   showOpenalexKey = false;
@@ -142,6 +147,37 @@ export class SettingsPage implements OnInit {
 
   onTierModelChange(): void {
     this.detectPreset();
+  }
+
+  fetchLiveModels(): void {
+    this.refreshingModels = true;
+    this.api.getAvailableModels().subscribe({
+      next: (res) => {
+        this.refreshingModels = false;
+        this.availableModels = res.models || [];
+        this.modelsSource = res.source;
+        this.liveModelsCount = res.total || res.models?.length || 0;
+
+        if (res.source === 'google_api') {
+          this.toast.success(
+            'Models Refreshed',
+            `Fetched ${this.liveModelsCount} live Gemini models directly from Google API.`
+          );
+        } else {
+          this.toast.info(
+            'Default Models Loaded',
+            'Using curated model list. Configure and test your Google API credentials to fetch live models.'
+          );
+        }
+      },
+      error: (err) => {
+        this.refreshingModels = false;
+        this.toast.error(
+          'Model Fetch Failed',
+          err.error?.detail || 'Could not fetch live models from Google API.'
+        );
+      },
+    });
   }
 
   setMode(mode: 'studio' | 'vertex'): void {

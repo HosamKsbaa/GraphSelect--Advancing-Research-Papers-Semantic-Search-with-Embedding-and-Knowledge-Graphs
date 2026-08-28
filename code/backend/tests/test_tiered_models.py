@@ -80,3 +80,24 @@ def test_settings_api_tiered_models_get_and_put(tmp_path):
         env_content = temp_env.read_text()
         assert "ADK_TIER1_MODEL=gemini-2.5-pro" in env_content
         assert "ADK_TIER2_MODEL=gemini-2.5-flash" in env_content
+
+
+def test_settings_api_get_available_models(tmp_path):
+    """Verify GET /api/settings/models returns live or fallback Gemini models."""
+    temp_env = tmp_path / ".env"
+    temp_env.write_text(
+        "OPENALEX_API_KEY=test-alex-key\n"
+        "NEO4J_PASSWORD=test-neo-pass\n"
+        "MYSQL_PASSWORD=test-sql-pass\n"
+    )
+
+    with patch.object(settings_router, "ENV_FILE", temp_env):
+        client = TestClient(app)
+        res = client.get("/api/settings/models")
+        assert res.status_code == 200
+        data = res.json()
+        assert "models" in data
+        assert len(data["models"]) > 0
+        assert data["total"] == len(data["models"])
+        assert data["source"] in ("google_api", "fallback")
+        assert "gemini-2.5-flash" in data["models"]

@@ -38,6 +38,24 @@ class SettingsResponse(BaseModel):
     )
 
 
+class ModelInfo(BaseModel):
+    """Metadata for an available Gemini model fetched from the Google API."""
+
+    name: str = Field(description="Unique model name e.g. 'gemini-2.5-flash'")
+    display_name: Optional[str] = Field(None, description="Human-readable display name")
+    description: Optional[str] = Field(None, description="Short summary of model capabilities")
+    supported_actions: list[str] = Field(default_factory=list, description="Supported operations e.g. generateContent")
+
+
+class AvailableModelsResponse(BaseModel):
+    """Response containing live models fetched directly from Google API."""
+
+    models: list[str] = Field(description="List of model names for select dropdowns")
+    model_details: list[ModelInfo] = Field(default_factory=list, description="Full model metadata if available")
+    source: Literal["google_api", "fallback"] = Field(description="Whether models were fetched live from Google API or fallback")
+    total: int = Field(description="Total models returned")
+
+
 class SettingsUpdateRequest(BaseModel):
     """Request body for updating settings."""
 

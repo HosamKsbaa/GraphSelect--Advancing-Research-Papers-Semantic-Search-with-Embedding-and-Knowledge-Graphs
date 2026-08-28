@@ -435,6 +435,44 @@
 }
 
 /* --- Multi-Agent Tiered Architecture Styles --- */
+.section-header-with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+
+  .section-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .section-header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .btn-refresh-models {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: var(--text-xs);
+    padding: 6px 12px;
+  }
+
+  @media (max-width: 640px) {
+    flex-direction: column;
+    align-items: flex-start;
+
+    .section-header-right {
+      width: 100%;
+      justify-content: space-between;
+      margin-top: var(--space-2);
+    }
+  }
+}
+
 .section-icon-swarm {
   background: rgba(168, 85, 247, 0.12);
   color: #c084fc;
