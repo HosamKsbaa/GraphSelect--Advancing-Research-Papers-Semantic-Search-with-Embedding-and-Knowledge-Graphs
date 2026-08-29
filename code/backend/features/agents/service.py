@@ -68,6 +68,11 @@ AGENT_DISPLAY_ROLES: dict[str, dict[str, str]] = {
         "role": "Outline Architecture & Section Scoping",
         "tier": "tier1",
     },
+    "WriterAgent": {
+        "display_name": "Writing & Export Coordinator",
+        "role": "Writing Pipeline, Section Coordination & LaTeX Export",
+        "tier": "tier1",
+    },
     "DraftingAgent": {
         "display_name": "Section Drafting Agent",
         "role": "Academic Literature Review Drafting",
@@ -711,16 +716,7 @@ class AgentService:
             sub_agent_names: list[str] = []
             for sub in getattr(agent, "sub_agents", []) or []:
                 sub_name = getattr(sub, "name", None)
-                if sub_name == "WriterAgent":
-                    for w_sub in getattr(sub, "sub_agents", []) or []:
-                        if getattr(w_sub, "name", None) == "WriterReviewerLoop":
-                            for loop_sub in getattr(w_sub, "sub_agents", []) or []:
-                                ls_name = getattr(loop_sub, "name", None)
-                                if ls_name:
-                                    sub_agent_names.append(ls_name)
-                        elif getattr(w_sub, "name", None):
-                            sub_agent_names.append(w_sub.name)
-                elif sub_name == "WriterReviewerLoop":
+                if sub_name == "WriterReviewerLoop":
                     for loop_sub in getattr(sub, "sub_agents", []) or []:
                         ls_name = getattr(loop_sub, "name", None)
                         if ls_name:

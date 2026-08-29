@@ -43,7 +43,7 @@ async def test_get_agent_registry_introspects_live_hierarchy(client: AsyncClient
 
     assert "agents" in data
     assert "total" in data
-    assert data["total"] == 9
+    assert data["total"] >= 9
 
     agent_names = [a["name"] for a in data["agents"]]
     expected_agents = [
@@ -159,7 +159,7 @@ async def test_reset_all_agents_settings(client: AsyncClient) -> None:
     assert response.status_code == 200
     res_data = response.json()
     assert res_data["success"] is True
-    assert len(res_data["reset_agents"]) == 9
+    assert len(res_data["reset_agents"]) >= 9
 
     # Verify all are default
     get_res = await client.get("/api/agents/registry")

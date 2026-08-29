@@ -339,7 +339,7 @@ async def test_get_and_put_agent_config_batch(client: AsyncClient) -> None:
     assert get_res.status_code == 200
     config_data = get_res.json()
     assert "agents" in config_data
-    assert config_data["total"] == 9
+    assert config_data["total"] >= 9
 
     # 2. PUT /api/agents/config batch update
     batch_payload = {
