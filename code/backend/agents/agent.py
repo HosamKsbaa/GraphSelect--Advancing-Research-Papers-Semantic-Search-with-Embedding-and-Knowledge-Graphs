@@ -55,9 +55,13 @@ def create_root_agent() -> LlmAgent:
 # ADK entry point — this is what ADK looks for when loading the agent
 root_agent = create_root_agent()
 
+import sys
+agent = sys.modules[__name__]
+
 __all__ = [
     "create_root_agent",
     "root_agent",
+    "agent",
     "DebuggerAgent",
     "debugger_agent",
     "create_debugger_agent",

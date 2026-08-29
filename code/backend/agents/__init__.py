@@ -46,10 +46,12 @@ from agents.agent import (
     debugger_agent,
     root_agent,
 )
+from agents import agent
 
 __all__: list[str] = [
     "create_root_agent",
     "root_agent",
+    "agent",
     "DebuggerAgent",
     "debugger_agent",
     "create_debugger_agent",
