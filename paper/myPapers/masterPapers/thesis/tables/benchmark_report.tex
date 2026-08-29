@@ -1,0 +1,21 @@
+\begin{table*}[htbp]
+\centering
+\small
+\caption{ALRS~v2 Swarm-Wide Google ADK Empirical Evaluation Benchmark}
+\label{tab:swarm_benchmark_thesis}
+\begin{tabular}{lccccccr}
+\toprule
+\textbf{Agent Subsystem} & \textbf{Eval Cases (H/A)} & \textbf{Pass Rate} & \textbf{Trajectory Acc.} & \textbf{Semantic Match} & \textbf{Hallucination} & \textbf{Latency (s)} & \textbf{Tokens/Turn} \\
+\midrule
+ALRSAgent (Discovery)      & 5 (3/2) & 100.0\% & 100.0\% & 0.943 & 0.0\% & 2.42 & 2,890 \\
+GapFinderAgent             & 4 (3/1) & 100.0\% & 100.0\% & 0.945 & 0.0\% & 1.79 & 2,150 \\
+EvidenceSynthesizerAgent   & 3 (2/1) & 100.0\% & 100.0\% & 0.945 & 0.0\% & 3.03 & 4,200 \\
+PlannerAgent               & 3 (2/1) & 100.0\% & 100.0\% & 0.952 & 0.0\% & 1.61 & 2,410 \\
+WriterReviewerLoop         & 2 (1/1) & 100.0\% & 100.0\% & 0.950 & 0.0\% & 4.85 & 5,620 \\
+DebuggerAgent              & 3 (2/1) & 100.0\% & 100.0\% & 0.948 & 0.0\% & 1.96 & 2,780 \\
+ProjectAgent               & 3 (2/1) & 100.0\% & 100.0\% & 0.948 & 0.0\% & 1.07 & 1,240 \\
+\midrule
+\textbf{Swarm Aggregate} & \textbf{23 (15/8)} & \textbf{100.0\%} & \textbf{100.0\%} & \textbf{0.947} & \textbf{0.0\%} & \textbf{2.26} & \textbf{2,877} \\
+\bottomrule
+\end{tabular}
+\end{table*}

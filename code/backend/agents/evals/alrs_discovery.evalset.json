@@ -1,0 +1,438 @@
+{
+  "eval_set_id": "alrs_discovery_evalset",
+  "name": "ALRS Discovery & 1-Hop GraphSelect Evaluation Set",
+  "description": "Evaluates 1-hop GraphSelect BFS traversal, DOI lookup, keyword discovery, candidate appraisal into 3 archetypes, and adversarial boundary cases.",
+  "creation_timestamp": 1756480000.0,
+  "eval_cases": [
+    {
+      "eval_id": "eval_alrs_1hop_traversal_01",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+          "active_project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-alrs-001",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Execute a 1-hop GraphSelect traversal using seed DOI 10.48550/arxiv.2308.00352 for active project 8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "run_graphselect_traversal",
+                "args": {
+                  "seed_doi": "10.48550/arxiv.2308.00352",
+                  "max_depth": 1
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "run_graphselect_traversal",
+                "response": {
+                  "status": "completed",
+                  "seed_doi": "10.48550/arxiv.2308.00352",
+                  "seed_title": "Efficient Graph Transformers with Sparse Attention",
+                  "cycle_level": 1,
+                  "max_depth": 1,
+                  "total_discovered": 14,
+                  "total_new": 12,
+                  "forward_count": 8,
+                  "backward_count": 6,
+                  "both_count": 0,
+                  "candidates": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "title": "Attention-based Neural Message Passing on Large Networks",
+                      "authors": [
+                        "Alice Walker",
+                        "Bob Smith"
+                      ],
+                      "year": 2021,
+                      "venue": "ACM SIGIR",
+                      "abstract_snippet": "We investigate neural message passing under attention constraints...",
+                      "direction": "backward_reference",
+                      "citation_count": 482,
+                      "in_graph_degree": 9,
+                      "similarity_scores": [
+                        {
+                          "question": "How do GNNs scale on citation networks?",
+                          "score": 0.942
+                        }
+                      ],
+                      "library_status": {
+                        "already_in_library": true,
+                        "embedding_cached": true,
+                        "pagerank_score": 0.082
+                      }
+                    },
+                    {
+                      "doi": "10.48550/arxiv.2401.12984",
+                      "title": "Linear Complexity Graph Transformers via Kernelized Attention",
+                      "authors": [
+                        "Carol Davis",
+                        "David Evans"
+                      ],
+                      "year": 2024,
+                      "venue": "ICLR",
+                      "abstract_snippet": "We derive kernelized linear-time approximations for graph self-attention...",
+                      "direction": "forward_citation",
+                      "citation_count": 35,
+                      "in_graph_degree": 4,
+                      "similarity_scores": [
+                        {
+                          "question": "How do GNNs scale on citation networks?",
+                          "score": 0.915
+                        }
+                      ],
+                      "library_status": {
+                        "already_in_library": false,
+                        "embedding_cached": true,
+                        "pagerank_score": 0.045
+                      }
+                    },
+                    {
+                      "doi": "10.1016/j.artint.2023.103982",
+                      "title": "Cross-Domain Knowledge Graph Embeddings: A Unifying Survey",
+                      "authors": [
+                        "Elena Rostova",
+                        "Frank Miller"
+                      ],
+                      "year": 2023,
+                      "venue": "Artificial Intelligence",
+                      "abstract_snippet": "A comprehensive survey linking relational knowledge graphs and citation topologies...",
+                      "direction": "backward_reference",
+                      "citation_count": 128,
+                      "in_graph_degree": 7,
+                      "similarity_scores": [
+                        {
+                          "question": "How do GNNs scale on citation networks?",
+                          "score": 0.887
+                        }
+                      ],
+                      "library_status": {
+                        "already_in_library": false,
+                        "embedding_cached": true,
+                        "pagerank_score": 0.061
+                      }
+                    }
+                  ],
+                  "foundational_prior_art": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "title": "Attention-based Neural Message Passing on Large Networks",
+                      "year": 2021,
+                      "cited_by_count": 482,
+                      "direction": "backward_reference",
+                      "hybrid_score": 0.942,
+                      "in_graph_degree": 9
+                    }
+                  ],
+                  "contemporary_breakthroughs": [
+                    {
+                      "doi": "10.48550/arxiv.2401.12984",
+                      "title": "Linear Complexity Graph Transformers via Kernelized Attention",
+                      "year": 2024,
+                      "cited_by_count": 35,
+                      "direction": "forward_citation",
+                      "hybrid_score": 0.915,
+                      "in_graph_degree": 4
+                    }
+                  ],
+                  "topological_bridges": [
+                    {
+                      "doi": "10.1016/j.artint.2023.103982",
+                      "title": "Cross-Domain Knowledge Graph Embeddings: A Unifying Survey",
+                      "year": 2023,
+                      "cited_by_count": 128,
+                      "direction": "backward_reference",
+                      "hybrid_score": 0.887,
+                      "in_graph_degree": 7
+                    }
+                  ],
+                  "strategic_recommendation": "Expand into Foundational Prior Art (10.1145/3613904.3642697) to ground core message passing mechanisms, or explore Contemporary Breakthrough (10.48550/arxiv.2401.12984) for state-of-the-art linear complexity benchmarks."
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### 1-Hop GraphSelect Traversal Results\n\n**Seed Paper**: *Efficient Graph Transformers with Sparse Attention* ()\n- **Discovered Candidates**: 14 total (8 forward citations, 6 backward references, 12 newly indexed).\n\n#### Candidate Pool Appraisal by Archetype:\n1. **Foundational Prior Art**:\n   - *Attention-based Neural Message Passing on Large Networks* ( | 2021 | 482 citations | Hybrid Score: 0.942)\n2. **Contemporary Breakthroughs**:\n   - *Linear Complexity Graph Transformers via Kernelized Attention* ( | 2024 | 35 citations | Hybrid Score: 0.915)\n3. **Topological Bridges**:\n   - *Cross-Domain Knowledge Graph Embeddings: A Unifying Survey* ( | 2023 | 128 citations | Hybrid Score: 0.887)\n\n**Strategic Recommendation**:\nExpand into Foundational Prior Art () to ground core message passing mechanisms, or explore Contemporary Breakthrough () for state-of-the-art linear complexity benchmarks.\n\n**Steering Options**:\n- **[A]**: Expand 1 hop deeper into Foundational Prior Art ()\n- **[B]**: Expand 1 hop deeper into Contemporary Breakthrough ()\n- **[C]**: Add all top 3 candidate papers directly to project library\n- **[D]**: Conclude traversal and proceed to Coverage & Gap Analysis"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_alrs_keyword_discovery_02",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-alrs-002",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Search for high-impact academic papers on graph neural network citation networks."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_papers_by_keyword",
+                "args": {
+                  "query": "graph neural network citation networks",
+                  "max_results": 10
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "search_papers_by_keyword",
+                "response": {
+                  "papers": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "title": "Semi-Supervised Classification with Graph Convolutional Networks",
+                      "year": 2017,
+                      "cited_by_count": 18200,
+                      "authors": [
+                        "Thomas N. Kipf",
+                        "Max Welling"
+                      ]
+                    },
+                    {
+                      "doi": "10.48550/arxiv.1710.10903",
+                      "title": "Graph Attention Networks",
+                      "year": 2018,
+                      "cited_by_count": 14500,
+                      "authors": [
+                        "Petar Veli\u010dkovi\u0107",
+                        "Guillem Cucurull",
+                        "Arantxa Casanova"
+                      ]
+                    }
+                  ],
+                  "total_returned": 2
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Discovered Academic Literature on Graph Neural Network Citation Networks\n\n1. **Semi-Supervised Classification with Graph Convolutional Networks**\n   - **DOI**: \n   - **Authors**: Thomas N. Kipf, Max Welling (2017)\n   - **Citations**: 18,200+\n   - **Relevance**: Landmark foundational architecture for spectral graph convolutions on citation networks.\n\n2. **Graph Attention Networks**\n   - **DOI**: \n   - **Authors**: Petar Veli\u010dkovi\u0107 et al. (2018)\n   - **Citations**: 14,500+\n   - **Relevance**: Introduces masked self-attention over node neighborhoods in citation graphs.\n\nWould you like me to add these foundational works to the project library or run 1-hop GraphSelect traversal on either seed?"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_alrs_malformed_doi_adversarial_03",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-alrs-003",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Run GraphSelect expansion on seed DOI invalid-doi-format-99999"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "run_graphselect_traversal",
+                "args": {
+                  "seed_doi": "invalid-doi-format-99999",
+                  "max_depth": 1
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "run_graphselect_traversal",
+                "response": {
+                  "error": "GraphSelect traversal failed: Invalid DOI format 'invalid-doi-format-99999'. Expected standard prefix starting with '10.'",
+                  "seed_doi": "invalid-doi-format-99999"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### DOI Format Error\n\nThe provided seed identifier  is not a valid Digital Object Identifier (DOI).\n\n**Validation Requirements**:\n- Valid DOIs start with  followed by a directory prefix and suffix (e.g.,  or ).\n\nPlease provide a valid DOI string, or supply keywords/titles and I will look up the matching paper for you."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_alrs_orphan_node_adversarial_04",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-alrs-004",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Expand citation graph from seed DOI 10.1000/isolated_preprint_2026"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "run_graphselect_traversal",
+                "args": {
+                  "seed_doi": "10.1000/isolated_preprint_2026",
+                  "max_depth": 1
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "run_graphselect_traversal",
+                "response": {
+                  "status": "completed",
+                  "seed_doi": "10.1000/isolated_preprint_2026",
+                  "seed_title": "Isolated Preprint on Emerging Paradigm",
+                  "cycle_level": 1,
+                  "max_depth": 1,
+                  "total_discovered": 0,
+                  "total_new": 0,
+                  "forward_count": 0,
+                  "backward_count": 0,
+                  "both_count": 0,
+                  "candidates": [],
+                  "foundational_prior_art": [],
+                  "contemporary_breakthroughs": [],
+                  "topological_bridges": [],
+                  "strategic_recommendation": "The seed paper has zero indexed citation linkages in OpenAlex. Suggest searching by keyword or author to identify related cluster nodes."
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### GraphSelect Expansion: Isolated Node\n\nSeed Paper  (*Isolated Preprint on Emerging Paradigm*) has 0 indexed forward citations and 0 backward references in the citation network.\n\n**Recommendation**:\nBecause no topological neighbors exist for this node, 1-hop BFS traversal cannot expand further along citation edges. I recommend discovering related literature via keyword search or exploring papers by the same authors to establish connecting edges."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_alrs_doi_lookup_05",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-alrs-005",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Look up paper metadata and similarity scores for DOI 10.1145/3613904.3642697."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "explore_paper",
+                "args": {
+                  "doi": "10.1145/3613904.3642697"
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "explore_paper",
+                "response": {
+                  "doi": "10.1145/3613904.3642697",
+                  "title": "Scalable Graph Neural Networks for Academic Search",
+                  "abstract_snippet": "We present an asynchronous message passing architecture for citation graph indexing...",
+                  "year": 2023,
+                  "authors": [
+                    "Alice Walker",
+                    "Bob Smith"
+                  ],
+                  "venue": "ACM SIGIR",
+                  "references_count": 42,
+                  "citations_count": 118,
+                  "already_in_graph": true,
+                  "similarity_scores": [
+                    {
+                      "question": "How do GNNs scale on citation networks?",
+                      "score": 0.912
+                    }
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Paper Exploration Details\n\n- **Title**: *Scalable Graph Neural Networks for Academic Search*\n- **DOI**: \n- **Authors**: Alice Walker, Bob Smith (2023)\n- **Venue**: ACM SIGIR\n- **Citations**: 118 | **References**: 42\n- **Semantic Similarity**: 0.912 against project research questions (*How do GNNs scale on citation networks?*)\n\nThis paper is highly relevant to our project scope and is already indexed in the project graph."
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

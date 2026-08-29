@@ -1,0 +1,323 @@
+{
+  "eval_set_id": "gap_finder_evalset",
+  "name": "GapFinder Citation Analysis & Coverage Evaluation Set",
+  "description": "Evaluates research question coverage analysis, targeted gap query suggestions, 3-tier PageRank ranking, and empty/saturated library boundaries.",
+  "creation_timestamp": 1756480000.0,
+  "eval_cases": [
+    {
+      "eval_id": "eval_gap_analysis_and_queries_01",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-gap-001",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Analyze research question coverage for our active project and generate search queries for any uncovered questions."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "analyze_coverage",
+                "args": {
+                  "threshold": 0.6
+                }
+              },
+              {
+                "name": "suggest_gap_queries",
+                "args": {
+                  "gap_question": "How do graph transformers scale to million-node citation networks?",
+                  "max_queries": 5
+                }
+              },
+              {
+                "name": "rank_papers",
+                "args": {
+                  "similarity_weight": 0.7,
+                  "pagerank_weight": 0.3
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "analyze_coverage",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "threshold": 0.6,
+                  "overall_coverage_pct": 66.7,
+                  "covered_count": 2,
+                  "uncovered_count": 1,
+                  "questions": [
+                    {
+                      "question": "How do message passing neural networks propagate node features?",
+                      "covered": true,
+                      "top_similarity": 0.92,
+                      "matching_papers_count": 6
+                    },
+                    {
+                      "question": "What attention mechanisms optimize graph link prediction?",
+                      "covered": true,
+                      "top_similarity": 0.88,
+                      "matching_papers_count": 4
+                    },
+                    {
+                      "question": "How do graph transformers scale to million-node citation networks?",
+                      "covered": false,
+                      "top_similarity": 0.48,
+                      "matching_papers_count": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "suggest_gap_queries",
+                "response": {
+                  "gap_question": "How do graph transformers scale to million-node citation networks?",
+                  "suggested_queries": [
+                    "scalable graph transformer million nodes",
+                    "linear attention graph neural networks large scale",
+                    "sampling methods for graph transformers",
+                    "subgraph tokenization million node graphs",
+                    "distributed graph transformer training benchmarks"
+                  ]
+                }
+              },
+              {
+                "name": "rank_papers",
+                "response": {
+                  "ranked_papers": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "title": "Attention-based Neural Message Passing on Large Networks",
+                      "hybrid_score": 0.942,
+                      "similarity_score": 0.92,
+                      "pagerank_score": 0.082
+                    },
+                    {
+                      "doi": "10.48550/arxiv.2308.00352",
+                      "title": "Efficient Graph Transformers with Sparse Attention",
+                      "hybrid_score": 0.915,
+                      "similarity_score": 0.88,
+                      "pagerank_score": 0.055
+                    }
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Research Question Coverage & Literature Gap Analysis\n\n- **Overall Coverage**: 66.7% (2/3 research questions adequately covered above the 0.60 similarity threshold).\n\n#### Coverage Status:\n1. **Q1: How do message passing neural networks propagate node features?**\n   - Status: **Covered** (Max Similarity: 0.92, 6 relevant papers)\n2. **Q2: What attention mechanisms optimize graph link prediction?**\n   - Status: **Covered** (Max Similarity: 0.88, 4 relevant papers)\n3. **Q3: How do graph transformers scale to million-node citation networks?**\n   - Status: **UNCOVERED GAP** (Max Similarity: 0.48, 0 relevant papers)\n\n#### Recommended Gap Search Queries for Q3:\n- `scalable graph transformer million nodes`\n- `linear attention graph neural networks large scale`\n- `sampling methods for graph transformers`\n- `subgraph tokenization million node graphs`\n- `distributed graph transformer training benchmarks`\n\n#### Top Ranked Core Papers (Hybrid Score):\n1. *Attention-based Neural Message Passing on Large Networks* (`10.1145/3613904.3642697` | Hybrid Score: 0.942)\n2. *Efficient Graph Transformers with Sparse Attention* (`10.48550/arxiv.2308.00352` | Hybrid Score: 0.915)\n\nWould you like to execute the suggested search queries to fill the gap in Q3?"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_gap_empty_library_adversarial_02",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-gap-002",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Run coverage analysis and PageRank ranking on this project."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "analyze_coverage",
+                "args": {
+                  "threshold": 0.6
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "analyze_coverage",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "coverage": [],
+                  "total_papers": 0,
+                  "message": "No papers in project library."
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Coverage Analysis: Empty Paper Library\n\nThe current project library contains 0 papers. Coverage analysis and PageRank computation require at least one indexed paper in the graph.\n\n**Next Steps**:\n1. Search for seminal papers using keyword search (e.g. *\"graph neural networks\"*).\n2. Provide seed DOIs to ingest foundation papers.\n3. Run 1-hop GraphSelect traversal to populate the citation network."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_gap_saturated_coverage_03",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-gap-003",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Check if there are any remaining gaps in our research questions."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "analyze_coverage",
+                "args": {
+                  "threshold": 0.6
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "analyze_coverage",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "threshold": 0.6,
+                  "overall_coverage_pct": 100.0,
+                  "covered_count": 3,
+                  "uncovered_count": 0,
+                  "questions": [
+                    {
+                      "question": "How do message passing neural networks propagate node features?",
+                      "covered": true,
+                      "top_similarity": 0.94,
+                      "matching_papers_count": 8
+                    },
+                    {
+                      "question": "What attention mechanisms optimize graph link prediction?",
+                      "covered": true,
+                      "top_similarity": 0.89,
+                      "matching_papers_count": 6
+                    },
+                    {
+                      "question": "How do graph transformers scale to million-node citation networks?",
+                      "covered": true,
+                      "top_similarity": 0.86,
+                      "matching_papers_count": 5
+                    }
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Research Question Coverage: Complete Saturation (100%)\n\nAll 3 research questions are comprehensively covered by the current literature library:\n- **Q1 (Message Passing)**: 100% Covered (Max Sim: 0.94, 8 papers)\n- **Q2 (Attention Mechanisms)**: 100% Covered (Max Sim: 0.89, 6 papers)\n- **Q3 (Scaling Transformers)**: 100% Covered (Max Sim: 0.86, 5 papers)\n\n**Recommendation**:\nWith zero remaining coverage gaps, the literature discovery phase is complete. We are ready to proceed to **Evidence Synthesis** (matrix extraction) or **Outline Planning**."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_gap_paper_similarity_04",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-gap-004",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Compute semantic similarity for DOI 10.1145/3613904.3642697 against all project research questions."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "compute_similarity",
+                "args": {
+                  "doi": "10.1145/3613904.3642697"
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "compute_similarity",
+                "response": {
+                  "doi": "10.1145/3613904.3642697",
+                  "title": "Attention-based Neural Message Passing on Large Networks",
+                  "scores": [
+                    {
+                      "question": "How do message passing neural networks propagate node features?",
+                      "score": 0.942
+                    },
+                    {
+                      "question": "What attention mechanisms optimize graph link prediction?",
+                      "score": 0.885
+                    },
+                    {
+                      "question": "How do graph transformers scale to million-node citation networks?",
+                      "score": 0.72
+                    }
+                  ],
+                  "avg_score": 0.849
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Semantic Similarity Breakdown for DOI `10.1145/3613904.3642697`\n\n- **Paper Title**: *Attention-based Neural Message Passing on Large Networks*\n- **Average Similarity**: 0.849\n\n#### Relevance by Research Question:\n1. **Q1 (Message Passing)**: `0.942` (Extremely High Alignment)\n2. **Q2 (Attention Mechanisms)**: `0.885` (Strong Alignment)\n3. **Q3 (Scaling Transformers)**: `0.720` (Moderate Alignment)"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

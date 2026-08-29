@@ -1,0 +1,255 @@
+{
+  "eval_set_id": "planner_evalset",
+  "name": "Planner Outline Generation Evaluation Set",
+  "description": "Evaluates thematic and chronological outline generation with grounded section-to-DOI bindings and insufficient paper library handling.",
+  "creation_timestamp": 1756480000.0,
+  "eval_cases": [
+    {
+      "eval_id": "eval_planner_thematic_outline_01",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-plan-001",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Generate a comprehensive thematic literature review outline for our active project."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "get_project_summary",
+                "args": {}
+              },
+              {
+                "name": "get_ranked_papers",
+                "args": {}
+              },
+              {
+                "name": "generate_outline",
+                "args": {
+                  "style": "thematic"
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "get_project_summary",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "paper_count": 8,
+                  "question_count": 3,
+                  "gap_count": 0,
+                  "has_outline": false,
+                  "has_drafts": false,
+                  "questions": [
+                    "How do message passing neural networks propagate node features?",
+                    "What attention mechanisms optimize graph link prediction?",
+                    "How do graph transformers scale to million-node citation networks?"
+                  ]
+                }
+              },
+              {
+                "name": "get_ranked_papers",
+                "response": {
+                  "papers": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "title": "Attention-based Neural Message Passing on Large Networks",
+                      "combined_score": 0.942
+                    },
+                    {
+                      "doi": "10.48550/arxiv.2308.00352",
+                      "title": "Efficient Graph Transformers with Sparse Attention",
+                      "combined_score": 0.915
+                    },
+                    {
+                      "doi": "10.1016/j.artint.2023.103982",
+                      "title": "Cross-Domain Knowledge Graph Embeddings: A Unifying Survey",
+                      "combined_score": 0.887
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "generate_outline",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "style": "thematic",
+                  "narrative_arc": "From isotropic message passing foundations to sparse attention graph transformers and cross-domain knowledge graphs.",
+                  "sections": [
+                    {
+                      "title": "Introduction and Foundations of Graph Representation Learning",
+                      "description": "Introduces spectral and spatial graph convolutions on academic citation topologies.",
+                      "assigned_dois": [
+                        "10.1145/3613904.3642697"
+                      ]
+                    },
+                    {
+                      "title": "Attention Mechanisms and Sparse Graph Transformers",
+                      "description": "Reviews masked self-attention and kernelized approximations for million-node graphs.",
+                      "assigned_dois": [
+                        "10.48550/arxiv.2308.00352"
+                      ]
+                    },
+                    {
+                      "title": "Cross-Domain Knowledge Graphs and Link Prediction",
+                      "description": "Synthesizes relational embeddings across heterogeneous academic knowledge networks.",
+                      "assigned_dois": [
+                        "10.1016/j.artint.2023.103982"
+                      ]
+                    },
+                    {
+                      "title": "Open Challenges and Future Directions",
+                      "description": "Identifies memory scaling, dynamic graphs, and zero-shot reasoning as frontier research topics.",
+                      "assigned_dois": []
+                    }
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Thematic Literature Review Outline\n\n**Narrative Arc**: *From isotropic message passing foundations to sparse attention graph transformers and cross-domain knowledge graphs.*\n\n#### Sections:\n1. **Section 1: Introduction and Foundations of Graph Representation Learning**\n   - **Scope**: Spectral and spatial graph convolutions on academic citation topologies.\n   - **Assigned DOIs**: `10.1145/3613904.3642697`\n\n2. **Section 2: Attention Mechanisms and Sparse Graph Transformers**\n   - **Scope**: Masked self-attention and kernelized approximations for million-node graphs.\n   - **Assigned DOIs**: `10.48550/arxiv.2308.00352`\n\n3. **Section 3: Cross-Domain Knowledge Graphs and Link Prediction**\n   - **Scope**: Relational embeddings across heterogeneous academic knowledge networks.\n   - **Assigned DOIs**: `10.1016/j.artint.2023.103982`\n\n4. **Section 4: Open Challenges and Future Directions**\n   - **Scope**: Memory scaling, dynamic graphs, and zero-shot reasoning.\n   - **Assigned DOIs**: *Synthesis Section*\n\nThe outline has been saved to project session state and is ready for iterative section drafting."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_planner_insufficient_papers_02",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-plan-002",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Generate an outline for our literature review."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "get_project_summary",
+                "args": {}
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "get_project_summary",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "paper_count": 1,
+                  "question_count": 3,
+                  "gap_count": 2,
+                  "has_outline": false,
+                  "has_drafts": false
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Insufficient Literature for Outline Generation\n\nThe project currently contains only **1 paper** in its library across 3 research questions.\n\n**Recommendation**:\nDrafting a multi-section literature review outline with only 1 source paper will result in inadequate citation coverage and shallow comparative synthesis. I recommend discovering and adding at least 5\u20138 relevant papers via `ALRSAgent` 1-hop GraphSelect traversal before generating the outline."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_planner_chronological_outline_03",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-plan-003",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Generate a chronological literature review outline tracing the historical evolution of GNN architectures."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "generate_outline",
+                "args": {
+                  "style": "chronological"
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "generate_outline",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "style": "chronological",
+                  "narrative_arc": "Chronological evolution from spectral graph convolutions (2016-2018) to spatial attention (2019-2022) and scalable graph transformers (2023-2026).",
+                  "sections": [
+                    {
+                      "title": "Early Era: Spectral Graph Convolutions (2016-2018)",
+                      "description": "Foundational mathematical formulations of Chebyshev and localized spectral filters.",
+                      "assigned_dois": [
+                        "10.1145/3613904.3642697"
+                      ]
+                    },
+                    {
+                      "title": "Modern Era: Sparse Transformers and Linear Complexity (2023-Present)",
+                      "description": "Recent breakthroughs in non-local self-attention on graphs.",
+                      "assigned_dois": [
+                        "10.48550/arxiv.2308.00352"
+                      ]
+                    }
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Chronological Literature Review Outline\n\n**Narrative Arc**: *Chronological evolution from spectral graph convolutions (2016-2018) to modern sparse transformers (2023-Present).*\n\n1. **Early Era: Spectral Graph Convolutions (2016-2018)** (`10.1145/3613904.3642697`)\n2. **Modern Era: Sparse Transformers and Linear Complexity (2023-Present)** (`10.48550/arxiv.2308.00352`)"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
