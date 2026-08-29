@@ -90,6 +90,20 @@ AGENT_DISPLAY_ROLES: dict[str, dict[str, str]] = {
     },
 }
 
+
+def get_agent_display_meta(name: str) -> dict[str, str]:
+    """Retrieve metadata for an agent or dynamically infer display name, role, and tier for newly added agents."""
+    if name in AGENT_DISPLAY_ROLES:
+        return AGENT_DISPLAY_ROLES[name]
+    # Dynamically split PascalCase to words: e.g. "DataVisualizerAgent" -> "Data Visualizer Agent"
+    words = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z][a-z]|\d|\W|$)|\d+", name)
+    display = " ".join(words) if words else name
+    return {
+        "display_name": display,
+        "role": f"Autonomous {display}",
+        "tier": "tier2",
+    }
+
 # Python type to JSON Schema type mapping
 TYPE_MAPPING: dict[type, str] = {
     str: "string",
@@ -252,8 +266,8 @@ class AgentService:
             visited_ids.add(id(current))
             
             name = getattr(current, "name", None)
-            # Only include agents that are swarm agents with models (filtering out loop/control wrappers)
-            if name and hasattr(current, "model") and name in AGENT_DISPLAY_ROLES:
+            # Dynamically include any agent that has a name and a model (LLM agent)
+            if name and hasattr(current, "model"):
                 agents_list.append(current)
 
             sub_agents = getattr(current, "sub_agents", []) or []
@@ -272,7 +286,7 @@ class AgentService:
         agents = self._get_all_agents()
         for agent in agents:
             name = getattr(agent, "name", "UnnamedAgent")
-            meta = AGENT_DISPLAY_ROLES.get(name, {})
+            meta = get_agent_display_meta(name)
             tier_id = meta.get("tier", "tier2")
             
             tier_obj = self._tiers.get(tier_id, self._tiers.get("tier1"))
@@ -626,7 +640,7 @@ class AgentService:
 
         for agent in agents:
             name = getattr(agent, "name", "UnnamedAgent")
-            meta = AGENT_DISPLAY_ROLES.get(name, {})
+            meta = get_agent_display_meta(name)
             display_name = meta.get("display_name", name)
             role = meta.get("role", "Specialized Agent")
             
@@ -708,7 +722,7 @@ class AgentService:
         for agent in agents:
             name = getattr(agent, "name", "UnnamedAgent")
             description = getattr(agent, "description", "") or ""
-            meta_info = AGENT_DISPLAY_ROLES.get(name, {})
+            meta_info = get_agent_display_meta(name)
             display_name = meta_info.get("display_name", name)
             role = meta_info.get("role", "Specialized Agent")
             

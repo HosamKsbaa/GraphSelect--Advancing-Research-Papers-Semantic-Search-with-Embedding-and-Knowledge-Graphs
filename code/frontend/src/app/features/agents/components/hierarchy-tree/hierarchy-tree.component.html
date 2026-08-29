@@ -99,44 +99,42 @@
           <!-- Root trunk stem -->
           <line x1="500" y1="0" x2="500" y2="25" class="connector-line stem" />
           <!-- Horizontal distribution bus -->
-          <line x1="125" y1="25" x2="875" y2="25" class="connector-line bus" />
-          <!-- Feeder branches to 4 coordinators -->
-          <line x1="125" y1="25" x2="125" y2="70" class="connector-line branch" />
-          <line x1="375" y1="25" x2="375" y2="70" class="connector-line branch" />
-          <line x1="625" y1="25" x2="625" y2="70" class="connector-line branch" />
-          <line x1="875" y1="25" x2="875" y2="70" class="connector-line branch" />
+          <line x1="100" y1="25" x2="900" y2="25" class="connector-line bus" />
+          <!-- Feeder branches to all coordinators dynamically -->
+          @for (x of getConnectorXCoords(); track $index) {
+            <line [attr.x1]="x" y1="25" [attr.x2]="x" y2="70" class="connector-line branch" />
+          }
         </svg>
       </div>
     }
 
-    <!-- LEVEL 1: COORDINATOR AGENTS (4 Branches) -->
+    <!-- LEVEL 1: COORDINATOR AGENTS (Dynamic Branch Loop) -->
     <div class="tree-level level-1-coordinators">
-      <!-- BRANCH 1: ResearchAgent & Subordinates -->
-      <div class="branch-column branch-research">
-        @if (agentMap().get('ResearchAgent'); as research) {
+      @for (coord of level1Agents(); track coord.name) {
+        <div class="branch-column">
           <div
             class="tree-node coord-node glass"
-            [class.selected-node]="isSelected(research)"
-            [class.node-modified]="isAgentModified(research)"
-            [style.border-top-color]="getTierColor(research)"
-            (click)="onNodeClick(research)"
+            [class.selected-node]="isSelected(coord)"
+            [class.node-modified]="isAgentModified(coord)"
+            [style.border-top-color]="getTierColor(coord)"
+            (click)="onNodeClick(coord)"
             tabindex="0"
             role="button"
           >
             <div class="node-header">
               <div class="node-title-group">
                 <span class="node-type-label">Coordinator</span>
-                <h4 class="node-name">{{ research.display_name }}</h4>
-                <code class="node-tag">{{ research.name }}</code>
+                <h4 class="node-name">{{ coord.display_name }}</h4>
+                <code class="node-tag">{{ coord.name }}</code>
               </div>
               <div class="node-status-badges">
-                <span class="badge tier-badge-node" [style.background-color]="getTierColor(research) + '25'" [style.color]="getTierColor(research)" [style.border-color]="getTierColor(research) + '60'">
-                  <span class="dot" [style.background-color]="getTierColor(research)"></span>
-                  {{ getEffectiveTier(research)?.name || 'Tier 1' }}
+                <span class="badge tier-badge-node" [style.background-color]="getTierColor(coord) + '25'" [style.color]="getTierColor(coord)" [style.border-color]="getTierColor(coord) + '60'">
+                  <span class="dot" [style.background-color]="getTierColor(coord)"></span>
+                  {{ getEffectiveTier(coord)?.name || 'Tier 1' }}
                 </span>
-                @if (hasDraftChanges(research)) {
+                @if (hasDraftChanges(coord)) {
                   <span class="badge badge-warning">Unsaved</span>
-                } @else if (isAgentModified(research)) {
+                } @else if (isAgentModified(coord)) {
                   <span class="badge badge-warning">Modified</span>
                 } @else {
                   <span class="badge badge-success">Default</span>
@@ -145,39 +143,45 @@
             </div>
 
             <div class="node-body">
-              <p class="node-desc">{{ research.description }}</p>
+              <p class="node-desc">{{ coord.description }}</p>
               <div class="node-meta-row">
                 <div class="meta-item">
                   <span class="meta-label">Model:</span>
-                  <span class="meta-value model-name">{{ getEffectiveModel(research) }}</span>
+                  <span class="meta-value model-name">{{ getEffectiveModel(coord) }}</span>
                 </div>
                 <div class="meta-item">
                   <span class="meta-label">Temp:</span>
-                  <span class="badge temp-badge" [ngClass]="getTempBadgeClass(getEffectiveTemperature(research))">
-                    {{ getEffectiveTemperature(research).toFixed(2) }}
+                  <span class="badge temp-badge" [ngClass]="getTempBadgeClass(getEffectiveTemperature(coord))">
+                    {{ getEffectiveTemperature(coord).toFixed(2) }}
                   </span>
                 </div>
               </div>
             </div>
 
-            <!-- Branch Collapse / Expand Toggle Button -->
-            <div class="branch-toggle-row">
-              <button
-                type="button"
-                class="btn-branch-toggle"
-                [class.collapsed]="isBranchCollapsed('ResearchAgent')"
-                (click)="toggleBranch('ResearchAgent', $event)"
-                title="Toggle discovery worker subordinates"
-              >
-                <span class="toggle-icon">{{ isBranchCollapsed('ResearchAgent') ? '+' : '−' }}</span>
-                <span>{{ isBranchCollapsed('ResearchAgent') ? 'Expand 3 Workers' : '3 Sub-Workers' }}</span>
-              </button>
-            </div>
-            <div class="port-anchor port-bottom"></div>
+            @if (getSubordinates(coord).length > 0) {
+              <!-- Branch Collapse / Expand Toggle Button -->
+              <div class="branch-toggle-row">
+                <button
+                  type="button"
+                  class="btn-branch-toggle"
+                  [class.collapsed]="isBranchCollapsed(coord.name)"
+                  (click)="toggleBranch(coord.name, $event)"
+                  [title]="'Toggle ' + coord.display_name + ' subordinates'"
+                >
+                  <span class="toggle-icon">{{ isBranchCollapsed(coord.name) ? '+' : '−' }}</span>
+                  <span>{{ isBranchCollapsed(coord.name) ? 'Expand ' + getSubordinates(coord).length + ' Sub-Agents' : getSubordinates(coord).length + ' Sub-Agents' }}</span>
+                </button>
+              </div>
+              <div class="port-anchor port-bottom"></div>
+            } @else {
+              <div class="leaf-node-badge">
+                <span>Direct Execution</span>
+              </div>
+            }
           </div>
 
-          <!-- LEVEL 2 SUBORDINATES (Research Workers) -->
-          @if (!isBranchCollapsed('ResearchAgent')) {
+          <!-- LEVEL 2 SUBORDINATES (Sub-Workers) -->
+          @if (getSubordinates(coord).length > 0 && !isBranchCollapsed(coord.name)) {
             <div class="svg-connector-sub-branch">
               <svg class="sub-connector-svg" preserveAspectRatio="none" viewBox="0 0 100 30">
                 <line x1="50" y1="0" x2="50" y2="30" class="connector-line branch" />
@@ -185,7 +189,7 @@
             </div>
 
             <div class="sub-workers-container animate-fade-in">
-              @for (worker of researchChildren(); track worker.name) {
+              @for (worker of getSubordinates(coord); track worker.name) {
                 <div
                   class="tree-node worker-node glass"
                   [class.selected-node]="isSelected(worker)"
@@ -224,236 +228,8 @@
               }
             </div>
           }
-        }
-      </div>
-
-      <!-- BRANCH 2: PlannerAgent -->
-      <div class="branch-column branch-planner">
-        @if (agentMap().get('PlannerAgent'); as planner) {
-          <div
-            class="tree-node coord-node glass"
-            [class.selected-node]="isSelected(planner)"
-            [class.node-modified]="isAgentModified(planner)"
-            [style.border-top-color]="getTierColor(planner)"
-            (click)="onNodeClick(planner)"
-            tabindex="0"
-            role="button"
-          >
-            <div class="node-header">
-              <div class="node-title-group">
-                <span class="node-type-label">Coordinator</span>
-                <h4 class="node-name">{{ planner.display_name }}</h4>
-                <code class="node-tag">{{ planner.name }}</code>
-              </div>
-              <div class="node-status-badges">
-                <span class="badge tier-badge-node" [style.background-color]="getTierColor(planner) + '25'" [style.color]="getTierColor(planner)" [style.border-color]="getTierColor(planner) + '60'">
-                  <span class="dot" [style.background-color]="getTierColor(planner)"></span>
-                  {{ getEffectiveTier(planner)?.name || 'Tier 1' }}
-                </span>
-                @if (hasDraftChanges(planner)) {
-                  <span class="badge badge-warning">Unsaved</span>
-                } @else if (isAgentModified(planner)) {
-                  <span class="badge badge-warning">Modified</span>
-                } @else {
-                  <span class="badge badge-success">Default</span>
-                }
-              </div>
-            </div>
-
-            <div class="node-body">
-              <p class="node-desc">{{ planner.description }}</p>
-              <div class="node-meta-row">
-                <div class="meta-item">
-                  <span class="meta-label">Model:</span>
-                  <span class="meta-value model-name">{{ getEffectiveModel(planner) }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-label">Temp:</span>
-                  <span class="badge temp-badge" [ngClass]="getTempBadgeClass(getEffectiveTemperature(planner))">
-                    {{ getEffectiveTemperature(planner).toFixed(2) }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div class="leaf-node-badge">
-              <span>Direct Execution</span>
-            </div>
-          </div>
-        }
-      </div>
-
-      <!-- BRANCH 3: WriterAgent & Subordinates -->
-      <div class="branch-column branch-writer">
-        @if (agentMap().get('WriterAgent'); as writer) {
-          <div
-            class="tree-node coord-node glass"
-            [class.selected-node]="isSelected(writer)"
-            [class.node-modified]="isAgentModified(writer)"
-            [style.border-top-color]="getTierColor(writer)"
-            (click)="onNodeClick(writer)"
-            tabindex="0"
-            role="button"
-          >
-            <div class="node-header">
-              <div class="node-title-group">
-                <span class="node-type-label">Writing Loop Coordinator</span>
-                <h4 class="node-name">{{ writer.display_name }}</h4>
-                <code class="node-tag">{{ writer.name }}</code>
-              </div>
-              <div class="node-status-badges">
-                <span class="badge tier-badge-node" [style.background-color]="getTierColor(writer) + '25'" [style.color]="getTierColor(writer)" [style.border-color]="getTierColor(writer) + '60'">
-                  <span class="dot" [style.background-color]="getTierColor(writer)"></span>
-                  {{ getEffectiveTier(writer)?.name || 'Tier 1' }}
-                </span>
-                @if (hasDraftChanges(writer)) {
-                  <span class="badge badge-warning">Unsaved</span>
-                } @else if (isAgentModified(writer)) {
-                  <span class="badge badge-warning">Modified</span>
-                } @else {
-                  <span class="badge badge-success">Default</span>
-                }
-              </div>
-            </div>
-
-            <div class="node-body">
-              <p class="node-desc">{{ writer.description }}</p>
-              <div class="node-meta-row">
-                <div class="meta-item">
-                  <span class="meta-label">Model:</span>
-                  <span class="meta-value model-name">{{ getEffectiveModel(writer) }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-label">Temp:</span>
-                  <span class="badge temp-badge" [ngClass]="getTempBadgeClass(getEffectiveTemperature(writer))">
-                    {{ getEffectiveTemperature(writer).toFixed(2) }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Branch Collapse / Expand Toggle Button -->
-            <div class="branch-toggle-row">
-              <button
-                type="button"
-                class="btn-branch-toggle"
-                [class.collapsed]="isBranchCollapsed('WriterAgent')"
-                (click)="toggleBranch('WriterAgent', $event)"
-                title="Toggle drafting and review sub-agents"
-              >
-                <span class="toggle-icon">{{ isBranchCollapsed('WriterAgent') ? '+' : '−' }}</span>
-                <span>{{ isBranchCollapsed('WriterAgent') ? 'Expand 2 Agents' : '2 Sub-Agents' }}</span>
-              </button>
-            </div>
-            <div class="port-anchor port-bottom"></div>
-          </div>
-
-          <!-- LEVEL 2 SUBORDINATES (Writer Sub-Agents) -->
-          @if (!isBranchCollapsed('WriterAgent')) {
-            <div class="svg-connector-sub-branch">
-              <svg class="sub-connector-svg" preserveAspectRatio="none" viewBox="0 0 100 30">
-                <line x1="50" y1="0" x2="50" y2="30" class="connector-line branch" />
-              </svg>
-            </div>
-
-            <div class="sub-workers-container animate-fade-in">
-              @for (sub of writerChildren(); track sub.name) {
-                <div
-                  class="tree-node worker-node glass"
-                  [class.selected-node]="isSelected(sub)"
-                  [class.node-modified]="isAgentModified(sub)"
-                  [style.border-left-color]="getTierColor(sub)"
-                  (click)="onNodeClick(sub)"
-                  tabindex="0"
-                  role="button"
-                >
-                  <div class="worker-header">
-                    <div class="worker-title-group">
-                      <h5 class="worker-name">{{ sub.display_name }}</h5>
-                      <code class="worker-tag">{{ sub.name }}</code>
-                    </div>
-                    <span class="badge tier-badge-node-sm" [style.background-color]="getTierColor(sub) + '25'" [style.color]="getTierColor(sub)">
-                      {{ getEffectiveTier(sub)?.name || sub.tier }}
-                    </span>
-                  </div>
-
-                  <div class="worker-body">
-                    <div class="worker-meta">
-                      <span class="meta-label">Model:</span>
-                      <span class="meta-value">{{ getEffectiveModel(sub) }}</span>
-                    </div>
-                    <div class="worker-meta">
-                      <span class="meta-label">Temp:</span>
-                      <span class="badge temp-badge-sm" [ngClass]="getTempBadgeClass(getEffectiveTemperature(sub))">
-                        {{ getEffectiveTemperature(sub).toFixed(2) }}
-                      </span>
-                    </div>
-                    <div class="worker-tools-badge">
-                      <span>{{ sub.tools.length }} tools</span>
-                    </div>
-                  </div>
-                </div>
-              }
-            </div>
-          }
-        }
-      </div>
-
-      <!-- BRANCH 4: DebuggerAgent -->
-      <div class="branch-column branch-debugger">
-        @if (agentMap().get('DebuggerAgent'); as debuggerAgent) {
-          <div
-            class="tree-node coord-node glass"
-            [class.selected-node]="isSelected(debuggerAgent)"
-            [class.node-modified]="isAgentModified(debuggerAgent)"
-            [style.border-top-color]="getTierColor(debuggerAgent)"
-            (click)="onNodeClick(debuggerAgent)"
-            tabindex="0"
-            role="button"
-          >
-            <div class="node-header">
-              <div class="node-title-group">
-                <span class="node-type-label">Diagnostics Coordinator</span>
-                <h4 class="node-name">{{ debuggerAgent.display_name }}</h4>
-                <code class="node-tag">{{ debuggerAgent.name }}</code>
-              </div>
-              <div class="node-status-badges">
-                <span class="badge tier-badge-node" [style.background-color]="getTierColor(debuggerAgent) + '25'" [style.color]="getTierColor(debuggerAgent)" [style.border-color]="getTierColor(debuggerAgent) + '60'">
-                  <span class="dot" [style.background-color]="getTierColor(debuggerAgent)"></span>
-                  {{ getEffectiveTier(debuggerAgent)?.name || 'Tier 1' }}
-                </span>
-                @if (hasDraftChanges(debuggerAgent)) {
-                  <span class="badge badge-warning">Unsaved</span>
-                } @else if (isAgentModified(debuggerAgent)) {
-                  <span class="badge badge-warning">Modified</span>
-                } @else {
-                  <span class="badge badge-success">Default</span>
-                }
-              </div>
-            </div>
-
-            <div class="node-body">
-              <p class="node-desc">{{ debuggerAgent.description }}</p>
-              <div class="node-meta-row">
-                <div class="meta-item">
-                  <span class="meta-label">Model:</span>
-                  <span class="meta-value model-name">{{ getEffectiveModel(debuggerAgent) }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-label">Temp:</span>
-                  <span class="badge temp-badge" [ngClass]="getTempBadgeClass(getEffectiveTemperature(debuggerAgent))">
-                    {{ getEffectiveTemperature(debuggerAgent).toFixed(2) }}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div class="leaf-node-badge">
-              <span>Autonomous Diagnostics</span>
-            </div>
-          </div>
-        }
-      </div>
+        </div>
+      }
     </div>
   </div>
 </div>

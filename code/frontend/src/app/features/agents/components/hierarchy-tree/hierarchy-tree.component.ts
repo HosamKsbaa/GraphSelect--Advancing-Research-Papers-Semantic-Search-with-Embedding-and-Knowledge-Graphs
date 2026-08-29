@@ -69,28 +69,50 @@ export class HierarchyTreeComponent {
     );
   });
 
-  // Coordinator Level 1 Agents
+  // Coordinator Level 1 Agents (Dynamic from root sub_agents or unnested agents)
   level1Agents = computed<AgentMetadata[]>(() => {
-    const l1Names = ['ResearchAgent', 'PlannerAgent', 'WriterAgent', 'DebuggerAgent'];
-    const list: AgentMetadata[] = [];
-    for (const name of l1Names) {
-      const a = this.agentMap().get(name);
-      if (a) list.push(a);
+    const root = this.rootAgent();
+    if (!root) return [];
+
+    if (root.sub_agents && root.sub_agents.length > 0) {
+      const list: AgentMetadata[] = [];
+      for (const name of root.sub_agents) {
+        const a = this.agentMap().get(name);
+        if (a) list.push(a);
+      }
+      if (list.length > 0) return list;
     }
-    return list;
+
+    // Fallback: any agent that is not the root and is not listed as a child of another coordinator
+    const childNames = new Set<string>();
+    for (const a of this.agents) {
+      for (const sub of a.sub_agents || []) {
+        childNames.add(sub);
+      }
+    }
+    return this.agents.filter((a) => a.name !== root.name && !childNames.has(a.name));
   });
 
-  // Children of ResearchAgent
-  researchChildren = computed<AgentMetadata[]>(() => {
-    const names = ['ALRSAgent', 'GapFinderAgent', 'EvidenceSynthesizerAgent'];
-    return names.map((n) => this.agentMap().get(n)).filter(Boolean) as AgentMetadata[];
-  });
+  // Dynamic subordinates for any coordinator
+  getSubordinates(coordinator: AgentMetadata): AgentMetadata[] {
+    const subNames = coordinator.sub_agents || [];
+    return subNames
+      .map((name) => this.agentMap().get(name))
+      .filter(Boolean) as AgentMetadata[];
+  }
 
-  // Children of WriterAgent
-  writerChildren = computed<AgentMetadata[]>(() => {
-    const names = ['DraftingAgent', 'ReviewerAgent'];
-    return names.map((n) => this.agentMap().get(n)).filter(Boolean) as AgentMetadata[];
-  });
+  // Dynamic SVG connector X coordinates for Level 1 branch stems
+  getConnectorXCoords(): number[] {
+    const count = this.level1Agents().length;
+    if (count <= 0) return [];
+    if (count === 1) return [500];
+    const coords: number[] = [];
+    const step = 800 / (count - 1);
+    for (let i = 0; i < count; i++) {
+      coords.push(100 + i * step);
+    }
+    return coords;
+  }
 
   isBranchCollapsed(agentName: string): boolean {
     return this.collapsedBranches().has(agentName);
