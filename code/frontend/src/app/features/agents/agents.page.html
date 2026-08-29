@@ -1,0 +1,309 @@
+<div class="agents-page-container animate-fade-in">
+  <!-- Page Header -->
+  <header class="page-header">
+    <div class="header-left">
+      <div class="title-row">
+        <h1 class="page-title">
+          <svg class="header-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 3v6m0 6v6M3 12h6m6 0h6"/>
+            <circle cx="12" cy="3" r="1.5"/>
+            <circle cx="12" cy="21" r="1.5"/>
+            <circle cx="3" cy="12" r="1.5"/>
+            <circle cx="21" cy="12" r="1.5"/>
+          </svg>
+          Agent Swarm Inspector & Configuration
+        </h1>
+        <span class="badge badge-accent">Live ADK Hierarchy</span>
+      </div>
+      <p class="page-subtitle">
+        Inspect live Google ADK agents, configure per-agent LLM models, tune sampling parameters, and observe real-time execution traces.
+      </p>
+    </div>
+
+    <!-- Quick Metrics Pills -->
+    <div class="header-metrics">
+      <div class="metric-pill glass">
+        <span class="metric-label">Swarm Agents</span>
+        <span class="metric-value text-accent">{{ totalAgents() }}</span>
+      </div>
+      <div class="metric-pill glass">
+        <span class="metric-label">Registered Tools</span>
+        <span class="metric-value text-primary">{{ totalToolsCount() }}</span>
+      </div>
+      <div class="metric-pill glass">
+        <span class="metric-label">Modified State</span>
+        <span class="metric-value" [class.text-warning]="modifiedCount() > 0" [class.text-success]="modifiedCount() === 0">
+          {{ modifiedCount() }} modified
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="tab-nav-bar glass">
+    <div class="tabs-left">
+      <button
+        class="tab-btn"
+        [class.active]="activeTab() === 'swarm'"
+        (click)="activeTab.set('swarm')"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1"/>
+          <rect x="14" y="3" width="7" height="7" rx="1"/>
+          <rect x="3" y="14" width="7" height="7" rx="1"/>
+          <rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+        Swarm Hierarchy & Configuration
+        @if (unsavedChangesCount() > 0) {
+          <span class="tab-badge badge-warning">{{ unsavedChangesCount() }} Unsaved</span>
+        }
+      </button>
+
+      <button
+        class="tab-btn"
+        [class.active]="activeTab() === 'traces'"
+        (click)="activeTab.set('traces')"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/>
+        </svg>
+        Live Traces Inspector
+      </button>
+    </div>
+
+    <!-- View Mode Toggle (for Swarm tab) -->
+    @if (activeTab() === 'swarm') {
+      <div class="view-mode-toggle">
+        <button
+          class="view-toggle-btn"
+          [class.active]="viewMode() === 'grid'"
+          (click)="viewMode.set('grid')"
+          title="Grid View"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          <span>Grid</span>
+        </button>
+        <button
+          class="view-toggle-btn"
+          [class.active]="viewMode() === 'hierarchy'"
+          (click)="viewMode.set('hierarchy')"
+          title="Hierarchy View"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="6" y1="3" x2="6" y2="15"/>
+            <circle cx="18" cy="6" r="3"/>
+            <circle cx="6" cy="18" r="3"/>
+            <path d="M18 9a9 9 0 0 1-9 9"/>
+          </svg>
+          <span>Hierarchy</span>
+        </button>
+      </div>
+    }
+  </div>
+
+  <!-- TAB 1: SWARM HIERARCHY & CONFIGURATION -->
+  @if (activeTab() === 'swarm') {
+    <!-- Global Action Bar & Filter Toolbar -->
+    <div class="action-bar-card glass">
+      <!-- Search & Filter Controls -->
+      <div class="filter-controls">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            type="text"
+            placeholder="Search agents by name, role, tool..."
+            [ngModel]="searchQuery()"
+            (ngModelChange)="searchQuery.set($event)"
+            class="search-input"
+          />
+          @if (searchQuery()) {
+            <button class="clear-search-btn" (click)="searchQuery.set('')">×</button>
+          }
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">Tier:</label>
+          <select [ngModel]="tierFilter()" (ngModelChange)="tierFilter.set($event)" class="filter-select">
+            <option value="all">All Tiers (9)</option>
+            <option value="tier1">Tier 1: Orchestration & Synthesis</option>
+            <option value="tier2">Tier 2: Workers & Retrieval</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label class="filter-label">Status:</label>
+          <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)" class="filter-select">
+            <option value="all">All Configurations</option>
+            <option value="modified">Modified Only</option>
+            <option value="default">Default Only</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button
+          class="btn btn-secondary"
+          [disabled]="testingConnection()"
+          (click)="testConnection()"
+          title="Ping Gemini API and verify connectivity"
+        >
+          @if (testingConnection()) {
+            <span class="spinner-sm"></span>
+            <span>Testing...</span>
+          } @else {
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+            <span>Test Connection</span>
+          }
+        </button>
+
+        <button
+          class="btn btn-secondary btn-reset-all"
+          [disabled]="resettingAll() || saving()"
+          (click)="resetAllToDefaults()"
+          title="Restore all 9 agents to factory system defaults"
+        >
+          @if (resettingAll()) {
+            <span class="spinner-sm"></span>
+            <span>Resetting...</span>
+          } @else {
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span>Reset All to Defaults</span>
+          }
+        </button>
+
+        <button
+          class="btn btn-primary btn-save-all"
+          [disabled]="saving() || unsavedChangesCount() === 0"
+          (click)="saveAllSettings()"
+        >
+          @if (saving()) {
+            <span class="spinner-sm"></span>
+            <span>Saving...</span>
+          } @else {
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+              <polyline points="7 3 7 8 15 8"/>
+            </svg>
+            <span>Save All Settings</span>
+            @if (unsavedChangesCount() > 0) {
+              <span class="save-badge">{{ unsavedChangesCount() }}</span>
+            }
+          }
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading Skeleton -->
+    @if (loading()) {
+      <div class="loading-grid">
+        @for (i of [1,2,3,4,5,6]; track i) {
+          <div class="card skeleton-card">
+            <div class="skeleton" style="height: 32px; width: 60%; margin-bottom: 12px;"></div>
+            <div class="skeleton" style="height: 16px; width: 90%; margin-bottom: 8px;"></div>
+            <div class="skeleton" style="height: 16px; width: 75%; margin-bottom: 24px;"></div>
+            <div class="skeleton" style="height: 40px; margin-bottom: 16px;"></div>
+            <div class="skeleton" style="height: 40px; margin-bottom: 16px;"></div>
+            <div class="skeleton" style="height: 60px;"></div>
+          </div>
+        }
+      </div>
+    } @else {
+      <!-- EMPTY STATE -->
+      @if (filteredAgents().length === 0) {
+        <div class="empty-state glass">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <h3>No Agents Match Filter</h3>
+          <p class="text-secondary">Try adjusting your search query or tier filters.</p>
+          <button class="btn btn-secondary" (click)="searchQuery.set(''); tierFilter.set('all'); statusFilter.set('all');">
+            Reset Filters
+          </button>
+        </div>
+      }
+
+      <!-- VIEW MODE: GRID -->
+      @if (viewMode() === 'grid' && filteredAgents().length > 0) {
+        <div class="agents-grid">
+          @for (agent of filteredAgents(); track agent.name) {
+            <app-agent-card
+              [agent]="agent"
+              [availableModels]="availableModels()"
+              [draftConfig]="getDraftForAgent(agent.name)"
+              (configChange)="onAgentConfigChange($event)"
+              (resetAgent)="resetAgent($event)"
+              (viewTraces)="navigateToTraces($event)"
+            />
+          }
+        </div>
+      }
+
+      <!-- VIEW MODE: HIERARCHY TREE -->
+      @if (viewMode() === 'hierarchy' && filteredAgents().length > 0) {
+        <div class="hierarchy-tree-view">
+          <!-- TIER 1 SECTION -->
+          <div class="tier-section">
+            <div class="tier-header">
+              <div class="tier-badge-pill tier1-pill">Tier 1: Orchestration, Planning & Review</div>
+              <span class="tier-desc text-secondary">High-reasoning orchestrators, section planners, critique rubrics, and diagnostic repair</span>
+            </div>
+            <div class="agents-grid">
+              @for (agent of tier1Agents(); track agent.name) {
+                <app-agent-card
+                  [agent]="agent"
+                  [availableModels]="availableModels()"
+                  [draftConfig]="getDraftForAgent(agent.name)"
+                  (configChange)="onAgentConfigChange($event)"
+                  (resetAgent)="resetAgent($event)"
+                  (viewTraces)="navigateToTraces($event)"
+                />
+              }
+            </div>
+          </div>
+
+          <!-- TIER 2 SECTION -->
+          <div class="tier-section">
+            <div class="tier-header">
+              <div class="tier-badge-pill tier2-pill">Tier 2: Retrieval, Literature Crawlers & Draft Generation</div>
+              <span class="tier-desc text-secondary">High-throughput specialized workers for 1-hop GraphSelect BFS citation exploration, PageRank analysis, and drafting</span>
+            </div>
+            <div class="agents-grid">
+              @for (agent of tier2Agents(); track agent.name) {
+                <app-agent-card
+                  [agent]="agent"
+                  [availableModels]="availableModels()"
+                  [draftConfig]="getDraftForAgent(agent.name)"
+                  (configChange)="onAgentConfigChange($event)"
+                  (resetAgent)="resetAgent($event)"
+                  (viewTraces)="navigateToTraces($event)"
+                />
+              }
+            </div>
+          </div>
+        </div>
+      }
+    }
+  }
+
+  <!-- TAB 2: LIVE TRACES INSPECTOR -->
+  @if (activeTab() === 'traces') {
+    <app-trace-viewer />
+  }
+</div>

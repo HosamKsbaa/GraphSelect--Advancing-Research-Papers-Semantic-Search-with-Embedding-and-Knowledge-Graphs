@@ -51,6 +51,12 @@ export const routes: Routes = [
       import('./features/debug/debug.page').then(m => m.DebugPage),
   },
   {
+    path: 'agents',
+    loadComponent: () =>
+      import('./features/agents/agents.page').then(m => m.AgentsPage),
+    title: 'Agent Swarm Inspector - ALRS',
+  },
+  {
     path: 'settings',
     loadComponent: () =>
       import('./features/settings/settings.page').then(m => m.SettingsPage),

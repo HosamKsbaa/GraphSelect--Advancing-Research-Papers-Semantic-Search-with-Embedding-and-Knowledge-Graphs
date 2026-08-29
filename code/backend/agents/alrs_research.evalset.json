@@ -1,0 +1,92 @@
+{
+  "eval_set_id": "alrs_research_workflow_eval",
+  "name": "ALRS Research & GraphSelect Evaluation Set",
+  "description": "Evaluates 1-hop GraphSelect citation traversal, candidate appraisal, and paper discovery trajectories.",
+  "eval_cases": [
+    {
+      "eval_id": "eval_graphselect_traversal_01",
+      "conversation": [
+        {
+          "invocation_id": "inv-alrs-001",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Run 1-hop GraphSelect traversal on seed DOI 10.48550/arxiv.2308.00352"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "The 1-hop GraphSelect traversal has completed successfully."
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "run_graphselect_traversal",
+                "args": {
+                  "seed_doi": "10.48550/arxiv.2308.00352",
+                  "max_depth": 1
+                }
+              }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_user",
+        "state": {
+          "active_project_id": "eval-project-001"
+        }
+      }
+    },
+    {
+      "eval_id": "eval_keyword_search_02",
+      "conversation": [
+        {
+          "invocation_id": "inv-alrs-002",
+          "user_content": {
+            "parts": [
+              {
+                "text": "Search papers by keyword multi-agent LLM architectures"
+              }
+            ],
+            "role": "user"
+          },
+          "final_response": {
+            "parts": [
+              {
+                "text": "Found relevant papers matching multi-agent LLM architectures."
+              }
+            ],
+            "role": "model"
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "search_papers_by_keyword",
+                "args": {
+                  "query": "multi-agent LLM architectures"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          }
+        }
+      ],
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_user",
+        "state": {
+          "active_project_id": "eval-project-001"
+        }
+      }
+    }
+  ]
+}

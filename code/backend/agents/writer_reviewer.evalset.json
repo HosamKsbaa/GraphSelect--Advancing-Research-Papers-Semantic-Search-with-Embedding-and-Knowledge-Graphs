@@ -1,0 +1,228 @@
+{
+  "eval_set_id": "writer_reviewer_evalset",
+  "name": "Writer & Reviewer Multi-Turn Drafting Loop Evaluation Set",
+  "description": "Evaluates multi-turn drafting, 5-dimension rubric peer review gatekeeping, GCDL zero-hallucination citation verification, and rejection of hallucinated/missing citations.",
+  "creation_timestamp": 1756480000.0,
+  "eval_cases": [
+    {
+      "eval_id": "eval_writer_reviewer_happy_path_01",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-wr-001",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Draft Section 2: Neural Citation Graph Traversal Algorithms using DOIs 10.1145/3613904.3642697 and 10.48550/arxiv.2308.00352."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "get_paper_abstracts",
+                "args": {
+                  "dois": [
+                    "10.1145/3613904.3642697",
+                    "10.48550/arxiv.2308.00352"
+                  ]
+                }
+              },
+              {
+                "name": "draft_section",
+                "args": {
+                  "section_title": "Neural Citation Graph Traversal Algorithms",
+                  "section_description": "Review of message passing neural networks, graph attention mechanisms, and topological citation traversal algorithms.",
+                  "paper_dois": [
+                    "10.1145/3613904.3642697",
+                    "10.48550/arxiv.2308.00352"
+                  ],
+                  "target_level": "master"
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "get_paper_abstracts",
+                "response": {
+                  "papers": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "title": "Attention-based Neural Message Passing on Large Networks",
+                      "abstract": "We investigate neural message passing under attention constraints...",
+                      "year": 2021
+                    },
+                    {
+                      "doi": "10.48550/arxiv.2308.00352",
+                      "title": "Efficient Graph Transformers with Sparse Attention",
+                      "abstract": "We present sparse attention transformers for million-node graph traversal...",
+                      "year": 2023
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "draft_section",
+                "response": {
+                  "section_title": "Neural Citation Graph Traversal Algorithms",
+                  "markdown": "## Neural Citation Graph Traversal Algorithms\n\nRecent advancements in neural graph representation learning have fundamentally transformed citation analysis. Walker et al. (10.1145/3613904.3642697) introduced cross-layer residual attention for scaling representation learning on dense citation topologies. Building on these foundations, Chen et al. (10.48550/arxiv.2308.00352) proposed sparse neighborhood attention, achieving superior empirical benchmarks while reducing memory footprint by 40%.\n\nIn synthesis, these architectures demonstrate that hybrid message-passing with topological attention achieves state-of-the-art citation link prediction across academic literature benchmarks.",
+                  "word_count": 78,
+                  "cited_dois": [
+                    "10.1145/3613904.3642697",
+                    "10.48550/arxiv.2308.00352"
+                  ],
+                  "saved_path": "projects/8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a/drafts/neural_citation_graph_traversal_algorithms.md"
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Section Drafted: Neural Citation Graph Traversal Algorithms\n\n\n\n**Statistics**: 78 words | 2 citations grounded in project library (, ).\nProceeding to Peer Review."
+              }
+            ]
+          }
+        },
+        {
+          "invocation_id": "inv-wr-002",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Review the drafted section for academic rigor and citation fidelity."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "review_section",
+                "args": {
+                  "section_title": "Neural Citation Graph Traversal Algorithms",
+                  "draft_markdown": "## Neural Citation Graph Traversal Algorithms\n\nRecent advancements in neural graph representation learning have fundamentally transformed citation analysis. Walker et al. (10.1145/3613904.3642697) introduced cross-layer residual attention for scaling representation learning on dense citation topologies. Building on these foundations, Chen et al. (10.48550/arxiv.2308.00352) proposed sparse neighborhood attention, achieving superior empirical benchmarks while reducing memory footprint by 40%.\n\nIn synthesis, these architectures demonstrate that hybrid message-passing with topological attention achieves state-of-the-art citation link prediction across academic literature benchmarks.",
+                  "assigned_dois": [
+                    "10.1145/3613904.3642697",
+                    "10.48550/arxiv.2308.00352"
+                  ]
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "review_section",
+                "response": {
+                  "approved": true,
+                  "scores": {
+                    "citation_fidelity": 5.0,
+                    "academic_depth": 4.8,
+                    "synthesis_quality": 4.7,
+                    "structural_coherence": 4.9,
+                    "latex_readiness": 5.0
+                  },
+                  "missing_citations": [],
+                  "hallucinated_citations": [],
+                  "feedback": [
+                    "Excellent grounded citations with 100% library verification.",
+                    "Clear narrative progression from dense message passing to sparse attention."
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Peer Review: Section Approved (5.0 / 5.0)\n\n- **Citation Fidelity**: 5.0 / 5.0 (0 hallucinated citations, 100% DOI groundedness)\n- **Academic Depth**: 4.8 / 5.0\n- **Synthesis Quality**: 4.7 / 5.0\n- **Structural Coherence**: 4.9 / 5.0\n- **LaTeX Readiness**: 5.0 / 5.0\n\n**Verdict**: **APPROVED**. All assigned DOIs are properly cited without factual distortion or missing papers. The drafting loop for this section is complete."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_writer_reviewer_hallucination_rejection_02",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-wr-003",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Review the drafted section containing ungrounded citation (Smith et al., 2029) and missing DOI 10.48550/arxiv.2308.00352."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "review_section",
+                "args": {
+                  "section_title": "Neural Citation Graph Traversal Algorithms",
+                  "draft_markdown": "## Neural Citation Graph Traversal Algorithms\n\nAs established by Smith et al. (2029), quantum graph neural networks dominate citation prediction.",
+                  "assigned_dois": [
+                    "10.1145/3613904.3642697",
+                    "10.48550/arxiv.2308.00352"
+                  ]
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "review_section",
+                "response": {
+                  "approved": false,
+                  "scores": {
+                    "citation_fidelity": 1.0,
+                    "academic_depth": 2.0,
+                    "synthesis_quality": 1.5,
+                    "structural_coherence": 2.5,
+                    "latex_readiness": 3.0
+                  },
+                  "missing_citations": [
+                    "10.1145/3613904.3642697",
+                    "10.48550/arxiv.2308.00352"
+                  ],
+                  "hallucinated_citations": [
+                    "Smith et al. (2029)"
+                  ],
+                  "feedback": [
+                    "CRITICAL: Unverified citation Smith et al. (2029) detected that is not in the project library (Zero-Hallucination violation).",
+                    "Assigned DOIs 10.1145/3613904.3642697 and 10.48550/arxiv.2308.00352 were not cited."
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Peer Review: REJECTED (Re-drafting Required)\n\n- **Verdict**: **REJECTED (Score: 2.0 / 5.0)**\n- **Citation Fidelity**: 1.0 / 5.0\n\n#### Critical Violations Detected:\n1. **Citation Hallucination**: Unverified reference  does not exist in the project library or OpenAlex corpus.\n2. **Missing Assigned Literature**: Required DOIs  and  were completely omitted.\n\n**Action**: DraftingAgent must regenerate the draft using only assigned DOIs from the verified project library."
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

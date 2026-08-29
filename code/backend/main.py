@@ -175,6 +175,7 @@ from features.planning.router import router as planning_router
 from features.writing.router import router as writing_router
 from features.export.router import router as export_router
 from features.chat.router import router as chat_router
+from features.agents.router import router as agents_router
 from projects.router import router as projects_router
 
 app.include_router(search_router)
@@ -183,6 +184,7 @@ app.include_router(papers_router)
 app.include_router(logs_router, prefix="/api")
 app.include_router(debug_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")
+app.include_router(agents_router, prefix="/api")
 app.include_router(research_router)
 app.include_router(analysis_router)
 app.include_router(planning_router)

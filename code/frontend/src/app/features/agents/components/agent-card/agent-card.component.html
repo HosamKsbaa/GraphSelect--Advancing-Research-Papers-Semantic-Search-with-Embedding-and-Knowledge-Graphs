@@ -1,0 +1,273 @@
+<div class="agent-card glass" [class.modified]="hasUnsavedChanges()">
+  <!-- Card Header -->
+  <div class="card-header">
+    <div class="header-main">
+      <div class="agent-title-row">
+        <h3 class="agent-display-name">{{ agent.display_name }}</h3>
+        <code class="agent-name-tag">{{ agent.name }}</code>
+      </div>
+      <div class="agent-badges-row">
+        <span class="badge" [ngClass]="getTierBadgeClass(agent.tier)">
+          {{ getTierLabel(agent.tier) }}
+        </span>
+        <span class="badge badge-role">{{ agent.role }}</span>
+        @if (hasUnsavedChanges() || !agent.config.is_default) {
+          <span class="badge badge-warning status-badge">Modified</span>
+        } @else {
+          <span class="badge badge-success status-badge">Default</span>
+        }
+      </div>
+    </div>
+
+    <p class="agent-description">{{ agent.description }}</p>
+
+    @if (agent.sub_agents && agent.sub_agents.length > 0) {
+      <div class="sub-agents-section">
+        <span class="sub-agents-label">Delegates to:</span>
+        <div class="sub-agents-list">
+          @for (sub of agent.sub_agents; track sub) {
+            <span class="sub-agent-pill">{{ sub }}</span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Card Body / Configuration Form -->
+  <div class="card-body">
+    <!-- Model Selector -->
+    <div class="form-group model-group">
+      <div class="form-label-row">
+        <label [for]="'model-' + agent.name" class="control-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2a10 10 0 1 0 10 10H12V2z"></path>
+            <path d="M12 12L2.1 12a10 10 0 0 0 9.9 10z"></path>
+            <path d="M12 12V2.1a10 10 0 0 1 10 9.9z"></path>
+          </svg>
+          Gemini Model
+        </label>
+        <span class="default-hint" [title]="'Canonical default: ' + agent.config.default_model">
+          def: {{ agent.config.default_model }}
+        </span>
+      </div>
+      <div class="select-wrapper">
+        <select 
+          [id]="'model-' + agent.name" 
+          class="form-select" 
+          [(ngModel)]="currentModel" 
+          (ngModelChange)="onModelChange($event)"
+        >
+          @for (model of getAllModels(); track model) {
+            <option [value]="model">
+              {{ model === 'inherit' ? 'inherit (System / Tier Default)' : model }}
+            </option>
+          }
+        </select>
+      </div>
+    </div>
+
+    <!-- Sliders Grid -->
+    <div class="sliders-grid">
+      <!-- Temperature Slider -->
+      <div class="slider-control">
+        <div class="slider-header">
+          <label [for]="'temp-' + agent.name" class="slider-label">
+            <span>Temperature</span>
+            <span class="temp-desc">{{ getTempDescription(currentTemperature) }}</span>
+          </label>
+          <span class="badge slider-value-badge" [ngClass]="getTempBadgeClass(currentTemperature)">
+            {{ currentTemperature.toFixed(2) }}
+          </span>
+        </div>
+        <input 
+          type="range" 
+          [id]="'temp-' + agent.name"
+          class="form-range temp-range" 
+          min="0.00" 
+          max="2.00" 
+          step="0.05" 
+          [(ngModel)]="currentTemperature" 
+          (ngModelChange)="onTemperatureChange($event)"
+        />
+        <div class="range-marks">
+          <span>0.0 (Deterministic)</span>
+          <span>1.0</span>
+          <span>2.0 (Creative)</span>
+        </div>
+      </div>
+
+      <!-- Top-P Slider -->
+      <div class="slider-control">
+        <div class="slider-header">
+          <label [for]="'topp-' + agent.name" class="slider-label">
+            <span>Top-P Nucleus</span>
+          </label>
+          <span class="badge slider-value-badge badge-topp">
+            {{ currentTopP.toFixed(2) }}
+          </span>
+        </div>
+        <input 
+          type="range" 
+          [id]="'topp-' + agent.name"
+          class="form-range topp-range" 
+          min="0.00" 
+          max="1.00" 
+          step="0.01" 
+          [(ngModel)]="currentTopP" 
+          (ngModelChange)="onTopPChange($event)"
+        />
+        <div class="range-marks">
+          <span>0.00</span>
+          <span>0.50</span>
+          <span>1.00</span>
+        </div>
+      </div>
+
+      <!-- Max Output Tokens Slider -->
+      <div class="slider-control">
+        <div class="slider-header">
+          <label [for]="'tokens-' + agent.name" class="slider-label">
+            <span>Max Output Tokens</span>
+          </label>
+          <span class="badge slider-value-badge badge-tokens">
+            {{ formatTokens(currentMaxTokens) }}
+          </span>
+        </div>
+        <input 
+          type="range" 
+          [id]="'tokens-' + agent.name"
+          class="form-range tokens-range" 
+          min="512" 
+          max="65536" 
+          step="512" 
+          [(ngModel)]="currentMaxTokens" 
+          (ngModelChange)="onMaxTokensChange($event)"
+        />
+        <div class="range-marks">
+          <span>512</span>
+          <span>8,192</span>
+          <span>65,536</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Collapsible System Prompt Section -->
+    <div class="collapsible-section prompt-section" [class.open]="showPromptEditor()">
+      <div class="section-toggle" (click)="showPromptEditor.set(!showPromptEditor())" role="button" tabindex="0">
+        <div class="toggle-left">
+          <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+          <span class="section-title">System Prompt & Instructions</span>
+          @if (currentPromptPrefix.trim()) {
+            <span class="badge badge-accent badge-active-override">Custom Prefix Active</span>
+          }
+        </div>
+        <span class="toggle-hint">{{ showPromptEditor() ? 'Hide' : 'Configure' }}</span>
+      </div>
+
+      @if (showPromptEditor()) {
+        <div class="section-content">
+          <!-- Prompt Prefix Override Textarea -->
+          <div class="form-group">
+            <div class="prompt-header-row">
+              <label [for]="'prompt-prefix-' + agent.name" class="control-label">
+                Custom Prompt Prefix / System Instructions Override
+              </label>
+              @if (currentPromptPrefix.trim()) {
+                <button type="button" class="btn-text-clear" (click)="clearPromptPrefix()">
+                  Clear Custom Prefix
+                </button>
+              }
+            </div>
+            <textarea
+              [id]="'prompt-prefix-' + agent.name"
+              class="form-textarea"
+              rows="3"
+              placeholder="Add custom domain constraints, formatting rules, or specialized instructions that prepend to this agent's prompt..."
+              [(ngModel)]="currentPromptPrefix"
+              (ngModelChange)="onPromptPrefixChange($event)"
+            ></textarea>
+            <div class="char-counter">
+              <span>{{ currentPromptPrefix.length }} characters</span>
+            </div>
+          </div>
+
+          <!-- Base System Prompt Collapsible Preview -->
+          <div class="base-prompt-container">
+            <div class="base-prompt-toggle" (click)="showBasePrompt.set(!showBasePrompt())" role="button" tabindex="0">
+              <svg class="chevron-icon-small" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.rotated]="showBasePrompt()">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <span>Canonical Base Prompt (Read-Only)</span>
+            </div>
+            @if (showBasePrompt()) {
+              <div class="base-prompt-preview">
+                <app-markdown-preview [markdown]="agent.config.system_prompt" />
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Collapsible Tools Directory -->
+    <div class="collapsible-section tools-section" [class.open]="showTools()">
+      <div class="section-toggle" (click)="showTools.set(!showTools())" role="button" tabindex="0">
+        <div class="toggle-left">
+          <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+          <span class="section-title">Registered ADK Tools</span>
+          <span class="badge badge-tools-count">{{ agent.tools.length }}</span>
+        </div>
+        <span class="toggle-hint">{{ showTools() ? 'Hide' : 'View Tools' }}</span>
+      </div>
+
+      @if (showTools()) {
+        <div class="section-content">
+          <app-tool-directory [tools]="agent.tools" [agentName]="agent.name" />
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Card Footer Actions -->
+  <div class="card-footer">
+    <div class="footer-status">
+      @if (hasUnsavedChanges()) {
+        <span class="status-unsaved">● Unsaved local changes</span>
+      } @else {
+        <span class="status-synced">✓ In sync with server</span>
+      }
+    </div>
+
+    <div class="footer-buttons">
+      <button 
+        type="button" 
+        class="btn btn-secondary btn-sm btn-traces" 
+        (click)="onViewTraces()"
+        title="View live traces for this agent"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+        </svg>
+        Traces
+      </button>
+
+      <button 
+        type="button" 
+        class="btn btn-secondary btn-sm btn-reset" 
+        (click)="onReset()" 
+        [disabled]="isSaving"
+        title="Reset this agent's model and parameters to factory defaults"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+          <path d="M3 3v5h5"></path>
+        </svg>
+        Reset to Default
+      </button>
+    </div>
+  </div>
+</div>

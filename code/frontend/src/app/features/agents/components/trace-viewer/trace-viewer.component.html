@@ -1,0 +1,305 @@
+<div class="trace-viewer">
+  <!-- Filter & Control Toolbar -->
+  <div class="trace-toolbar glass">
+    <div class="toolbar-row main-filters">
+      <!-- Search Input -->
+      <div class="filter-item search-box">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input 
+          type="text" 
+          class="form-input" 
+          placeholder="Search prompts, responses, tool calls..."
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQuery.set($event)"
+        />
+        @if (searchQuery()) {
+          <button type="button" class="btn-clear" (click)="searchQuery.set('')">✕</button>
+        }
+      </div>
+
+      <!-- Agent Filter Dropdown -->
+      <div class="filter-item select-box">
+        <label class="filter-label">Agent:</label>
+        <select 
+          class="form-select" 
+          [ngModel]="selectedAgent()"
+          (ngModelChange)="selectedAgent.set($event); fetchTraces()"
+        >
+          <option value="all">All Agents (Swarm)</option>
+          @for (ag of knownAgents; track ag) {
+            <option [value]="ag">{{ ag }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Status Filter -->
+      <div class="filter-item select-box">
+        <label class="filter-label">Status:</label>
+        <select 
+          class="form-select" 
+          [ngModel]="selectedStatus()"
+          (ngModelChange)="selectedStatus.set($event)"
+        >
+          <option value="all">All Statuses</option>
+          <option value="success">Success Only</option>
+          <option value="error">Errors Only</option>
+        </select>
+      </div>
+
+      <!-- Limit Selector -->
+      <div class="filter-item select-box limit-box">
+        <label class="filter-label">Limit:</label>
+        <select 
+          class="form-select" 
+          [ngModel]="traceLimit()"
+          (ngModelChange)="traceLimit.set($event); fetchTraces()"
+        >
+          <option [ngValue]="25">25</option>
+          <option [ngValue]="50">50</option>
+          <option [ngValue]="100">100</option>
+          <option [ngValue]="200">200</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Actions & Status Bar -->
+    <div class="toolbar-row actions-bar">
+      <div class="traces-counter">
+        <span class="count-highlight">{{ filteredTraces().length }}</span>
+        <span class="count-label">traces visible (total loaded: {{ traces().length }})</span>
+      </div>
+
+      <div class="toolbar-actions">
+        <!-- Auto-Refresh Toggle -->
+        <button 
+          type="button" 
+          class="btn btn-sm btn-toggle" 
+          [class.btn-active]="autoRefreshEnabled()"
+          (click)="toggleAutoRefresh()"
+        >
+          <span class="pulse-dot" [class.active]="autoRefreshEnabled()"></span>
+          <span>Live Polling ({{ refreshIntervalSeconds() }}s)</span>
+        </button>
+
+        <!-- Manual Refresh Button -->
+        <button 
+          type="button" 
+          class="btn btn-secondary btn-sm" 
+          (click)="fetchTraces()"
+          [disabled]="loading()"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.spinning]="loading()">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Refresh Traces
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  @if (loading() && traces().length === 0) {
+    <div class="loading-container glass">
+      <div class="spinner"></div>
+      <p>Loading real-time execution traces...</p>
+    </div>
+  }
+
+  <!-- Empty State -->
+  @if (!loading() && filteredTraces().length === 0) {
+    <div class="empty-state glass">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <h3>No Traces Found</h3>
+      <p class="text-muted">
+        @if (searchQuery() || selectedAgent() !== 'all' || selectedStatus() !== 'all') {
+          No execution traces match your active filters. Try resetting the filters above.
+        } @else {
+          No agent execution traces recorded yet. Traces will appear here when agents process tasks and invoke tools.
+        }
+      </p>
+      <button type="button" class="btn btn-secondary btn-sm" (click)="searchQuery.set(''); selectedAgent.set('all'); selectedStatus.set('all'); fetchTraces()">
+        Reset Filters
+      </button>
+    </div>
+  }
+
+  <!-- Traces Feed List -->
+  @if (filteredTraces().length > 0) {
+    <div class="traces-list">
+      @for (trace of filteredTraces(); track trace.id) {
+        <div class="trace-card glass" [class.trace-error]="trace.status === 'error'">
+          <!-- Trace Header -->
+          <div class="trace-header">
+            <div class="trace-header-left">
+              <span class="status-indicator" [class.status-success]="trace.status === 'success'" [class.status-error]="trace.status === 'error'"></span>
+              <span class="badge badge-agent">{{ trace.agent_name }}</span>
+              <span class="action-summary">{{ trace.action_summary }}</span>
+            </div>
+
+            <div class="trace-header-right">
+              <span class="metric-badge latency-badge" [title]="'Latency: ' + (trace.latency_ms || 0) + 'ms'">
+                {{ formatLatency(trace.latency_ms) }}
+              </span>
+              <span class="metric-badge tokens-badge" [title]="'Tokens: ' + trace.token_count">
+                {{ formatTokens(trace.token_count) }}
+              </span>
+              <span class="trace-timestamp">{{ trace.timestamp | date:'HH:mm:ss.SSS' }}</span>
+              <button 
+                type="button" 
+                class="btn-copy-json" 
+                (click)="copyFullTrace(trace)" 
+                [title]="'Copy trace JSON (' + trace.id + ')'"
+              >
+                @if (copiedState() === 'trace_' + trace.id) {
+                  <span class="text-success">Copied!</span>
+                } @else {
+                  <span>JSON</span>
+                }
+              </button>
+            </div>
+          </div>
+
+          <!-- Trace Decision Outcome if present -->
+          @if (trace.decision_outcome) {
+            <div class="decision-banner">
+              <span class="decision-label">Outcome / Next Step:</span>
+              <span class="decision-text">{{ trace.decision_outcome }}</span>
+            </div>
+          }
+
+          <!-- Trace Sections Accordions -->
+          <div class="trace-sections">
+            <!-- 1. LLM Prompt Viewer -->
+            @if (trace.llm_prompt) {
+              <div class="trace-section" [class.open]="isSectionExpanded(trace.id, 'prompt')">
+                <div class="section-header" (click)="toggleSection(trace.id, 'prompt')" role="button" tabindex="0">
+                  <div class="section-header-left">
+                    <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <span class="section-title">Prompt / System Instructions</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    class="btn-copy-section" 
+                    (click)="$event.stopPropagation(); copyPrompt(trace)"
+                  >
+                    @if (copiedState() === 'prompt_' + trace.id) {
+                      <span class="text-success">Copied</span>
+                    } @else {
+                      <span>Copy Prompt</span>
+                    }
+                  </button>
+                </div>
+
+                @if (isSectionExpanded(trace.id, 'prompt')) {
+                  <div class="section-body">
+                    <pre class="code-payload"><code>{{ trace.llm_prompt }}</code></pre>
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- 2. Tool Calls Viewer -->
+            @if (trace.tool_calls && trace.tool_calls.length > 0) {
+              <div class="trace-section" [class.open]="isSectionExpanded(trace.id, 'tools')">
+                <div class="section-header" (click)="toggleSection(trace.id, 'tools')" role="button" tabindex="0">
+                  <div class="section-header-left">
+                    <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <span class="section-title">Tool Invocations</span>
+                    <span class="badge badge-tool-count">{{ trace.tool_calls.length }} called</span>
+                  </div>
+                </div>
+
+                @if (isSectionExpanded(trace.id, 'tools')) {
+                  <div class="section-body">
+                    <div class="tool-calls-grid">
+                      @for (tc of trace.tool_calls; track tc.name; let i = $index) {
+                        <div class="tool-call-item">
+                          <div class="tool-call-header">
+                            <div class="tc-name">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="16 18 22 12 16 6"></polyline>
+                                <polyline points="8 6 2 12 8 18"></polyline>
+                              </svg>
+                              <code>{{ tc.name }}</code>
+                            </div>
+                            <button 
+                              type="button" 
+                              class="btn-copy-section" 
+                              (click)="copyToolCall(tc, trace.id, i)"
+                            >
+                              @if (copiedState() === 'tool_' + trace.id + '_' + i) {
+                                <span class="text-success">Copied</span>
+                              } @else {
+                                <span>Copy Call</span>
+                              }
+                            </button>
+                          </div>
+
+                          <div class="tool-call-args">
+                            <span class="sub-label">Arguments:</span>
+                            <pre class="code-payload"><code>{{ formatJson(tc.arguments) }}</code></pre>
+                          </div>
+
+                          @if (tc.result) {
+                            <div class="tool-call-result">
+                              <span class="sub-label">Result:</span>
+                              <pre class="code-payload result-payload"><code>{{ tc.result }}</code></pre>
+                            </div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- 3. LLM Response Viewer -->
+            @if (trace.llm_response) {
+              <div class="trace-section" [class.open]="isSectionExpanded(trace.id, 'response')">
+                <div class="section-header" (click)="toggleSection(trace.id, 'response')" role="button" tabindex="0">
+                  <div class="section-header-left">
+                    <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                    <span class="section-title">Raw Model Completion</span>
+                  </div>
+                  <button 
+                    type="button" 
+                    class="btn-copy-section" 
+                    (click)="$event.stopPropagation(); copyResponse(trace)"
+                  >
+                    @if (copiedState() === 'response_' + trace.id) {
+                      <span class="text-success">Copied</span>
+                    } @else {
+                      <span>Copy Response</span>
+                    }
+                  </button>
+                </div>
+
+                @if (isSectionExpanded(trace.id, 'response')) {
+                  <div class="section-body">
+                    <pre class="code-payload response-payload"><code>{{ trace.llm_response }}</code></pre>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

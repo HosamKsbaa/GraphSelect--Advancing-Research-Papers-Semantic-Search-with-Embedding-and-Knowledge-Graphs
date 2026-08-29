@@ -1,0 +1,151 @@
+<div class="tool-directory">
+  <div class="directory-header">
+    <div class="header-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+      </svg>
+      <span>Registered Tools</span>
+      <span class="tool-count-badge">{{ tools.length }}</span>
+    </div>
+    @if (tools.length > 1) {
+      <div class="header-actions">
+        <button type="button" class="btn-text-action" (click)="expandAll()">Expand All</button>
+        <span class="divider">|</span>
+        <button type="button" class="btn-text-action" (click)="collapseAll()">Collapse All</button>
+      </div>
+    }
+  </div>
+
+  @if (tools.length === 0) {
+    <div class="no-tools-state">
+      <span class="text-muted">No direct ADK tools bound to this agent.</span>
+    </div>
+  } @else {
+    <div class="tool-list">
+      @for (tool of tools; track tool.name) {
+        <div class="tool-item" [class.expanded]="isToolExpanded(tool.name)">
+          <!-- Tool Header -->
+          <div class="tool-item-header" (click)="toggleTool(tool.name)" role="button" tabindex="0">
+            <div class="tool-name-container">
+              <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+              <code class="tool-name">{{ tool.name }}</code>
+            </div>
+
+            <div class="tool-header-meta">
+              <span class="param-count-tag" [title]="getPropertiesList(tool).length + ' parameters'">
+                {{ getPropertiesList(tool).length }} params
+              </span>
+              <button 
+                type="button" 
+                class="btn-copy-schema" 
+                (click)="copySchema(tool, $event)" 
+                [title]="'Copy ' + tool.name + ' JSON Schema'"
+              >
+                @if (copiedToolName() === tool.name) {
+                  <span class="copied-indicator">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                    Copied
+                  </span>
+                } @else {
+                  <span class="copy-label">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Schema
+                  </span>
+                }
+              </button>
+            </div>
+          </div>
+
+          <!-- Tool Expanded Body -->
+          @if (isToolExpanded(tool.name)) {
+            <div class="tool-item-body">
+              <!-- Docstring -->
+              @if (tool.description) {
+                <div class="tool-description">
+                  <app-markdown-preview [markdown]="tool.description" />
+                </div>
+              }
+
+              <!-- Schema Section -->
+              <div class="tool-schema-container">
+                <div class="schema-view-toggle">
+                  <span class="schema-title">Parameters & Arguments</span>
+                  <div class="toggle-buttons">
+                    <button 
+                      type="button" 
+                      class="toggle-btn" 
+                      [class.active]="getViewMode(tool.name) === 'visual'"
+                      (click)="setViewMode(tool.name, 'visual')"
+                    >
+                      Visual Tree
+                    </button>
+                    <button 
+                      type="button" 
+                      class="toggle-btn" 
+                      [class.active]="getViewMode(tool.name) === 'json'"
+                      (click)="setViewMode(tool.name, 'json')"
+                    >
+                      JSON Schema
+                    </button>
+                  </div>
+                </div>
+
+                @if (getViewMode(tool.name) === 'visual') {
+                  <div class="parameters-tree">
+                    @if (getPropertiesList(tool).length === 0) {
+                      <div class="no-params-text">No parameters required (accepts empty arguments).</div>
+                    } @else {
+                      <div class="param-grid">
+                        @for (item of getPropertiesList(tool); track item.name) {
+                          <div class="param-row">
+                            <div class="param-meta">
+                              <span class="param-name">{{ item.name }}</span>
+                              <span class="param-type-badge">{{ item.prop.type || 'any' }}</span>
+                              @if (item.isRequired) {
+                                <span class="badge-required">required</span>
+                              } @else {
+                                <span class="badge-optional">optional</span>
+                              }
+                            </div>
+                            @if (item.prop.description) {
+                              <div class="param-desc">{{ item.prop.description }}</div>
+                            }
+                            @if (item.prop.enum && item.prop.enum.length > 0) {
+                              <div class="param-enum">
+                                <span class="enum-label">Allowed:</span>
+                                @for (val of item.prop.enum; track val) {
+                                  <code>{{ val }}</code>
+                                }
+                              </div>
+                            }
+                            @if (item.prop.default !== undefined && item.prop.default !== null) {
+                              <div class="param-default">
+                                <span class="default-label">Default:</span>
+                                <code>{{ item.prop.default | json }}</code>
+                              </div>
+                            }
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <div class="json-schema-view">
+                    <pre class="schema-code"><code>{{ formatJsonSchema(tool) }}</code></pre>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

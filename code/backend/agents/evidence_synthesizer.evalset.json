@@ -1,0 +1,240 @@
+{
+  "eval_set_id": "evidence_synthesizer_evalset",
+  "name": "Evidence Synthesizer Matrix & Findings Evaluation Set",
+  "description": "Evaluates parameter extraction, structured comparison matrix generation, consensus mapping, and contradictory empirical claim handling.",
+  "creation_timestamp": 1756480000.0,
+  "eval_cases": [
+    {
+      "eval_id": "eval_evidence_matrix_synthesis_01",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-synth-001",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Extract methodology and empirical findings from papers 10.1145/3613904.3642697 and 10.48550/arxiv.2308.00352, then build a comparison matrix."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "extract_paper_findings",
+                "args": {
+                  "dois": [
+                    "10.1145/3613904.3642697",
+                    "10.48550/arxiv.2308.00352"
+                  ]
+                }
+              },
+              {
+                "name": "generate_comparison_matrix",
+                "args": {
+                  "findings": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "methodology": "Graph Attention Networks with Cross-Layer Residual Connections",
+                      "empirical_results": "Achieved 89.4% F1-score on OGB-ArXiv citation benchmark",
+                      "limitations": "Quadratic memory scaling on dense graphs"
+                    },
+                    {
+                      "doi": "10.48550/arxiv.2308.00352",
+                      "methodology": "Sparse Attention Transformer with Local Neighborhood Aggregation",
+                      "empirical_results": "Achieved 91.2% F1-score with 40% memory reduction",
+                      "limitations": "Slight latency degradation on disconnected subgraphs"
+                    }
+                  ],
+                  "research_questions": [
+                    "How do graph neural architectures perform on academic citation graphs?"
+                  ]
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "extract_paper_findings",
+                "response": {
+                  "total_extracted": 2,
+                  "findings": [
+                    {
+                      "doi": "10.1145/3613904.3642697",
+                      "title": "Attention-based Neural Message Passing on Large Networks",
+                      "methodology": "Graph Attention Networks with Cross-Layer Residual Connections",
+                      "empirical_results": "Achieved 89.4% F1-score on OGB-ArXiv citation benchmark",
+                      "datasets": [
+                        "OGB-ArXiv",
+                        "Cora",
+                        "Citeseer"
+                      ],
+                      "limitations": "Quadratic memory scaling on dense graphs"
+                    },
+                    {
+                      "doi": "10.48550/arxiv.2308.00352",
+                      "title": "Efficient Graph Transformers with Sparse Attention",
+                      "methodology": "Sparse Attention Transformer with Local Neighborhood Aggregation",
+                      "empirical_results": "Achieved 91.2% F1-score with 40% memory reduction",
+                      "datasets": [
+                        "OGB-ArXiv",
+                        "PubMed"
+                      ],
+                      "limitations": "Slight latency degradation on disconnected subgraphs"
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "generate_comparison_matrix",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "dimensions_count": 4,
+                  "markdown_table": "| Dimension | Walker et al. (10.1145/3613904.3642697) | Chen et al. (10.48550/arxiv.2308.00352) |\n|---|---|---|\n| **Architecture** | GAT + Residuals | Sparse Transformer |\n| **Benchmark Accuracy** | 89.4% F1 (OGB-ArXiv) | 91.2% F1 (OGB-ArXiv) |\n| **Efficiency** | Quadratic Memory | 40% Memory Reduction |\n| **Key Limitation** | Dense Graph Scaling | Disconnected Subgraphs |",
+                  "synthesis_narrative": "Both architectures demonstrate that attention mechanisms outperform standard message-passing on academic citation graphs, with Sparse Transformers providing superior memory economics."
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Structured Evidence Comparison Matrix\n\n| Dimension | Walker et al. (`10.1145/3613904.3642697`) | Chen et al. (`10.48550/arxiv.2308.00352`) |\n|---|---|---|\n| **Architecture** | GAT + Cross-Layer Residuals | Sparse Neighborhood Transformer |\n| **Benchmark Accuracy** | 89.4% F1 on OGB-ArXiv | 91.2% F1 on OGB-ArXiv |\n| **Efficiency** | Standard / Quadratic Memory | 40% Memory Reduction |\n| **Key Limitation** | High Dense Graph Memory | Subgraph Disconnection Latency |\n\n#### Evidence Synthesis Narrative:\nBoth studies establish that attention-weighted aggregation provides significant gains over isotropic message passing on citation networks. Chen et al. directly improves upon Walker et al. by introducing sparse neighborhood attention patterns, reducing memory footprint by 40% while achieving a +1.8% F1 improvement on the OGB-ArXiv benchmark."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_evidence_conflicting_claims_02",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-synth-002",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Synthesize findings on whether LoRA parameter-efficient fine-tuning outperforms full fine-tuning on academic citation graphs."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "synthesize_evidence",
+                "args": {}
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "synthesize_evidence",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "papers_analyzed": 2,
+                  "conflicts_detected": [
+                    {
+                      "topic": "LoRA vs Full Fine-Tuning Performance",
+                      "claim_a": "Paper A (10.1000/lora_paper) claims LoRA outperforms full fine-tuning by +4.2% on in-distribution citation benchmarks.",
+                      "claim_b": "Paper B (10.1000/fullft_paper) claims full fine-tuning achieves +6.1% higher accuracy on out-of-distribution transfer tasks."
+                    }
+                  ],
+                  "consensus_points": [
+                    "LoRA reduces trainable parameter count by over 90% across all evaluated architectures."
+                  ]
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Synthesis of Empirical Findings: LoRA vs Full Fine-Tuning\n\nOur cross-literature analysis reveals an important **empirical divergence** across evaluation regimes:\n\n#### 1. Methodological Divergence & Conflicting Findings:\n- **In-Distribution Citation Graphs**: Paper A (`10.1000/lora_paper`) demonstrates that LoRA rank-8 adaptation achieves a **+4.2% higher F1 score** than full fine-tuning by regularizing against catastrophic forgetting on localized graph clusters.\n- **Out-of-Distribution Transfer**: Conversely, Paper B (`10.1000/fullft_paper`) finds that full fine-tuning outperforms LoRA by **+6.1%** when transferring across disparate academic disciplines (e.g. Computer Science to Biomedicine).\n\n#### 2. Consensus Agreement:\n- Both studies agree that LoRA reduces trainable parameter budgets by >90% without degrading foundational representation quality.\n\n**Academic Conclusion**: Performance superiority is contingent on distribution shift: LoRA is optimal for domain-specific citation clusters, whereas full fine-tuning remains necessary for broad cross-disciplinary domain adaptation."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_evidence_full_synthesis_03",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {
+          "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+        }
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-synth-003",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Execute comprehensive evidence synthesis across all collected papers in our project library."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "synthesize_evidence",
+                "args": {}
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "synthesize_evidence",
+                "response": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "papers_analyzed": 3,
+                  "comparison_matrix": {
+                    "dimensions": [
+                      "Architecture",
+                      "Benchmark",
+                      "Efficiency",
+                      "Open Problems"
+                    ],
+                    "papers_included": [
+                      "10.1145/3613904.3642697",
+                      "10.48550/arxiv.2308.00352",
+                      "10.1016/j.artint.2023.103982"
+                    ]
+                  },
+                  "markdown_table": "| Dimension | 10.1145/3613904.3642697 | 10.48550/arxiv.2308.00352 | 10.1016/j.artint.2023.103982 |\n|---|---|---|---|\n| **Paradigm** | Message Passing GAT | Sparse Graph Transformer | Knowledge Graph Embedding |\n| **Best Metric** | 89.4% F1 | 91.2% F1 | 0.88 MRR |",
+                  "synthesis_narrative": "Across the 3 foundational pillars of our literature review, topological message-passing, non-local transformer attention, and multi-relational knowledge graph embeddings form a complementary tripartite methodology."
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Full Evidence Synthesis Report\n\n- **Papers Synthesized**: 3 core project papers\n- **Extracted Dimensions**: Architecture Paradigm, Benchmark Metrics, Computational Efficiency, Open Problems\n\n#### Tripartite Methodological Matrix:\n1. **Message Passing Attention** (`10.1145/3613904.3642697`): Excels at local neighborhood feature aggregation (89.4% F1).\n2. **Sparse Graph Transformers** (`10.48550/arxiv.2308.00352`): Bridges long-range dependencies with 40% memory savings (91.2% F1).\n3. **Knowledge Graph Embeddings** (`10.1016/j.artint.2023.103982`): Unifies heterogeneous relation types across multi-domain citation graphs (0.88 MRR).\n\nThis synthesis provides the empirical substrate required for Section 3 and Section 4 of our literature review."
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

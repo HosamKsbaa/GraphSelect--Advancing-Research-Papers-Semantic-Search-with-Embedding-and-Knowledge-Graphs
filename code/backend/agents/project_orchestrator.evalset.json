@@ -1,0 +1,170 @@
+{
+  "eval_set_id": "project_orchestrator_evalset",
+  "name": "Project Orchestrator Lifecycle & Swarm Routing Evaluation Set",
+  "description": "Evaluates project creation, project selection, project listing, swarm delegation, and uninitialized session state handling.",
+  "creation_timestamp": 1756480000.0,
+  "eval_cases": [
+    {
+      "eval_id": "eval_orchestrator_create_project_01",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-orch-001",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Create a new research project titled \"Quantum Machine Learning in Drug Discovery\" on quantum variational circuits."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "create_new_project",
+                "args": {
+                  "name": "Quantum Machine Learning in Drug Discovery",
+                  "topic": "quantum variational circuits and molecular graph representations",
+                  "description": "Literature review on quantum graph neural networks and molecular property prediction."
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "create_new_project",
+                "response": {
+                  "status": "created",
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "name": "Quantum Machine Learning in Drug Discovery",
+                  "topic": "quantum variational circuits and molecular graph representations",
+                  "description": "Literature review on quantum graph neural networks and molecular property prediction.",
+                  "message": "Successfully created and activated project 'Quantum Machine Learning in Drug Discovery' with ID '8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a'."
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Project Initialized: **Quantum Machine Learning in Drug Discovery**\n\n- **Project ID**: \n- **Topic**: Quantum variational circuits and molecular graph representations\n- **Status**: Active & Ready\n\n#### Recommended Next Steps:\n1. **Define Research Questions**: Formulate 3\u20135 specific research questions.\n2. **Seed Discovery**: Discover foundation literature using OpenAlex or seed DOIs.\n3. **1-Hop Traversal**: Run GraphSelect traversal cycles."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_orchestrator_missing_project_02",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-orch-002",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Run coverage analysis on our current literature."
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "list_projects",
+                "args": {}
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "list_projects",
+                "response": {
+                  "projects": [
+                    {
+                      "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                      "name": "GNN Drug Repurposing",
+                      "topic": "Graph Neural Networks for Drug Repurposing",
+                      "paper_count": 8,
+                      "question_count": 3
+                    }
+                  ],
+                  "total": 1
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Active Project Required\n\nNo research project is currently selected in your session. To perform coverage analysis, please select an existing project or create a new one:\n\n**Available Projects**:\n1. **GNN Drug Repurposing** () \u2014 8 papers, 3 questions.\n\nReply with  or provide a title for a new project."
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "eval_id": "eval_orchestrator_select_project_03",
+      "session_input": {
+        "app_name": "backend",
+        "user_id": "eval_researcher",
+        "state": {}
+      },
+      "conversation": [
+        {
+          "invocation_id": "inv-orch-003",
+          "user_content": {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Select project 8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+              }
+            ]
+          },
+          "intermediate_data": {
+            "tool_uses": [
+              {
+                "name": "select_project",
+                "args": {
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a"
+                }
+              }
+            ],
+            "tool_responses": [
+              {
+                "name": "select_project",
+                "response": {
+                  "status": "activated",
+                  "project_id": "8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a",
+                  "name": "GNN Drug Repurposing",
+                  "topic": "Graph Neural Networks for Drug Repurposing",
+                  "message": "Successfully activated project 'GNN Drug Repurposing' with ID '8f4b2e10-9a3d-4c8e-b21f-9a1c8f3e5b7a'."
+                }
+              }
+            ],
+            "intermediate_responses": []
+          },
+          "final_response": {
+            "role": "model",
+            "parts": [
+              {
+                "text": "### Project Activated: **GNN Drug Repurposing**\n\n- **Project ID**: \n- **Topic**: Graph Neural Networks for Drug Repurposing\n- **Status**: Active in Session State\n\nYou can now execute research operations, gap analyses, outline generation, or section drafting."
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -14,6 +14,7 @@ from e2e_playwright.pages.system_status_page import SystemStatusPage
 from e2e_playwright.pages.logs_page import LogsPage
 from e2e_playwright.pages.debug_page import DebugPage
 from e2e_playwright.pages.settings_page import SettingsPage
+from e2e_playwright.pages.agents_page import AgentsPage
 
 __all__ = [
     "BasePage",
@@ -30,4 +31,5 @@ __all__ = [
     "LogsPage",
     "DebugPage",
     "SettingsPage",
+    "AgentsPage",
 ]
