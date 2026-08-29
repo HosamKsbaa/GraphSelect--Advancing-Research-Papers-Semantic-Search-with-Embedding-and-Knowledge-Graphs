@@ -1,4 +1,4 @@
-"""FastAPI router for Agent Swarm Inspector & Configuration endpoints."""
+"""FastAPI router for Agent Swarm Inspector, Tier Management & Configuration endpoints."""
 from __future__ import annotations
 
 import logging
@@ -9,6 +9,9 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 
 from agents.agent import root_agent
 from features.agents.models import (
+    AgentConfigBatchUpdateRequest,
+    AgentConfigBatchUpdateResponse,
+    AgentConfigListResponse,
     AgentConfigUpdate,
     AgentRegistryResponse,
     AgentResetRequest,
@@ -16,6 +19,11 @@ from features.agents.models import (
     AgentSettingsUpdateRequest,
     AgentSettingsUpdateResponse,
     AgentTraceListResponse,
+    ModelTier,
+    TierCreateRequest,
+    TierDeleteResponse,
+    TierListResponse,
+    TierUpdateRequest,
 )
 from features.agents.service import AgentService
 
@@ -39,6 +47,105 @@ def get_agent_service(request: Request) -> AgentService:
             _agent_service.mysql = mysql_service
     return _agent_service
 
+
+# ============================================================================
+# Tier Management Endpoints (Milestone 1)
+# ============================================================================
+
+@router.get("/tiers", response_model=TierListResponse)
+async def get_tiers(request: Request) -> TierListResponse:
+    """List all system and custom model tiers with default sampling parameters."""
+    service = get_agent_service(request)
+    tiers = await service.get_tiers()
+    return TierListResponse(tiers=tiers, total=len(tiers))
+
+
+@router.post("/tiers", response_model=ModelTier, status_code=status.HTTP_201_CREATED)
+async def create_tier(payload: TierCreateRequest, request: Request) -> ModelTier:
+    """Create a new custom model tier."""
+    service = get_agent_service(request)
+    return await service.create_tier(payload)
+
+
+@router.put("/tiers/{tier_id}", response_model=ModelTier)
+async def update_tier(tier_id: str, payload: TierUpdateRequest, request: Request) -> ModelTier:
+    """Update a model tier and dynamically cascade updated defaults to all inherited agents."""
+    service = get_agent_service(request)
+    tier = await service.get_tier(tier_id)
+    if tier is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tier '{tier_id}' not found.",
+        )
+    return await service.update_tier(tier_id, payload)
+
+
+@router.delete("/tiers/{tier_id}", response_model=TierDeleteResponse)
+async def delete_tier(tier_id: str, request: Request) -> TierDeleteResponse:
+    """Delete a custom tier and safely reassign all assigned member agents to tier1."""
+    service = get_agent_service(request)
+    tier = await service.get_tier(tier_id)
+    if tier is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tier '{tier_id}' not found.",
+        )
+    if tier.is_system or tier_id in {"tier1", "tier2", "tier3"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete built-in system tier '{tier_id}'.",
+        )
+
+    return await service.delete_tier(tier_id)
+
+
+# ============================================================================
+# Agent Configuration Endpoints
+# ============================================================================
+
+@router.get("/config", response_model=AgentConfigListResponse)
+async def get_agent_config(request: Request) -> AgentConfigListResponse:
+    """Retrieve full configuration state, mode, tier assignment, and effective parameters for all agents."""
+    service = get_agent_service(request)
+    configs = await service.get_agent_configs()
+    return AgentConfigListResponse(agents=configs, total=len(configs))
+
+
+@router.put("/config", response_model=AgentConfigBatchUpdateResponse)
+async def update_agent_config(
+    payload: AgentConfigBatchUpdateRequest, request: Request
+) -> AgentConfigBatchUpdateResponse:
+    """Batch update agent tier assignments, configuration modes ('inherit' | 'custom'), and custom overrides."""
+    service = get_agent_service(request)
+    registry = await service.get_registry()
+    valid_agent_names = {a.name for a in registry.agents}
+
+    # Validate agent names
+    unknown_agents = [item.agent_id for item in payload.overrides if item.agent_id not in valid_agent_names]
+    if unknown_agents:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown agent(s): {', '.join(unknown_agents)}.",
+        )
+
+    # Validate tier_ids
+    existing_tiers = {t.id for t in await service.get_tiers()}
+    unknown_tiers = [
+        item.tier_id for item in payload.overrides
+        if item.tier_id is not None and item.tier_id not in existing_tiers
+    ]
+    if unknown_tiers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown tier_id(s): {', '.join(unknown_tiers)}. Available tiers: {', '.join(sorted(existing_tiers))}",
+        )
+
+    return await service.update_agent_configs(payload.overrides)
+
+
+# ============================================================================
+# Core Registry & Settings Endpoints
+# ============================================================================
 
 @router.get("/registry", response_model=AgentRegistryResponse)
 async def get_agent_registry(request: Request) -> AgentRegistryResponse:

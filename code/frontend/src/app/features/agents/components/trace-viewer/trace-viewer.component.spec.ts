@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { TraceViewerComponent } from './trace-viewer.component';
 import { AgentService, AgentTraceListResponse } from '../../../../core/agent.service';
 import { ToastService } from '../../../../core/toast.service';
@@ -9,8 +10,8 @@ import { ToastService } from '../../../../core/toast.service';
 describe('TraceViewerComponent', () => {
   let component: TraceViewerComponent;
   let fixture: ComponentFixture<TraceViewerComponent>;
-  let agentServiceSpy: jasmine.SpyObj<AgentService>;
-  let toastSpy: jasmine.SpyObj<ToastService>;
+  let agentServiceMock: any;
+  let toastMock: any;
 
   const mockTraceResponse: AgentTraceListResponse = {
     traces: [
@@ -42,15 +43,21 @@ describe('TraceViewerComponent', () => {
   };
 
   beforeEach(async () => {
-    agentServiceSpy = jasmine.createSpyObj('AgentService', ['getTraces']);
-    toastSpy = jasmine.createSpyObj('ToastService', ['success', 'error', 'info', 'warning']);
-    agentServiceSpy.getTraces.and.returnValue(of(mockTraceResponse));
+    agentServiceMock = {
+      getTraces: vi.fn().mockReturnValue(of(mockTraceResponse)),
+    };
+    toastMock = {
+      success: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+    };
 
     await TestBed.configureTestingModule({
       imports: [TraceViewerComponent],
       providers: [
-        { provide: AgentService, useValue: agentServiceSpy },
-        { provide: ToastService, useValue: toastSpy },
+        { provide: AgentService, useValue: agentServiceMock },
+        { provide: ToastService, useValue: toastMock },
         provideHttpClient(),
         provideHttpClientTesting(),
       ],

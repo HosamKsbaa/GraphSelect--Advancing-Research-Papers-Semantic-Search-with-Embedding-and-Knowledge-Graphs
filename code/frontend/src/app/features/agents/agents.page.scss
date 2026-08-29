@@ -259,6 +259,18 @@
         }
       }
 
+      &.btn-manage-tiers {
+        background: rgba(99, 102, 241, 0.15);
+        border-color: rgba(99, 102, 241, 0.35);
+        color: #c7d2fe;
+
+        &:hover:not(:disabled) {
+          background: rgba(99, 102, 241, 0.25);
+          color: #fff;
+          border-color: rgba(99, 102, 241, 0.6);
+        }
+      }
+
       &.btn-primary {
         background: var(--color-accent, #6366f1);
         color: white;

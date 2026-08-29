@@ -1,16 +1,23 @@
-"""Agent Swarm service for dynamic introspection, tool schema reflection, and hot-reloading."""
+"""Agent Swarm service for dynamic introspection, tool schema reflection, tier management, and hot-reloading."""
 from __future__ import annotations
 
 import asyncio
 import inspect
 import json
 import logging
+import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional, get_type_hints
+
+from fastapi import HTTPException, status
 
 from config import get_settings
 from features.agents.models import (
     AgentConfig,
+    AgentConfigBatchUpdateResponse,
+    AgentConfigItem,
+    AgentConfigOverrideItem,
     AgentConfigUpdate,
     AgentMetadata,
     AgentRegistryResponse,
@@ -18,6 +25,10 @@ from features.agents.models import (
     AgentSettingsUpdateResponse,
     AgentToolDefinition,
     LiveAgentTrace,
+    ModelTier,
+    TierCreateRequest,
+    TierDeleteResponse,
+    TierUpdateRequest,
     ToolCallTrace,
     ToolParameterProperty,
     ToolParameterSchema,
@@ -60,12 +71,12 @@ AGENT_DISPLAY_ROLES: dict[str, dict[str, str]] = {
     "DraftingAgent": {
         "display_name": "Section Drafting Agent",
         "role": "Academic Literature Review Drafting",
-        "tier": "tier2",
+        "tier": "tier3",
     },
     "ReviewerAgent": {
         "display_name": "Peer Review Agent",
         "role": "Peer Review, Rubric Critique & Citation Verification",
-        "tier": "tier1",
+        "tier": "tier3",
     },
     "DebuggerAgent": {
         "display_name": "Autonomous Diagnostic Agent",
@@ -171,15 +182,59 @@ def extract_tool_schema(tool: Any) -> AgentToolDefinition:
 
 
 class AgentService:
-    """Service managing dynamic agent introspection, hot-reloading, and settings persistence."""
+    """Service managing dynamic agent introspection, model tiers, hot-reloading, and settings persistence."""
 
     def __init__(self, root_agent: Any, mysql_service: Any = None) -> None:
         self.root_agent = root_agent
         self.mysql = mysql_service
+        self._tiers: dict[str, ModelTier] = {}
         self._canonical_defaults: dict[str, dict[str, Any]] = {}
         self._active_overrides: dict[str, dict[str, Any]] = {}
         self._initialized = False
+        self._init_default_tiers()
         self._capture_canonical_defaults()
+
+    def _init_default_tiers(self) -> None:
+        """Initialize the 3 canonical built-in system tiers."""
+        settings = get_settings()
+        default_tier1 = getattr(settings, "adk_tier1_model", settings.adk_model_name)
+        default_tier2 = getattr(settings, "adk_tier2_model", settings.adk_model_name)
+
+        self._tiers = {
+            "tier1": ModelTier(
+                id="tier1",
+                name="Tier 1: Orchestration",
+                description="High-rigor coordination, planning, peer review, and runtime diagnosis",
+                model=default_tier1,
+                temperature=0.70,
+                top_p=0.95,
+                max_output_tokens=8192,
+                color="#3b82f6",
+                is_system=True,
+            ),
+            "tier2": ModelTier(
+                id="tier2",
+                name="Tier 2: Discovery & Synthesis",
+                description="High-throughput literature search, graph traversal, and matrix extraction",
+                model=default_tier2,
+                temperature=0.30,
+                top_p=0.90,
+                max_output_tokens=8192,
+                color="#10b981",
+                is_system=True,
+            ),
+            "tier3": ModelTier(
+                id="tier3",
+                name="Tier 3: Writing & Review",
+                description="Long-form drafting, rubric critique, and iterative refinement",
+                model=default_tier1,
+                temperature=0.50,
+                top_p=0.95,
+                max_output_tokens=8192,
+                color="#8b5cf6",
+                is_system=True,
+            ),
+        }
 
     def _get_all_agents(self) -> list[Any]:
         """Traverse the entire agent hierarchy dynamically and return unique agent instances."""
@@ -213,18 +268,13 @@ class AgentService:
         for agent in agents:
             name = getattr(agent, "name", "UnnamedAgent")
             meta = AGENT_DISPLAY_ROLES.get(name, {})
-            tier = meta.get("tier", "tier2")
-            default_model = getattr(agent, "model", default_tier1 if tier == "tier1" else default_tier2)
+            tier_id = meta.get("tier", "tier2")
             
-            # Canonical temperature based on agent role
-            if tier == "tier1":
-                default_temp = 0.70
-                default_top_p = 0.95
-                default_tokens = 8192
-            else:
-                default_temp = 0.20 if "ALRS" in name or "Search" in name else 0.40
-                default_top_p = 0.90
-                default_tokens = 8192
+            tier_obj = self._tiers.get(tier_id, self._tiers.get("tier1"))
+            default_model = tier_obj.model if tier_obj else (default_tier1 if tier_id in ("tier1", "tier3") else default_tier2)
+            default_temp = tier_obj.temperature if tier_obj else 0.70
+            default_top_p = tier_obj.top_p if tier_obj else 0.95
+            default_tokens = tier_obj.max_output_tokens if tier_obj else 8192
 
             base_instruction = getattr(agent, "instruction", "") or ""
             if callable(base_instruction):
@@ -234,6 +284,7 @@ class AgentService:
                     base_instruction = str(base_instruction)
 
             self._canonical_defaults[name] = {
+                "tier_id": tier_id,
                 "default_model": default_model,
                 "default_temperature": default_temp,
                 "default_top_p": default_top_p,
@@ -241,58 +292,403 @@ class AgentService:
                 "system_prompt": str(base_instruction),
             }
 
+        self._apply_overrides_to_live_agents()
+
+    def resolve_effective_config(self, agent_name: str) -> dict[str, Any]:
+        """Resolve active and effective runtime parameters for a given agent."""
+        canonical = self._canonical_defaults.get(agent_name, {
+            "tier_id": "tier2",
+            "default_model": self._tiers.get("tier2", self._tiers["tier1"]).model,
+            "default_temperature": 0.30,
+            "default_top_p": 0.90,
+            "default_max_output_tokens": 8192,
+            "system_prompt": "",
+        })
+        override = self._active_overrides.get(agent_name, {})
+
+        assigned_tier_id = (
+            override.get("assigned_tier_id")
+            or override.get("tier_id")
+            or canonical.get("tier_id", "tier1")
+        )
+        if assigned_tier_id not in self._tiers:
+            assigned_tier_id = "tier1"
+
+        tier = self._tiers.get(assigned_tier_id, self._tiers.get("tier1"))
+
+        # Determine config mode
+        explicit_mode = override.get("config_mode")
+        if explicit_mode in ("inherit", "custom"):
+            config_mode = explicit_mode
+        else:
+            # If explicit model/temp override exists without explicit mode, treat as custom
+            has_custom_params = any(
+                k in override for k in ("model", "temperature", "top_p", "max_output_tokens")
+            )
+            config_mode = "custom" if has_custom_params else "inherit"
+
+        if config_mode == "inherit" and tier:
+            effective_model = tier.model
+            effective_temp = tier.temperature
+            effective_top_p = tier.top_p
+            effective_tokens = tier.max_output_tokens
+            active_model = tier.model
+            active_temp = tier.temperature
+            active_top_p = tier.top_p
+            active_tokens = tier.max_output_tokens
+        else:
+            # Custom override mode
+            effective_model = override.get("model") or (tier.model if tier else canonical["default_model"])
+            effective_temp = override.get("temperature", tier.temperature if tier else canonical["default_temperature"])
+            effective_top_p = override.get("top_p", tier.top_p if tier else canonical["default_top_p"])
+            effective_tokens = override.get("max_output_tokens", tier.max_output_tokens if tier else canonical["default_max_output_tokens"])
+            active_model = effective_model
+            active_temp = effective_temp
+            active_top_p = effective_top_p
+            active_tokens = effective_tokens
+
+        custom_prefix = override.get("custom_prompt_prefix", None)
+        system_prompt = canonical.get("system_prompt", "")
+
+        is_default = (
+            not override
+            or (
+                config_mode == "inherit"
+                and assigned_tier_id == canonical.get("tier_id")
+                and not custom_prefix
+                and not any(k in override for k in ("model", "temperature", "top_p", "max_output_tokens"))
+            )
+        )
+
+        return {
+            "assigned_tier_id": assigned_tier_id,
+            "config_mode": config_mode,
+            "model": active_model,
+            "default_model": canonical["default_model"],
+            "temperature": active_temp,
+            "default_temperature": canonical["default_temperature"],
+            "top_p": active_top_p,
+            "default_top_p": canonical["default_top_p"],
+            "max_output_tokens": active_tokens,
+            "default_max_output_tokens": canonical["default_max_output_tokens"],
+            "custom_prompt_prefix": custom_prefix,
+            "system_prompt": system_prompt,
+            "is_default": is_default,
+            "effective_model": effective_model,
+            "effective_temperature": effective_temp,
+            "effective_top_p": effective_top_p,
+            "effective_max_output_tokens": effective_tokens,
+        }
+
     async def initialize_from_db(self) -> None:
-        """Load persisted agent overrides from MySQL settings table if available."""
+        """Load persisted tiers and agent overrides from MySQL settings table if available."""
         if self._initialized:
             return
         if self.mysql is not None:
+            # 1. Load tiers
             try:
-                row = await asyncio.wait_for(
+                row_tiers = await asyncio.wait_for(
+                    self.mysql.fetch_one(
+                        "SELECT setting_value FROM settings WHERE setting_key = 'agent_swarm_tiers'"
+                    ),
+                    timeout=2.0,
+                )
+                if row_tiers and row_tiers.get("setting_value"):
+                    saved_tiers = json.loads(row_tiers["setting_value"])
+                    if isinstance(saved_tiers, list):
+                        for item in saved_tiers:
+                            if isinstance(item, dict) and "id" in item:
+                                self._tiers[item["id"]] = ModelTier(**item)
+                    elif isinstance(saved_tiers, dict):
+                        for k, item in saved_tiers.items():
+                            if isinstance(item, dict) and "id" in item:
+                                self._tiers[item["id"]] = ModelTier(**item)
+            except Exception as exc:
+                logger.debug("Failed to load agent tiers from MySQL: %s", exc)
+
+            # 2. Load overrides
+            try:
+                row_overrides = await asyncio.wait_for(
                     self.mysql.fetch_one(
                         "SELECT setting_value FROM settings WHERE setting_key = 'agent_swarm_overrides'"
                     ),
-                    timeout=2.0
+                    timeout=2.0,
                 )
-                if row and row.get("setting_value"):
-                    saved_overrides = json.loads(row["setting_value"])
+                if row_overrides and row_overrides.get("setting_value"):
+                    saved_overrides = json.loads(row_overrides["setting_value"])
                     if isinstance(saved_overrides, dict):
-                        self._active_overrides.update(saved_overrides)
-                        self._apply_overrides_to_live_agents()
+                        for k, v in saved_overrides.items():
+                            if isinstance(v, dict):
+                                self._active_overrides[k] = v
             except Exception as exc:
-                logger.warning("Failed to load agent overrides from MySQL: %s", exc)
+                logger.debug("Failed to load agent overrides from MySQL: %s", exc)
+
+            self._apply_overrides_to_live_agents()
+
         self._initialized = True
 
+    async def initialize_tiers_from_db(self) -> None:
+        """Alias helper for initializing tiers from MySQL."""
+        await self.initialize_from_db()
+
     def _apply_overrides_to_live_agents(self) -> None:
-        """Apply active in-memory overrides directly onto live ADK agent instances."""
+        """Apply active in-memory effective parameters directly onto live ADK agent instances."""
         agents = self._get_all_agents()
         for agent in agents:
             name = getattr(agent, "name", "")
             if not hasattr(agent, "model"):
                 continue
-            canonical = self._canonical_defaults.get(name, {})
-            override = self._active_overrides.get(name)
 
-            if override:
-                # Update model if provided
-                if override.get("model") and hasattr(agent, "model"):
-                    agent.model = override["model"]
-                elif canonical.get("default_model") and hasattr(agent, "model"):
-                    agent.model = canonical["default_model"]
+            resolved = self.resolve_effective_config(name)
+            
+            # Mutate model on live agent instance
+            agent.model = resolved["effective_model"]
 
-                # Update instruction with custom prefix if provided
-                prefix = override.get("custom_prompt_prefix")
-                base_instruction = canonical.get("system_prompt", "")
-                if hasattr(agent, "instruction"):
-                    if prefix:
-                        agent.instruction = f"{prefix.strip()}\n\n{base_instruction}"
-                    else:
-                        agent.instruction = base_instruction
-            else:
-                # Restore canonical defaults
-                if canonical.get("default_model") and hasattr(agent, "model"):
-                    agent.model = canonical["default_model"]
-                if hasattr(agent, "instruction"):
-                    agent.instruction = canonical.get("system_prompt", "")
+            # Mutate instruction with custom prompt prefix if present
+            if hasattr(agent, "instruction"):
+                prefix = resolved.get("custom_prompt_prefix")
+                system_prompt = resolved.get("system_prompt", "")
+                if prefix:
+                    agent.instruction = f"{prefix.strip()}\n\n{system_prompt}"
+                else:
+                    agent.instruction = system_prompt
+
+    async def _persist_tiers_to_db(self) -> None:
+        """Persist current tier definitions into MySQL settings table."""
+        if self.mysql is not None:
+            try:
+                tiers_payload = [t.model_dump() for t in self._tiers.values()]
+                await asyncio.wait_for(
+                    self.mysql.execute(
+                        """INSERT INTO settings (setting_key, setting_value)
+                           VALUES ('agent_swarm_tiers', %s)
+                           ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)""",
+                        (json.dumps(tiers_payload),),
+                    ),
+                    timeout=2.0,
+                )
+            except Exception as exc:
+                logger.warning("Failed to persist agent swarm tiers to MySQL: %s", exc)
+
+    async def _persist_overrides_to_db(self) -> None:
+        """Persist current agent overrides into MySQL settings table."""
+        if self.mysql is not None:
+            try:
+                await asyncio.wait_for(
+                    self.mysql.execute(
+                        """INSERT INTO settings (setting_key, setting_value)
+                           VALUES ('agent_swarm_overrides', %s)
+                           ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)""",
+                        (json.dumps(self._active_overrides),),
+                    ),
+                    timeout=2.0,
+                )
+            except Exception as exc:
+                logger.warning("Failed to persist agent swarm overrides to MySQL: %s", exc)
+
+    # =========================================================================
+    # Tier Management CRUD
+    # =========================================================================
+
+    async def get_tiers(self) -> list[ModelTier]:
+        """Return all registered system and custom model tiers."""
+        await self.initialize_from_db()
+        return list(self._tiers.values())
+
+    async def get_tier(self, tier_id: str) -> Optional[ModelTier]:
+        """Get a specific model tier by identifier."""
+        await self.initialize_from_db()
+        return self._tiers.get(tier_id)
+
+    async def create_tier(self, payload: TierCreateRequest) -> ModelTier:
+        """Create a new custom model tier in registry and persist."""
+        await self.initialize_from_db()
+
+        if payload.id:
+            tier_id = payload.id.strip().lower()
+        else:
+            clean_slug = re.sub(r"[^a-zA-Z0-9_-]+", "_", payload.name.strip().lower()).strip("_")
+            tier_id = f"tier_{clean_slug}"[:64]
+
+        if tier_id in {"tier1", "tier2", "tier3"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot create custom tier with reserved system ID '{tier_id}'.",
+            )
+
+        if tier_id in self._tiers:
+            # Ensure unique id
+            tier_id = f"{tier_id[:55]}_{uuid.uuid4().hex[:6]}"
+
+        new_tier = ModelTier(
+            id=tier_id,
+            name=payload.name,
+            description=payload.description or "",
+            model=payload.model,
+            temperature=payload.temperature,
+            top_p=payload.top_p,
+            max_output_tokens=payload.max_output_tokens,
+            color=payload.color,
+            is_system=False,
+        )
+        self._tiers[tier_id] = new_tier
+        await self._persist_tiers_to_db()
+        return new_tier
+
+    async def update_tier(self, tier_id: str, payload: TierUpdateRequest) -> ModelTier:
+        """Update tier parameters and dynamically cascade changes to all inherited member agents."""
+        await self.initialize_from_db()
+        existing = self._tiers.get(tier_id)
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tier '{tier_id}' not found.",
+            )
+
+        updated_dict = existing.model_dump()
+        for k, v in payload.model_dump(exclude_none=True).items():
+            updated_dict[k] = v
+        # Ensure system flag and ID cannot be corrupted
+        updated_dict["id"] = existing.id
+        updated_dict["is_system"] = existing.is_system
+
+        updated_tier = ModelTier(**updated_dict)
+        self._tiers[tier_id] = updated_tier
+
+        # Dynamic cascading to all agents inheriting this tier
+        self._apply_overrides_to_live_agents()
+
+        await self._persist_tiers_to_db()
+        return updated_tier
+
+    async def delete_tier(self, tier_id: str) -> TierDeleteResponse:
+        """Delete custom tier, safely reassign member agents to tier1, and cascade."""
+        await self.initialize_from_db()
+        existing = self._tiers.get(tier_id)
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Tier '{tier_id}' not found.",
+            )
+
+        if existing.is_system or tier_id in {"tier1", "tier2", "tier3"}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot delete built-in system tier '{tier_id}'.",
+            )
+
+        # Reassign member agents to tier1
+        reassigned_count = 0
+        all_agents = self._get_all_agents()
+        for agent in all_agents:
+            agent_name = getattr(agent, "name", "")
+            override = self._active_overrides.setdefault(agent_name, {})
+            current_tier = (
+                override.get("assigned_tier_id")
+                or override.get("tier_id")
+                or self._canonical_defaults.get(agent_name, {}).get("tier_id", "tier1")
+            )
+            if current_tier == tier_id:
+                override["assigned_tier_id"] = "tier1"
+                override["tier_id"] = "tier1"
+                reassigned_count += 1
+
+        del self._tiers[tier_id]
+
+        # Apply cascade to live agents
+        self._apply_overrides_to_live_agents()
+
+        await self._persist_tiers_to_db()
+        await self._persist_overrides_to_db()
+
+        return TierDeleteResponse(
+            status="deleted",
+            tier_id=tier_id,
+            reassigned_agents_count=reassigned_count,
+            reassigned_to_tier_id="tier1",
+            message=f"Tier '{tier_id}' safely deleted; {reassigned_count} agent(s) reassigned to 'tier1'.",
+        )
+
+    # =========================================================================
+    # Agent Configuration Endpoints & Inspection
+    # =========================================================================
+
+    async def get_agent_configs(self) -> list[AgentConfigItem]:
+        """Return structured configuration items for all agents in swarm."""
+        await self.initialize_from_db()
+        agents = self._get_all_agents()
+        configs: list[AgentConfigItem] = []
+
+        for agent in agents:
+            name = getattr(agent, "name", "UnnamedAgent")
+            meta = AGENT_DISPLAY_ROLES.get(name, {})
+            display_name = meta.get("display_name", name)
+            role = meta.get("role", "Specialized Agent")
+            
+            resolved = self.resolve_effective_config(name)
+            
+            configs.append(
+                AgentConfigItem(
+                    agent_id=name,
+                    name=name,
+                    display_name=display_name,
+                    role=role,
+                    tier_id=resolved["assigned_tier_id"],
+                    assigned_tier_id=resolved["assigned_tier_id"],
+                    config_mode=resolved["config_mode"],
+                    model=resolved["model"],
+                    temperature=resolved["temperature"],
+                    top_p=resolved["top_p"],
+                    max_output_tokens=resolved["max_output_tokens"],
+                    custom_prompt_prefix=resolved["custom_prompt_prefix"],
+                    system_prompt=resolved["system_prompt"],
+                    effective_model=resolved["effective_model"],
+                    effective_temperature=resolved["effective_temperature"],
+                    effective_top_p=resolved["effective_top_p"],
+                    effective_max_output_tokens=resolved["effective_max_output_tokens"],
+                    is_default=resolved["is_default"],
+                )
+            )
+
+        return configs
+
+    async def update_agent_configs(
+        self, overrides: list[AgentConfigOverrideItem]
+    ) -> AgentConfigBatchUpdateResponse:
+        """Batch update agent tier assignments, configuration modes, and parameters."""
+        await self.initialize_from_db()
+        all_agent_names = {getattr(a, "name", "") for a in self._get_all_agents()}
+        
+        updated: list[str] = []
+        for item in overrides:
+            if item.agent_id not in all_agent_names:
+                continue
+
+            current_override = self._active_overrides.get(item.agent_id, {})
+            dumped = item.model_dump(exclude_none=True)
+            dumped.pop("agent_id", None)
+            
+            if "assigned_tier_id" in dumped:
+                dumped["tier_id"] = dumped["assigned_tier_id"]
+            elif "tier_id" in dumped:
+                dumped["assigned_tier_id"] = dumped["tier_id"]
+
+            current_override.update(dumped)
+            self._active_overrides[item.agent_id] = current_override
+            updated.append(item.agent_id)
+
+        # Apply to live agent instances
+        self._apply_overrides_to_live_agents()
+        await self._persist_overrides_to_db()
+
+        updated_configs = await self.get_agent_configs()
+
+        return AgentConfigBatchUpdateResponse(
+            success=True,
+            message=f"Successfully updated configuration for {len(updated)} agent(s).",
+            updated_agents=updated,
+            agents=updated_configs,
+        )
 
     async def get_registry(self) -> AgentRegistryResponse:
         """Dynamically introspect and return metadata for all agents in the swarm."""
@@ -310,9 +706,8 @@ class AgentService:
             meta_info = AGENT_DISPLAY_ROLES.get(name, {})
             display_name = meta_info.get("display_name", name)
             role = meta_info.get("role", "Specialized Agent")
-            tier = meta_info.get("tier", "tier2")
-
-            # Discover sub-agents (unpacking intermediate wrappers like WriterAgent/LoopAgent)
+            
+            # Sub agents
             sub_agent_names: list[str] = []
             for sub in getattr(agent, "sub_agents", []) or []:
                 sub_name = getattr(sub, "name", None)
@@ -333,47 +728,31 @@ class AgentService:
                 elif sub_name:
                     sub_agent_names.append(sub_name)
 
-            # Discover tools and schemas
+            # Tools
             tool_definitions: list[AgentToolDefinition] = []
             for tool in getattr(agent, "tools", []) or []:
                 tool_definitions.append(extract_tool_schema(tool))
 
-            canonical = self._canonical_defaults.get(name, {
-                "default_model": default_tier1 if tier == "tier1" else default_tier2,
-                "default_temperature": 0.7 if tier == "tier1" else 0.3,
-                "default_top_p": 0.95,
-                "default_max_output_tokens": 8192,
-                "system_prompt": getattr(agent, "instruction", "") or "",
-            })
-
-            override = self._active_overrides.get(name, {})
-            
-            active_model = override.get("model") or getattr(agent, "model", canonical["default_model"])
-            active_temp = override.get("temperature", canonical["default_temperature"])
-            active_top_p = override.get("top_p", canonical["default_top_p"])
-            active_tokens = override.get("max_output_tokens", canonical["default_max_output_tokens"])
-            custom_prefix = override.get("custom_prompt_prefix", None)
-
-            is_default = (
-                active_model == canonical["default_model"]
-                and abs(active_temp - canonical["default_temperature"]) < 1e-4
-                and abs(active_top_p - canonical["default_top_p"]) < 1e-4
-                and active_tokens == canonical["default_max_output_tokens"]
-                and not custom_prefix
-            )
+            resolved = self.resolve_effective_config(name)
 
             config = AgentConfig(
-                model=active_model,
-                default_model=canonical["default_model"],
-                temperature=active_temp,
-                default_temperature=canonical["default_temperature"],
-                top_p=active_top_p,
-                default_top_p=canonical["default_top_p"],
-                max_output_tokens=active_tokens,
-                default_max_output_tokens=canonical["default_max_output_tokens"],
-                custom_prompt_prefix=custom_prefix,
-                system_prompt=canonical["system_prompt"],
-                is_default=is_default,
+                config_mode=resolved["config_mode"],
+                assigned_tier_id=resolved["assigned_tier_id"],
+                model=resolved["model"],
+                default_model=resolved["default_model"],
+                temperature=resolved["temperature"],
+                default_temperature=resolved["default_temperature"],
+                top_p=resolved["top_p"],
+                default_top_p=resolved["default_top_p"],
+                max_output_tokens=resolved["max_output_tokens"],
+                default_max_output_tokens=resolved["default_max_output_tokens"],
+                custom_prompt_prefix=resolved["custom_prompt_prefix"],
+                system_prompt=resolved["system_prompt"],
+                is_default=resolved["is_default"],
+                effective_model=resolved["effective_model"],
+                effective_temperature=resolved["effective_temperature"],
+                effective_top_p=resolved["effective_top_p"],
+                effective_max_output_tokens=resolved["effective_max_output_tokens"],
             )
 
             agent_metas.append(
@@ -382,7 +761,9 @@ class AgentService:
                     display_name=display_name,
                     description=description,
                     role=role,
-                    tier=tier,
+                    tier=resolved["assigned_tier_id"],
+                    assigned_tier_id=resolved["assigned_tier_id"],
+                    config_mode=resolved["config_mode"],
                     sub_agents=sub_agent_names,
                     tools=tool_definitions,
                     config=config,
@@ -392,6 +773,7 @@ class AgentService:
         return AgentRegistryResponse(
             agents=agent_metas,
             total=len(agent_metas),
+            tiers=list(self._tiers.values()),
             system_default_tier1_model=default_tier1,
             system_default_tier2_model=default_tier2,
         )
@@ -408,27 +790,18 @@ class AgentService:
 
             current_override = self._active_overrides.get(agent_name, {})
             dumped = update.model_dump(exclude_none=True)
+            if "assigned_tier_id" in dumped:
+                dumped["tier_id"] = dumped["assigned_tier_id"]
+            elif "tier_id" in dumped:
+                dumped["assigned_tier_id"] = dumped["tier_id"]
+
             current_override.update(dumped)
             self._active_overrides[agent_name] = current_override
             updated.append(agent_name)
 
         # Apply immediately to live agent instances
         self._apply_overrides_to_live_agents()
-
-        # Persist to database if available
-        if self.mysql is not None:
-            try:
-                await asyncio.wait_for(
-                    self.mysql.execute(
-                        """INSERT INTO settings (setting_key, setting_value)
-                           VALUES ('agent_swarm_overrides', %s)
-                           ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)""",
-                        (json.dumps(self._active_overrides),)
-                    ),
-                    timeout=2.0
-                )
-            except Exception as exc:
-                logger.warning("Failed to persist agent swarm overrides to MySQL: %s", exc)
+        await self._persist_overrides_to_db()
 
         return AgentSettingsUpdateResponse(
             success=True,
@@ -448,25 +821,13 @@ class AgentService:
             reset_agents.append(agent_name)
         else:
             self._active_overrides.clear()
+            self._init_default_tiers()
             reset_agents.extend(all_agent_names)
 
         # Apply reset to live instances
         self._apply_overrides_to_live_agents()
-
-        # Persist reset to database
-        if self.mysql is not None:
-            try:
-                await asyncio.wait_for(
-                    self.mysql.execute(
-                        """INSERT INTO settings (setting_key, setting_value)
-                           VALUES ('agent_swarm_overrides', %s)
-                           ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)""",
-                        (json.dumps(self._active_overrides),)
-                    ),
-                    timeout=2.0
-                )
-            except Exception as exc:
-                logger.warning("Failed to persist reset settings to MySQL: %s", exc)
+        await self._persist_tiers_to_db()
+        await self._persist_overrides_to_db()
 
         return AgentResetResponse(
             success=True,

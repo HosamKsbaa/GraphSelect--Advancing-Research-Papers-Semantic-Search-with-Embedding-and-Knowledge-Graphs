@@ -2,17 +2,20 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { of } from 'rxjs';
+import { vi } from 'vitest';
 import { AgentsPage } from './agents.page';
 import { AgentRegistryResponse, AgentService } from '../../core/agent.service';
 import { ApiService, AvailableModelsResponse } from '../../core/api.service';
 import { ToastService } from '../../core/toast.service';
+import { TierManagementService, FALLBACK_SYSTEM_TIERS } from '../../core/tier-management.service';
 
 describe('AgentsPage', () => {
   let component: AgentsPage;
   let fixture: ComponentFixture<AgentsPage>;
-  let agentServiceSpy: jasmine.SpyObj<AgentService>;
-  let apiServiceSpy: jasmine.SpyObj<ApiService>;
-  let toastSpy: jasmine.SpyObj<ToastService>;
+  let agentServiceMock: any;
+  let apiServiceMock: any;
+  let toastMock: any;
+  let tierServiceMock: any;
 
   const mockRegistry: AgentRegistryResponse = {
     agents: [
@@ -22,6 +25,8 @@ describe('AgentsPage', () => {
         description: 'Root orchestrator',
         role: 'Orchestration',
         tier: 'tier1',
+        assigned_tier_id: 'tier1',
+        config_mode: 'inherit',
         sub_agents: ['ResearchAgent'],
         tools: [],
         config: {
@@ -44,6 +49,8 @@ describe('AgentsPage', () => {
         description: 'Discovery node',
         role: 'Search & Discovery',
         tier: 'tier2',
+        assigned_tier_id: 'tier2',
+        config_mode: 'inherit',
         sub_agents: [],
         tools: [],
         config: {
@@ -74,26 +81,42 @@ describe('AgentsPage', () => {
   };
 
   beforeEach(async () => {
-    agentServiceSpy = jasmine.createSpyObj('AgentService', [
-      'getRegistry',
-      'updateSettings',
-      'resetSettings',
-      'getTraces',
-      'testAgentConnection',
-    ]);
-    apiServiceSpy = jasmine.createSpyObj('ApiService', ['getAvailableModels']);
-    toastSpy = jasmine.createSpyObj('ToastService', ['success', 'error', 'info', 'warning']);
+    agentServiceMock = {
+      getRegistry: vi.fn().mockReturnValue(of(mockRegistry)),
+      updateSettings: vi.fn(),
+      resetSettings: vi.fn(),
+      getTraces: vi.fn().mockReturnValue(of({ traces: [], total: 0 })),
+      testAgentConnection: vi.fn(),
+    };
 
-    agentServiceSpy.getRegistry.and.returnValue(of(mockRegistry));
-    agentServiceSpy.getTraces.and.returnValue(of({ traces: [], total: 0 }));
-    apiServiceSpy.getAvailableModels.and.returnValue(of(mockModels));
+    apiServiceMock = {
+      getAvailableModels: vi.fn().mockReturnValue(of(mockModels)),
+    };
+
+    toastMock = {
+      success: vi.fn(),
+      error: vi.fn(),
+      info: vi.fn(),
+      warning: vi.fn(),
+    };
+
+    tierServiceMock = {
+      tiers: vi.fn().mockReturnValue(FALLBACK_SYSTEM_TIERS),
+      editingTier: vi.fn().mockReturnValue(null),
+      isEditorOpen: vi.fn().mockReturnValue(false),
+      loadTiers: vi.fn().mockReturnValue(of({ tiers: FALLBACK_SYSTEM_TIERS, total: 3 })),
+      openEditor: vi.fn(),
+      closeEditor: vi.fn(),
+      getTierById: vi.fn((id: string) => FALLBACK_SYSTEM_TIERS.find((t) => t.id === id) || FALLBACK_SYSTEM_TIERS[0]),
+    };
 
     await TestBed.configureTestingModule({
       imports: [AgentsPage],
       providers: [
-        { provide: AgentService, useValue: agentServiceSpy },
-        { provide: ApiService, useValue: apiServiceSpy },
-        { provide: ToastService, useValue: toastSpy },
+        { provide: AgentService, useValue: agentServiceMock },
+        { provide: ApiService, useValue: apiServiceMock },
+        { provide: ToastService, useValue: toastMock },
+        { provide: TierManagementService, useValue: tierServiceMock },
         provideHttpClient(),
         provideHttpClientTesting(),
       ],
@@ -142,5 +165,26 @@ describe('AgentsPage', () => {
     expect(component.activeTab()).toBe('swarm');
     component.activeTab.set('traces');
     expect(component.activeTab()).toBe('traces');
+  });
+
+  it('should switch view mode between grid and hierarchy', () => {
+    expect(component.viewMode()).toBe('grid');
+    component.viewMode.set('hierarchy');
+    expect(component.viewMode()).toBe('hierarchy');
+  });
+
+  it('should open and close agent drawer', () => {
+    expect(component.isDrawerOpen()).toBe(false);
+    component.openAgentDrawer(mockRegistry.agents[0]);
+    expect(component.isDrawerOpen()).toBe(true);
+    expect(component.selectedDrawerAgent()?.name).toBe('ProjectAgent');
+
+    component.closeAgentDrawer();
+    expect(component.isDrawerOpen()).toBe(false);
+  });
+
+  it('should open tier editor modal', () => {
+    component.openTierEditor();
+    expect(tierServiceMock.openEditor).toHaveBeenCalled();
   });
 });

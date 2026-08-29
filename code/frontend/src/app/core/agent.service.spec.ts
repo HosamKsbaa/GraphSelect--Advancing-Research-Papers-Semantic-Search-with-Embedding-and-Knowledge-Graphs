@@ -146,7 +146,7 @@ describe('AgentService', () => {
     });
 
     const req = httpMock.expectOne(
-      (r) => r.url === `${apiService.baseUrl}/agents/traces` && r.params.get('agent_name') === 'ALRSAgent'
+      (r) => r.url.includes(`${apiService.baseUrl}/agents/traces`) && r.url.includes('agent_name=ALRSAgent')
     );
     expect(req.request.method).toBe('GET');
     req.flush(mockTracesResponse);

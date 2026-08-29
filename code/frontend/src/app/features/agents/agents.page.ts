@@ -10,7 +10,14 @@ import {
 } from '../../core/agent.service';
 import { ApiService, AvailableModelsResponse } from '../../core/api.service';
 import { ToastService } from '../../core/toast.service';
+import {
+  ModelTier,
+  TierManagementService,
+} from '../../core/tier-management.service';
 import { AgentCardComponent } from './components/agent-card/agent-card.component';
+import { HierarchyTreeComponent } from './components/hierarchy-tree/hierarchy-tree.component';
+import { TierEditorModalComponent } from './components/tier-editor-modal/tier-editor-modal.component';
+import { AgentDrawerComponent } from './components/agent-drawer/agent-drawer.component';
 import { TraceViewerComponent } from './components/trace-viewer/trace-viewer.component';
 
 @Component({
@@ -20,17 +27,21 @@ import { TraceViewerComponent } from './components/trace-viewer/trace-viewer.com
     CommonModule,
     FormsModule,
     AgentCardComponent,
+    HierarchyTreeComponent,
+    TierEditorModalComponent,
+    AgentDrawerComponent,
     TraceViewerComponent,
   ],
   templateUrl: './agents.page.html',
   styleUrl: './agents.page.scss',
 })
 export class AgentsPage implements OnInit {
-  private agentService = inject(AgentService);
-  private apiService = inject(ApiService);
-  private toast = inject(ToastService);
+  agentService = inject(AgentService);
+  tierService = inject(TierManagementService);
+  apiService = inject(ApiService);
+  toast = inject(ToastService);
 
-  // Active Tab
+  // Active Tab & View Mode
   activeTab = signal<'swarm' | 'traces'>('swarm');
   viewMode = signal<'grid' | 'hierarchy'>('grid');
 
@@ -57,11 +68,15 @@ export class AgentsPage implements OnInit {
 
   // Search & Filter
   searchQuery = signal<string>('');
-  tierFilter = signal<'all' | 'tier1' | 'tier2'>('all');
+  tierFilter = signal<string>('all');
   statusFilter = signal<'all' | 'modified' | 'default'>('all');
 
-  // Trace viewer pre-filter (if switched from agent card)
+  // Trace viewer pre-filter
   selectedTraceAgent = signal<string | undefined>(undefined);
+
+  // Agent Drawer State
+  selectedDrawerAgent = signal<AgentMetadata | null>(null);
+  isDrawerOpen = signal<boolean>(false);
 
   // Computed Metrics & Lists
   totalAgents = computed(() => this.agents().length);
@@ -94,7 +109,13 @@ export class AgentsPage implements OnInit {
 
     return this.agents().filter(agent => {
       // Tier filter
-      if (tier !== 'all' && agent.tier !== tier) return false;
+      if (tier !== 'all') {
+        const agentTierId =
+          agent.assigned_tier_id ||
+          agent.config?.assigned_tier_id ||
+          agent.tier;
+        if (agentTierId !== tier && agent.tier !== tier) return false;
+      }
 
       // Status filter
       const isDrafted = drafts.has(agent.name);
@@ -119,11 +140,11 @@ export class AgentsPage implements OnInit {
   });
 
   tier1Agents = computed(() =>
-    this.filteredAgents().filter(a => a.tier === 'tier1')
+    this.filteredAgents().filter(a => (a.assigned_tier_id || a.tier) === 'tier1')
   );
 
   tier2Agents = computed(() =>
-    this.filteredAgents().filter(a => a.tier === 'tier2')
+    this.filteredAgents().filter(a => (a.assigned_tier_id || a.tier) === 'tier2')
   );
 
   allAgentNames = computed(() => this.agents().map(a => a.name));
@@ -131,6 +152,7 @@ export class AgentsPage implements OnInit {
   ngOnInit(): void {
     this.loadRegistry();
     this.loadModels();
+    this.loadTiers();
   }
 
   loadRegistry(): void {
@@ -139,8 +161,14 @@ export class AgentsPage implements OnInit {
       next: (res) => {
         this.registry.set(res);
         this.agents.set(res.agents);
-        this.draftUpdates.set(new Map());
         this.loading.set(false);
+        // If drawer is open, keep selected drawer agent synced
+        if (this.selectedDrawerAgent()) {
+          const updated = res.agents.find(a => a.name === this.selectedDrawerAgent()!.name);
+          if (updated) {
+            this.selectedDrawerAgent.set(updated);
+          }
+        }
       },
       error: (err) => {
         this.loading.set(false);
@@ -166,12 +194,86 @@ export class AgentsPage implements OnInit {
     });
   }
 
+  loadTiers(): void {
+    this.tierService.loadTiers().subscribe({
+      next: () => {
+        // Tiers loaded into signal
+      },
+      error: () => {
+        // Fallback default tiers already active
+      },
+    });
+  }
+
+  openTierEditor(tier?: ModelTier): void {
+    this.tierService.openEditor(tier);
+  }
+
+  closeTierEditor(): void {
+    this.tierService.closeEditor();
+  }
+
+  onTierUpdated(tier: ModelTier): void {
+    this.loadRegistry();
+  }
+
+  onTierCreated(tier: ModelTier): void {
+    this.loadRegistry();
+  }
+
+  onTierDeleted(tierId: string): void {
+    this.loadRegistry();
+  }
+
+  openAgentDrawer(agent: AgentMetadata): void {
+    this.selectedDrawerAgent.set(agent);
+    this.isDrawerOpen.set(true);
+  }
+
+  closeAgentDrawer(): void {
+    this.isDrawerOpen.set(false);
+  }
+
   onAgentConfigChange(event: { agentName: string; config?: AgentConfigUpdate; update?: AgentConfigUpdate }): void {
     const updatePayload = event.config || event.update;
     if (!updatePayload) return;
     const map = new Map(this.draftUpdates());
     map.set(event.agentName, updatePayload);
     this.draftUpdates.set(map);
+  }
+
+  saveSingleAgent(agentName: string): void {
+    const draft = this.draftUpdates().get(agentName);
+    if (!draft) {
+      this.toast.info('No Changes', `No unsaved changes for ${agentName}.`);
+      return;
+    }
+
+    this.saving.set(true);
+    const request: AgentSettingsUpdateRequest = {
+      settings: { [agentName]: draft },
+    };
+
+    this.agentService.updateSettings(request).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.toast.success(
+          'Agent Settings Saved',
+          `Successfully saved and hot-reloaded configuration for ${agentName}.`
+        );
+        const map = new Map(this.draftUpdates());
+        map.delete(agentName);
+        this.draftUpdates.set(map);
+        this.loadRegistry();
+      },
+      error: (err) => {
+        this.saving.set(false);
+        this.toast.error(
+          'Save Failed',
+          err.error?.detail || `Could not save configuration for ${agentName}.`
+        );
+      },
+    });
   }
 
   saveAllSettings(): void {
@@ -196,6 +298,7 @@ export class AgentsPage implements OnInit {
           'Swarm Settings Saved & Hot-Reloaded',
           `Successfully updated ${res.updated_agents.length} agent(s). Changes applied instantly to runtime instances.`
         );
+        this.draftUpdates.set(new Map());
         this.loadRegistry();
       },
       error: (err) => {
@@ -210,12 +313,11 @@ export class AgentsPage implements OnInit {
 
   resetAgent(agentName: string): void {
     this.agentService.resetSettings(agentName).subscribe({
-      next: (res) => {
+      next: () => {
         this.toast.success(
           'Agent Reset to Default',
           `Restored factory defaults for ${agentName}.`
         );
-        // Clear local draft for this agent
         const map = new Map(this.draftUpdates());
         map.delete(agentName);
         this.draftUpdates.set(map);

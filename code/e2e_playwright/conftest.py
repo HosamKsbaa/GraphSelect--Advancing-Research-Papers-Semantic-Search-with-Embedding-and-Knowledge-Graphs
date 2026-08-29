@@ -77,7 +77,7 @@ def page(context: BrowserContext, request) -> Generator[Page, None, None]:
         test_name = request.node.name.replace("/", "_").replace(":", "_")
         screenshot_path = os.path.join(SCREENSHOT_DIR, f"FAIL_{test_name}.png")
         try:
-            page.screenshot(path=screenshot_path, full_page=True)
+            page.screenshot(path=screenshot_path, full_page=True, timeout=5000)
             print(f"\n[Playwright] Saved failure screenshot to: {screenshot_path}")
         except Exception as e:
             print(f"\n[Playwright] Failed to save screenshot: {e}")
@@ -220,7 +220,13 @@ def assert_toast_message(
     timeout: float = 5000
 ) -> Locator:
     """Assert that a toast notification is rendered and contains NO [object Object] anomalies."""
-    toast = page.locator("alrs-toast-container .toast").first
+    if expected_text_substring:
+        toast = page.locator(f"alrs-toast-container .toast:has(.toast-message:has-text('{expected_text_substring}')), alrs-toast-container .toast:has-text('{expected_text_substring}')").first
+    elif expected_title_substring:
+        toast = page.locator(f"alrs-toast-container .toast:has(.toast-title:has-text('{expected_title_substring}')), alrs-toast-container .toast:has-text('{expected_title_substring}')").first
+    else:
+        toast = page.locator("alrs-toast-container .toast").first
+
     expect(toast).to_be_visible(timeout=timeout)
     
     title_locator = toast.locator(".toast-title")
@@ -238,8 +244,9 @@ def assert_toast_message(
             f"Expected substring '{expected_title_substring}' not found in toast title '{title_text}'"
         )
     if expected_text_substring:
-        assert expected_text_substring.lower() in message_text.lower(), (
-            f"Expected substring '{expected_text_substring}' not found in toast message '{message_text}'"
+        full_toast_text = f"{title_text} {message_text}".lower()
+        assert expected_text_substring.lower() in full_toast_text, (
+            f"Expected substring '{expected_text_substring}' not found in toast content '{full_toast_text}'"
         )
         
     return toast

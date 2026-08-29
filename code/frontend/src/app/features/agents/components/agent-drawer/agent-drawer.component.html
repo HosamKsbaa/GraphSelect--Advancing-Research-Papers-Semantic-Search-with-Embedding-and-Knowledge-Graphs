@@ -1,0 +1,65 @@
+@if (isOpen && agent) {
+  <div class="drawer-overlay" (click)="onClose()">
+    <div class="drawer-panel glass animate-slide-in-right" (click)="$event.stopPropagation()">
+      <!-- Drawer Header -->
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <div class="drawer-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+              <rect x="9" y="9" width="6" height="6"></rect>
+              <line x1="9" y1="1" x2="9" y2="4"></line>
+              <line x1="15" y1="1" x2="15" y2="4"></line>
+              <line x1="9" y1="20" x2="9" y2="23"></line>
+              <line x1="15" y1="20" x2="15" y2="23"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="drawer-title">{{ agent.display_name }}</h3>
+            <span class="drawer-subtitle">{{ agent.role }} • {{ agent.name }}</span>
+          </div>
+        </div>
+
+        <button type="button" class="btn-close" (click)="onClose()" title="Close drawer">×</button>
+      </div>
+
+      <!-- Drawer Content -->
+      <div class="drawer-body">
+        <app-agent-card
+          [agent]="agent"
+          [availableModels]="availableModels"
+          [draftConfig]="draftConfig"
+          [isSaving]="isSaving"
+          (configChange)="onConfigChange($event)"
+          (resetAgent)="onResetAgent($event)"
+          (viewTraces)="onViewTraces($event)"
+        />
+      </div>
+
+      <!-- Drawer Footer -->
+      <div class="drawer-footer">
+        <button type="button" class="btn btn-secondary btn-sm" (click)="onClose()">
+          Close
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm btn-save-drawer"
+          [disabled]="isSaving || !draftConfig"
+          (click)="onSaveClick()"
+        >
+          @if (isSaving) {
+            <span class="spinner-sm"></span>
+            <span>Saving...</span>
+          } @else {
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            <span>Save Agent Config</span>
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}

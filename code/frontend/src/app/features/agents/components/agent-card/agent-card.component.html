@@ -1,4 +1,4 @@
-<div class="agent-card glass" [class.modified]="hasUnsavedChanges()">
+<div class="agent-card glass" [class.modified]="hasUnsavedChanges()" [style.border-top-color]="getEffectiveTierColor()">
   <!-- Card Header -->
   <div class="card-header">
     <div class="header-main">
@@ -7,8 +7,9 @@
         <code class="agent-name-tag">{{ agent.name }}</code>
       </div>
       <div class="agent-badges-row">
-        <span class="badge" [ngClass]="getTierBadgeClass(agent.tier)">
-          {{ getTierLabel(agent.tier) }}
+        <span class="badge badge-dynamic-tier" [style.background-color]="getEffectiveTierColor() + '25'" [style.color]="getEffectiveTierColor()" [style.border-color]="getEffectiveTierColor() + '60'">
+          <span class="dot" [style.background-color]="getEffectiveTierColor()"></span>
+          {{ currentTier()?.name || agent.tier }}
         </span>
         <span class="badge badge-role">{{ agent.role }}</span>
         @if (hasUnsavedChanges() || !agent.config.is_default) {
@@ -35,6 +36,70 @@
 
   <!-- Card Body / Configuration Form -->
   <div class="card-body">
+    <!-- MODE TOGGLE SWITCH (Inherit Tier Defaults vs Custom Override) -->
+    <div class="mode-toggle-card glass">
+      <div class="mode-toggle-label">Configuration Mode:</div>
+      <div class="mode-toggle-pills">
+        <button
+          type="button"
+          class="mode-pill-btn"
+          [class.active]="configMode() === 'inherit'"
+          (click)="setMode('inherit')"
+          title="Cascade sampling parameters and model automatically from assigned tier"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+          </svg>
+          <span>Inherit Tier Defaults</span>
+        </button>
+        <button
+          type="button"
+          class="mode-pill-btn"
+          [class.active]="configMode() === 'custom'"
+          (click)="setMode('custom')"
+          title="Unlock individual model and sampling parameter overrides for this agent"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Custom Override</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ASSIGNED TIER SELECTOR (Always accessible or prominent in Inherit mode) -->
+    <div class="form-group tier-assignment-group">
+      <div class="form-label-row">
+        <label [for]="'tier-select-' + agent.name" class="control-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+          </svg>
+          Assigned Tier
+        </label>
+        @if (configMode() === 'inherit') {
+          <span class="inherited-badge-hint" [style.color]="getEffectiveTierColor()">
+            Inheriting from {{ currentTier()?.name }}
+          </span>
+        }
+      </div>
+      <div class="select-wrapper">
+        <select
+          [id]="'tier-select-' + agent.name"
+          class="form-select tier-select"
+          [ngModel]="assignedTierId()"
+          (ngModelChange)="onAssignedTierChange($event)"
+        >
+          @for (tier of allTiers(); track tier.id) {
+            <option [value]="tier.id">
+              {{ tier.name }} ({{ tier.model }})
+            </option>
+          }
+        </select>
+      </div>
+    </div>
+
     <!-- Model Selector -->
     <div class="form-group model-group">
       <div class="form-label-row">
@@ -46,28 +111,51 @@
           </svg>
           Gemini Model
         </label>
-        <span class="default-hint" [title]="'Canonical default: ' + agent.config.default_model">
-          def: {{ agent.config.default_model }}
-        </span>
+        @if (configMode() === 'inherit') {
+          <span class="badge badge-locked-hint">🔒 Inherited</span>
+        } @else {
+          <span class="default-hint" [title]="'Tier default: ' + (currentTier()?.model || agent.config.default_model)">
+            def: {{ currentTier()?.model || agent.config.default_model }}
+          </span>
+        }
       </div>
-      <div class="select-wrapper">
-        <select 
-          [id]="'model-' + agent.name" 
-          class="form-select" 
-          [(ngModel)]="currentModel" 
-          (ngModelChange)="onModelChange($event)"
-        >
-          @for (model of getAllModels(); track model) {
-            <option [value]="model">
-              {{ model === 'inherit' ? 'inherit (System / Tier Default)' : model }}
-            </option>
-          }
-        </select>
+      <div class="select-wrapper" [class.locked-wrapper]="configMode() === 'inherit'">
+        @if (configMode() === 'inherit') {
+          <input
+            type="text"
+            class="form-input locked-input"
+            readonly
+            [value]="currentModel + ' (Inherited from ' + (currentTier()?.name || 'Tier') + ')'"
+          />
+        } @else {
+          <select 
+            [id]="'model-' + agent.name" 
+            class="form-select" 
+            [(ngModel)]="currentModel" 
+            (ngModelChange)="onModelChange($event)"
+          >
+            @for (model of getAllModels(); track model) {
+              <option [value]="model">
+                {{ model }}
+              </option>
+            }
+          </select>
+        }
       </div>
     </div>
 
     <!-- Sliders Grid -->
-    <div class="sliders-grid">
+    <div class="sliders-grid" [class.sliders-locked]="configMode() === 'inherit'">
+      @if (configMode() === 'inherit') {
+        <div class="sliders-locked-banner">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <span>Parameters locked to Tier Defaults (Switch to <strong>Custom Override</strong> to edit)</span>
+        </div>
+      }
+
       <!-- Temperature Slider -->
       <div class="slider-control">
         <div class="slider-header">
@@ -86,6 +174,7 @@
           min="0.00" 
           max="2.00" 
           step="0.05" 
+          [disabled]="configMode() === 'inherit'"
           [(ngModel)]="currentTemperature" 
           (ngModelChange)="onTemperatureChange($event)"
         />
@@ -113,6 +202,7 @@
           min="0.00" 
           max="1.00" 
           step="0.01" 
+          [disabled]="configMode() === 'inherit'"
           [(ngModel)]="currentTopP" 
           (ngModelChange)="onTopPChange($event)"
         />
@@ -140,6 +230,7 @@
           min="512" 
           max="65536" 
           step="512" 
+          [disabled]="configMode() === 'inherit'"
           [(ngModel)]="currentMaxTokens" 
           (ngModelChange)="onMaxTokensChange($event)"
         />

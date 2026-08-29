@@ -3,6 +3,8 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { ApiService, TestConnectionResponse } from './api.service';
 
+import { ModelTier } from './tier-management.service';
+
 export interface ToolParameterProperty {
   type: string;
   description?: string;
@@ -24,6 +26,8 @@ export interface AgentToolDefinition {
 }
 
 export interface AgentConfig {
+  config_mode?: 'inherit' | 'custom' | string;
+  assigned_tier_id?: string;
   model: string;
   default_model: string;
   temperature: number;
@@ -35,6 +39,10 @@ export interface AgentConfig {
   custom_prompt_prefix: string | null;
   system_prompt: string;
   is_default: boolean;
+  effective_model?: string;
+  effective_temperature?: number;
+  effective_top_p?: number;
+  effective_max_output_tokens?: number;
 }
 
 export interface AgentMetadata {
@@ -43,6 +51,8 @@ export interface AgentMetadata {
   description: string;
   role: string;
   tier: 'tier1' | 'tier2' | string;
+  assigned_tier_id?: string;
+  config_mode?: 'inherit' | 'custom' | string;
   sub_agents: string[];
   tools: AgentToolDefinition[];
   config: AgentConfig;
@@ -51,11 +61,15 @@ export interface AgentMetadata {
 export interface AgentRegistryResponse {
   agents: AgentMetadata[];
   total: number;
+  tiers?: ModelTier[];
   system_default_tier1_model: string;
   system_default_tier2_model: string;
 }
 
 export interface AgentConfigUpdate {
+  config_mode?: 'inherit' | 'custom' | string;
+  assigned_tier_id?: string;
+  tier_id?: string;
   model?: string;
   temperature?: number;
   top_p?: number;

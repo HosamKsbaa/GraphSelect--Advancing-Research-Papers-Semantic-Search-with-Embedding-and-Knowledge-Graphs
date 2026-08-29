@@ -93,7 +93,7 @@
           class="view-toggle-btn"
           [class.active]="viewMode() === 'hierarchy'"
           (click)="viewMode.set('hierarchy')"
-          title="Hierarchy View"
+          title="Hierarchy Tree View"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="6" y1="3" x2="6" y2="15"/>
@@ -101,7 +101,7 @@
             <circle cx="6" cy="18" r="3"/>
             <path d="M18 9a9 9 0 0 1-9 9"/>
           </svg>
-          <span>Hierarchy</span>
+          <span>Hierarchy Tree</span>
         </button>
       </div>
     }
@@ -113,7 +113,7 @@
     <div class="action-bar-card glass">
       <!-- Search & Filter Controls -->
       <div class="filter-controls">
-        <div class="search-input-wrapper">
+        <div class="search-input-wrapper search-box">
           <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -123,25 +123,26 @@
             placeholder="Search agents by name, role, tool..."
             [ngModel]="searchQuery()"
             (ngModelChange)="searchQuery.set($event)"
-            class="search-input"
+            class="search-input form-input"
           />
           @if (searchQuery()) {
-            <button class="clear-search-btn" (click)="searchQuery.set('')">×</button>
+            <button class="clear-search-btn btn-clear" (click)="searchQuery.set('')">×</button>
           }
         </div>
 
-        <div class="filter-group">
+        <div class="filter-group filter-select-group">
           <label class="filter-label">Tier:</label>
-          <select [ngModel]="tierFilter()" (ngModelChange)="tierFilter.set($event)" class="filter-select">
-            <option value="all">All Tiers (9)</option>
-            <option value="tier1">Tier 1: Orchestration & Synthesis</option>
-            <option value="tier2">Tier 2: Workers & Retrieval</option>
+          <select [ngModel]="tierFilter()" (ngModelChange)="tierFilter.set($event)" class="filter-select form-select">
+            <option value="all">All Tiers ({{ tierService.tiers().length }})</option>
+            @for (tier of tierService.tiers(); track tier.id) {
+              <option [value]="tier.id">{{ tier.name }}</option>
+            }
           </select>
         </div>
 
-        <div class="filter-group">
+        <div class="filter-group filter-select-group">
           <label class="filter-label">Status:</label>
-          <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)" class="filter-select">
+          <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)" class="filter-select form-select">
             <option value="all">All Configurations</option>
             <option value="modified">Modified Only</option>
             <option value="default">Default Only</option>
@@ -151,6 +152,20 @@
 
       <!-- Action Buttons -->
       <div class="action-buttons">
+        <!-- Manage Tiers Button -->
+        <button
+          type="button"
+          class="btn btn-secondary btn-manage-tiers"
+          (click)="openTierEditor()"
+          title="Open Model Tier Editor"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+          </svg>
+          <span>🏷️ Manage Tiers</span>
+        </button>
+
         <button
           class="btn btn-secondary"
           [disabled]="testingConnection()"
@@ -247,57 +262,30 @@
               [agent]="agent"
               [availableModels]="availableModels()"
               [draftConfig]="getDraftForAgent(agent.name)"
+              [isSaving]="saving()"
               (configChange)="onAgentConfigChange($event)"
               (resetAgent)="resetAgent($event)"
               (viewTraces)="navigateToTraces($event)"
+              (selectAgent)="openAgentDrawer($event)"
             />
           }
         </div>
       }
 
-      <!-- VIEW MODE: HIERARCHY TREE -->
+      <!-- VIEW MODE: HIERARCHY TREE (True Visual Tree with SVG Connectors) -->
       @if (viewMode() === 'hierarchy' && filteredAgents().length > 0) {
-        <div class="hierarchy-tree-view">
-          <!-- TIER 1 SECTION -->
-          <div class="tier-section">
-            <div class="tier-header">
-              <div class="tier-badge-pill tier1-pill">Tier 1: Orchestration, Planning & Review</div>
-              <span class="tier-desc text-secondary">High-reasoning orchestrators, section planners, critique rubrics, and diagnostic repair</span>
-            </div>
-            <div class="agents-grid">
-              @for (agent of tier1Agents(); track agent.name) {
-                <app-agent-card
-                  [agent]="agent"
-                  [availableModels]="availableModels()"
-                  [draftConfig]="getDraftForAgent(agent.name)"
-                  (configChange)="onAgentConfigChange($event)"
-                  (resetAgent)="resetAgent($event)"
-                  (viewTraces)="navigateToTraces($event)"
-                />
-              }
-            </div>
-          </div>
-
-          <!-- TIER 2 SECTION -->
-          <div class="tier-section">
-            <div class="tier-header">
-              <div class="tier-badge-pill tier2-pill">Tier 2: Retrieval, Literature Crawlers & Draft Generation</div>
-              <span class="tier-desc text-secondary">High-throughput specialized workers for 1-hop GraphSelect BFS citation exploration, PageRank analysis, and drafting</span>
-            </div>
-            <div class="agents-grid">
-              @for (agent of tier2Agents(); track agent.name) {
-                <app-agent-card
-                  [agent]="agent"
-                  [availableModels]="availableModels()"
-                  [draftConfig]="getDraftForAgent(agent.name)"
-                  (configChange)="onAgentConfigChange($event)"
-                  (resetAgent)="resetAgent($event)"
-                  (viewTraces)="navigateToTraces($event)"
-                />
-              }
-            </div>
-          </div>
-        </div>
+        <app-hierarchy-tree
+          [agents]="agents()"
+          [availableModels]="availableModels()"
+          [draftUpdates]="draftUpdates()"
+          [selectedAgentName]="selectedDrawerAgent()?.name"
+          [tiers]="tierService.tiers()"
+          (agentSelect)="openAgentDrawer($event)"
+          (selectAgent)="openAgentDrawer($event)"
+          (configChange)="onAgentConfigChange($event)"
+          (resetAgent)="resetAgent($event)"
+          (viewTraces)="navigateToTraces($event)"
+        />
       }
     }
   }
@@ -306,4 +294,28 @@
   @if (activeTab() === 'traces') {
     <app-trace-viewer />
   }
+
+  <!-- TIER EDITOR MODAL -->
+  <app-tier-editor-modal
+    [isOpen]="tierService.isEditorOpen()"
+    [availableModels]="availableModels()"
+    (close)="closeTierEditor()"
+    (tierUpdated)="onTierUpdated($event)"
+    (tierCreated)="onTierCreated($event)"
+    (tierDeleted)="onTierDeleted($event)"
+  />
+
+  <!-- AGENT CONFIGURATION SLIDE-IN DRAWER -->
+  <app-agent-drawer
+    [isOpen]="isDrawerOpen()"
+    [agent]="selectedDrawerAgent()"
+    [availableModels]="availableModels()"
+    [draftConfig]="getDraftForAgent(selectedDrawerAgent()?.name || '')"
+    [isSaving]="saving()"
+    (close)="closeAgentDrawer()"
+    (saveAgent)="saveSingleAgent($event)"
+    (configChange)="onAgentConfigChange($event)"
+    (resetAgent)="resetAgent($event)"
+    (viewTraces)="navigateToTraces($event)"
+  />
 </div>
