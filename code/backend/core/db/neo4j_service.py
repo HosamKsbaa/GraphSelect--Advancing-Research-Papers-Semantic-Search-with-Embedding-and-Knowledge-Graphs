@@ -657,7 +657,7 @@ class Neo4jService:
         """
         query = """
         MERGE (pr:Project {project_id: $project_id})
-        MATCH (p:Paper {doi: $doi})
+        MERGE (p:Paper {doi: $doi})
         MERGE (pr)-[:HAS_PAPER]->(p)
         """
         await self.execute_write(query, {
