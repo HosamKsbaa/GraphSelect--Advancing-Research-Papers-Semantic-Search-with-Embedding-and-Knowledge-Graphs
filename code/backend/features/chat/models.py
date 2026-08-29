@@ -34,6 +34,9 @@ class ChatMessage(BaseModel):
     timestamp: str = Field(default_factory=_utc_now_iso)
     tool_traces: List[ToolTrace] = Field(default_factory=list)
     citations: List[CitationTrace] = Field(default_factory=list)
+    steering_options: List[Dict[str, Any]] = Field(default_factory=list)
+    appraisal: Optional[Dict[str, Any]] = None
+
 
 
 class ChatSessionSummary(BaseModel):

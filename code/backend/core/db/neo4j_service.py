@@ -122,7 +122,50 @@ class Neo4jService:
             'source': paper.source,
         }
         records = await self.execute_write(query, params)
-        return records[0]
+
+        if getattr(paper, "authors", None):
+            author_query = """
+            MATCH (p:Paper {doi: $doi})
+            UNWIND $authors AS auth
+            MERGE (a:Author {name: auth.name})
+            ON CREATE SET a.openalex_id = auth.openalex_id,
+                          a.orcid       = auth.orcid,
+                          a.institution = auth.institution,
+                          a.created_at  = datetime()
+            MERGE (a)-[:AUTHORED]->(p)
+            """
+            auth_params = [
+                {
+                    'name': a.name,
+                    'openalex_id': a.openalex_id,
+                    'orcid': a.orcid,
+                    'institution': a.institution,
+                }
+                for a in paper.authors
+                if hasattr(a, "name") and a.name
+            ]
+            if auth_params:
+                await self.execute_write(author_query, {'doi': paper.doi, 'authors': auth_params})
+
+        if getattr(paper, "venue", None) and hasattr(paper.venue, "name") and paper.venue.name:
+            venue_query = """
+            MATCH (p:Paper {doi: $doi})
+            MERGE (v:Venue {name: $venue.name})
+            ON CREATE SET v.openalex_id = $venue.openalex_id,
+                          v.issn        = $venue.issn,
+                          v.venue_type  = $venue.venue_type,
+                          v.created_at  = datetime()
+            MERGE (p)-[:PUBLISHED_IN]->(v)
+            """
+            v_params = {
+                'name': paper.venue.name,
+                'openalex_id': paper.venue.openalex_id,
+                'issn': paper.venue.issn,
+                'venue_type': paper.venue.venue_type,
+            }
+            await self.execute_write(venue_query, {'doi': paper.doi, 'venue': v_params})
+
+        return records[0] if records else {'doi': paper.doi, 'title': paper.title}
 
     async def get_paper_by_doi(self, doi: str) -> dict[str, Any] | None:
         """Get a paper by DOI. NEVER includes the embedding field."""
@@ -811,5 +854,191 @@ class Neo4jService:
             'project_id': project_id,
             'threshold': threshold,
         })
+
+    # ------------------------------------------------------------------
+    # Milestone 1 Batch Graph & Centrality Helper Methods
+    # ------------------------------------------------------------------
+
+    async def batch_get_paper_degrees(self, dois: list[str]) -> dict[str, int]:
+        """Get the in-graph degree (CITES in + out count) for a list of DOIs."""
+        if not dois:
+            return {}
+        clean_dois = [d.replace("https://doi.org/", "").strip() for d in dois if d]
+        query = """
+        UNWIND $dois AS target_doi
+        MATCH (p:Paper {doi: target_doi})
+        OPTIONAL MATCH (p)-[r:CITES]-(other:Paper)
+        RETURN target_doi AS doi, count(DISTINCT r) AS degree
+        """
+        records = await self.execute_read(query, {"dois": clean_dois})
+        result = {d: 0 for d in clean_dois}
+        for r in records:
+            if r.get("doi"):
+                result[str(r["doi"])] = int(r.get("degree", 0))
+        return result
+
+    async def get_in_graph_degrees(self, dois: list[str]) -> dict[str, int]:
+        """Alias for batch_get_paper_degrees."""
+        return await self.batch_get_paper_degrees(dois)
+
+    async def batch_check_project_papers(self, project_id: str, dois: list[str]) -> set[str]:
+        """Check which DOIs in the provided list are already saved to the project library."""
+        if not project_id or not dois:
+            return set()
+        clean_dois = [d.replace("https://doi.org/", "").strip() for d in dois if d]
+        query = """
+        MATCH (pr:Project {project_id: $project_id})-[:HAS_PAPER]->(p:Paper)
+        WHERE p.doi IN $dois
+        RETURN p.doi AS doi
+        """
+        records = await self.execute_read(query, {"project_id": project_id, "dois": clean_dois})
+        return {str(r["doi"]) for r in records if r.get("doi")}
+
+    async def check_project_papers_membership(
+        self,
+        project_id: str,
+        dois: list[str],
+    ) -> dict[str, bool]:
+        """Check membership of DOIs in project library returning dict mapping DOI to bool."""
+        if not project_id or not dois:
+            return {d: False for d in dois}
+        in_lib = await self.batch_check_project_papers(project_id, dois)
+        return {d: (d.replace("https://doi.org/", "").strip() in in_lib) for d in dois if d}
+
+    async def get_project_research_questions_with_embeddings(
+        self, project_id: str
+    ) -> list[dict[str, Any]]:
+        """Retrieve all research questions and their pre-computed embeddings for a project."""
+        query = """
+        MATCH (q:ResearchQuestion)
+        WHERE q.project_id = $project_id OR (q)-[:BELONGS_TO]->(:Project {project_id: $project_id})
+        RETURN DISTINCT q.question_id AS question_id,
+                        q.text        AS text,
+                        q.embedding   AS embedding
+        """
+        records = await self.execute_read(query, {"project_id": project_id})
+        return records
+
+    async def batch_get_paper_embeddings(self, dois: list[str]) -> dict[str, list[float]]:
+        """Fetch stored embedding vectors for a list of DOIs from Neo4j."""
+        if not dois:
+            return {}
+        clean_dois = [d.replace("https://doi.org/", "").strip() for d in dois if d]
+        query = """
+        MATCH (p:Paper)
+        WHERE p.doi IN $dois AND p.embedding IS NOT NULL
+        RETURN p.doi AS doi, p.embedding AS embedding
+        """
+        records = await self.execute_read(query, {"dois": clean_dois})
+        return {str(r["doi"]): list(r["embedding"]) for r in records if r.get("doi") and r.get("embedding")}
+
+    async def get_papers_by_dois(self, dois: list[str]) -> list[dict[str, Any]]:
+        """Batch fetch paper metadata, authors, and venue by DOIs."""
+        if not dois:
+            return []
+        clean_dois = [d.replace("https://doi.org/", "").strip() for d in dois if d]
+        query = """
+        MATCH (p:Paper)
+        WHERE p.doi IN $dois
+        OPTIONAL MATCH (p)<-[:AUTHORED]-(a:Author)
+        OPTIONAL MATCH (p)-[:PUBLISHED_IN]->(v:Venue)
+        RETURN p.doi           AS doi,
+               p.title         AS title,
+               p.abstract      AS abstract,
+               p.year          AS year,
+               p.cited_by_count AS cited_by_count,
+               p.openalex_id   AS openalex_id,
+               p.publication_date AS publication_date,
+               p.source        AS source,
+               p.created_at    AS created_at,
+               p.embedding IS NOT NULL AS has_embedding,
+               collect(DISTINCT {name: a.name, openalex_id: a.openalex_id}) AS authors,
+               v.name          AS venue_name
+        """
+        records = await self.execute_read(query, {'dois': clean_dois})
+        return records
+
+    async def create_papers_batch(self, papers: list[PaperCreate]) -> int:
+        """MERGE multiple papers and their author/venue relationships in a single batch."""
+        if not papers:
+            return 0
+
+        paper_rows: list[dict[str, Any]] = []
+        author_rows: list[dict[str, Any]] = []
+        venue_rows: list[dict[str, Any]] = []
+
+        for p in papers:
+            paper_rows.append({
+                'doi': p.doi,
+                'title': p.title,
+                'abstract': p.abstract,
+                'year': p.year,
+                'cited_by_count': p.cited_by_count,
+                'openalex_id': p.openalex_id,
+                'publication_date': p.publication_date,
+                'source': p.source,
+            })
+            for a in getattr(p, "authors", []):
+                if hasattr(a, "name") and a.name:
+                    author_rows.append({
+                        'doi': p.doi,
+                        'name': a.name,
+                        'openalex_id': getattr(a, 'openalex_id', None),
+                        'orcid': getattr(a, 'orcid', None),
+                        'institution': getattr(a, 'institution', None),
+                    })
+            venue = getattr(p, "venue", None)
+            if venue and hasattr(venue, "name") and venue.name:
+                venue_rows.append({
+                    'doi': p.doi,
+                    'name': venue.name,
+                    'openalex_id': getattr(venue, 'openalex_id', None),
+                    'issn': getattr(venue, 'issn', None),
+                    'venue_type': getattr(venue, 'venue_type', None),
+                })
+
+        batch_papers_query = """
+        UNWIND $batch AS row
+        MERGE (p:Paper {doi: row.doi})
+        ON CREATE SET p.created_at = datetime()
+        SET p.title           = row.title,
+            p.abstract        = row.abstract,
+            p.year            = row.year,
+            p.cited_by_count  = row.cited_by_count,
+            p.openalex_id     = row.openalex_id,
+            p.publication_date = row.publication_date,
+            p.source          = row.source,
+            p.updated_at      = datetime()
+        """
+        await self.execute_write(batch_papers_query, {'batch': paper_rows})
+
+        if author_rows:
+            batch_authors_query = """
+            UNWIND $batch AS row
+            MATCH (p:Paper {doi: row.doi})
+            MERGE (a:Author {name: row.name})
+            ON CREATE SET a.openalex_id = row.openalex_id,
+                          a.orcid       = row.orcid,
+                          a.institution = row.institution,
+                          a.created_at  = datetime()
+            MERGE (a)-[:AUTHORED]->(p)
+            """
+            await self.execute_write(batch_authors_query, {'batch': author_rows})
+
+        if venue_rows:
+            batch_venues_query = """
+            UNWIND $batch AS row
+            MATCH (p:Paper {doi: row.doi})
+            MERGE (v:Venue {name: row.name})
+            ON CREATE SET v.openalex_id = row.openalex_id,
+                          v.issn        = row.issn,
+                          v.venue_type  = row.venue_type,
+                          v.created_at  = datetime()
+            MERGE (p)-[:PUBLISHED_IN]->(v)
+            """
+            await self.execute_write(batch_venues_query, {'batch': venue_rows})
+
+        return len(papers)
+
 
 

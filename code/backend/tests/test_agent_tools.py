@@ -19,6 +19,7 @@ from agents.research.tools.retrieval_tools import (
     add_paper_to_project,
     explore_paper,
     get_project_papers,
+    run_graphselect_traversal,
 )
 from agents.research.tools.search_tools import (
     add_research_question,
@@ -466,3 +467,277 @@ async def test_list_projects_success() -> None:
             if hasattr(ServiceRegistry, "_neo4j"):
                 delattr(ServiceRegistry, "_neo4j")
         ServiceRegistry._initialized = old_init
+
+
+@pytest.mark.asyncio
+async def test_run_graphselect_traversal_tool_bounded_one_hop_success(
+    mock_tool_context: ToolContext,
+) -> None:
+    """Verify run_graphselect_traversal tool executes 1-hop expansion and returns rich candidates."""
+    from features.search.models import CandidatePaperState, OneHopExpansionResult
+
+    mock_candidates = [
+        CandidatePaperState(
+            doi="10.1000/cand1",
+            title="Candidate 1",
+            authors=["Alice"],
+            year=2024,
+            venue="ICLR",
+            abstract_snippet="Abstract snippet 1",
+            direction="forward_citation",
+            citation_count=50,
+            in_graph_degree=2,
+            similarity_scores=[{"question_id": "rq-1", "question": "Q1", "score": 0.92}],
+            max_similarity=0.92,
+            mean_similarity=0.92,
+            already_in_library=False,
+            embedding_cached=True,
+            pagerank_score=0.8,
+        ),
+        CandidatePaperState(
+            doi="10.1000/cand2",
+            title="Candidate 2",
+            authors=["Bob"],
+            year=2023,
+            venue="NeurIPS",
+            abstract_snippet="Abstract snippet 2",
+            direction="backward_reference",
+            citation_count=120,
+            in_graph_degree=1,
+            similarity_scores=[{"question_id": "rq-1", "question": "Q1", "score": 0.85}],
+            max_similarity=0.85,
+            mean_similarity=0.85,
+            already_in_library=True,
+            embedding_cached=True,
+            pagerank_score=0.5,
+        ),
+    ]
+
+    mock_result = OneHopExpansionResult(
+        seed_doi="10.1145/3292500.3330919",
+        seed_title="Seed Paper",
+        cycle_level=1,
+        total_discovered=2,
+        total_new=2,
+        forward_count=1,
+        backward_count=1,
+        both_count=0,
+        candidates=mock_candidates,
+        new_dois=["10.1000/cand1", "10.1000/cand2"],
+        traversal_summary=["1-Hop GraphSelect traversal complete."],
+        errors=[],
+    )
+
+    mock_crawler = AsyncMock()
+    mock_crawler.run_one_hop_expansion.return_value = mock_result
+
+    old_crawler = getattr(ServiceRegistry, "_crawler_service", None)
+    old_init = ServiceRegistry._initialized
+
+    ServiceRegistry._crawler_service = mock_crawler
+    ServiceRegistry._initialized = True
+
+    try:
+        result = await run_graphselect_traversal(
+            seed_doi="10.1145/3292500.3330919",
+            max_depth=1,
+            similarity_threshold=0.6,
+            mode="interactive",
+            tool_context=mock_tool_context,
+        )
+
+        assert result["status"] == "completed"
+        assert result["seed_doi"] == "10.1145/3292500.3330919"
+        assert result["cycle_level"] == 1
+        assert result["total_discovered"] == 2
+        assert len(result["candidates"]) == 2
+
+        candidates: list[dict[str, Any]] = result["candidates"]  # type: ignore[assignment]
+        for cand in candidates:
+            assert "doi" in cand
+            assert "title" in cand
+            assert "authors" in cand
+            assert "year" in cand
+            assert "venue" in cand
+            assert "abstract_snippet" in cand
+            assert "direction" in cand
+            assert "citation_count" in cand
+            assert "in_graph_degree" in cand
+            assert "similarity_scores" in cand
+            assert "already_in_library" in cand
+
+        mock_crawler.run_one_hop_expansion.assert_called_once_with(
+            session_id="project-123",
+            seed_doi="10.1145/3292500.3330919",
+            project_id="project-123",
+            embedding_provider=getattr(ServiceRegistry, "embedding_provider", None),
+        )
+    finally:
+        if old_crawler is not None:
+            ServiceRegistry._crawler_service = old_crawler
+        else:
+            if hasattr(ServiceRegistry, "_crawler_service"):
+                delattr(ServiceRegistry, "_crawler_service")
+        ServiceRegistry._initialized = old_init
+
+
+@pytest.mark.asyncio
+async def test_run_graphselect_traversal_tool_clamps_depth_to_one_in_interactive_mode(
+    mock_tool_context: ToolContext,
+) -> None:
+    """In interactive HITL mode, tool enforces 1-hop execution even if max_depth > 1."""
+    from features.search.models import OneHopExpansionResult
+
+    mock_result = OneHopExpansionResult(
+        seed_doi="10.1145/3292500.3330919",
+        seed_title="Seed Paper",
+        cycle_level=1,
+        total_discovered=0,
+        total_new=0,
+        forward_count=0,
+        backward_count=0,
+        both_count=0,
+        candidates=[],
+        new_dois=[],
+        traversal_summary=["Completed."],
+        errors=[],
+    )
+
+    mock_crawler = AsyncMock()
+    mock_crawler.run_one_hop_expansion.return_value = mock_result
+
+    old_crawler = getattr(ServiceRegistry, "_crawler_service", None)
+    old_init = ServiceRegistry._initialized
+
+    ServiceRegistry._crawler_service = mock_crawler
+    ServiceRegistry._initialized = True
+
+    try:
+        result = await run_graphselect_traversal(
+            seed_doi="10.1145/3292500.3330919",
+            max_depth=3,
+            mode="interactive",
+            tool_context=mock_tool_context,
+        )
+
+        assert result["status"] == "completed"
+        assert result["max_depth"] == 1
+        mock_crawler.run_one_hop_expansion.assert_called_once()
+    finally:
+        if old_crawler is not None:
+            ServiceRegistry._crawler_service = old_crawler
+        else:
+            if hasattr(ServiceRegistry, "_crawler_service"):
+                delattr(ServiceRegistry, "_crawler_service")
+        ServiceRegistry._initialized = old_init
+
+
+@pytest.mark.asyncio
+async def test_run_graphselect_traversal_missing_project_id_returns_error() -> None:
+    """Tool fails cleanly with descriptive error if project_id is missing."""
+    mock_ctx = MagicMock(spec=ToolContext)
+    mock_ctx.state = {}
+
+    result = await run_graphselect_traversal(
+        seed_doi="10.1145/3292500.3330919",
+        tool_context=mock_ctx,
+    )
+
+    assert "error" in result
+    assert "No project_id in session state" in str(result["error"])
+
+
+@pytest.mark.asyncio
+async def test_run_graphselect_traversal_auto_lookup_seed_from_project_library(
+    mock_tool_context: ToolContext,
+) -> None:
+    """If seed_doi is omitted, tool queries Neo4j for an existing project paper."""
+    from features.search.models import OneHopExpansionResult
+
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_project_papers.return_value = [{"doi": "10.1000/library_seed"}]
+
+    mock_result = OneHopExpansionResult(
+        seed_doi="10.1000/library_seed",
+        seed_title="Library Seed",
+        cycle_level=1,
+        total_discovered=1,
+        total_new=1,
+        forward_count=1,
+        backward_count=0,
+        both_count=0,
+        candidates=[],
+        new_dois=["10.1000/c1"],
+        traversal_summary=[],
+        errors=[],
+    )
+
+    mock_crawler = AsyncMock()
+    mock_crawler.run_one_hop_expansion.return_value = mock_result
+
+    old_neo4j = getattr(ServiceRegistry, "_neo4j", None)
+    old_crawler = getattr(ServiceRegistry, "_crawler_service", None)
+    old_init = ServiceRegistry._initialized
+
+    ServiceRegistry._neo4j = mock_neo4j
+    ServiceRegistry._crawler_service = mock_crawler
+    ServiceRegistry._initialized = True
+
+    try:
+        result = await run_graphselect_traversal(
+            seed_doi="",
+            tool_context=mock_tool_context,
+        )
+
+        assert result["status"] == "completed"
+        assert result["seed_doi"] == "10.1000/library_seed"
+        mock_crawler.run_one_hop_expansion.assert_called_once_with(
+            session_id="project-123",
+            seed_doi="10.1000/library_seed",
+            project_id="project-123",
+            embedding_provider=getattr(ServiceRegistry, "embedding_provider", None),
+        )
+    finally:
+        if old_neo4j is not None:
+            ServiceRegistry._neo4j = old_neo4j
+        else:
+            if hasattr(ServiceRegistry, "_neo4j"):
+                delattr(ServiceRegistry, "_neo4j")
+        if old_crawler is not None:
+            ServiceRegistry._crawler_service = old_crawler
+        else:
+            if hasattr(ServiceRegistry, "_crawler_service"):
+                delattr(ServiceRegistry, "_crawler_service")
+        ServiceRegistry._initialized = old_init
+
+
+@pytest.mark.asyncio
+async def test_run_graphselect_traversal_no_seed_found_returns_error(
+    mock_tool_context: ToolContext,
+) -> None:
+    """Tool returns descriptive error if seed_doi is omitted and project has no papers."""
+    mock_neo4j = AsyncMock()
+    mock_neo4j.get_project_papers.return_value = []
+
+    old_neo4j = getattr(ServiceRegistry, "_neo4j", None)
+    old_init = ServiceRegistry._initialized
+
+    ServiceRegistry._neo4j = mock_neo4j
+    ServiceRegistry._initialized = True
+
+    try:
+        result = await run_graphselect_traversal(
+            seed_doi="",
+            tool_context=mock_tool_context,
+        )
+
+        assert "error" in result
+        assert "seed_doi is required" in str(result["error"])
+    finally:
+        if old_neo4j is not None:
+            ServiceRegistry._neo4j = old_neo4j
+        else:
+            if hasattr(ServiceRegistry, "_neo4j"):
+                delattr(ServiceRegistry, "_neo4j")
+        ServiceRegistry._initialized = old_init
+

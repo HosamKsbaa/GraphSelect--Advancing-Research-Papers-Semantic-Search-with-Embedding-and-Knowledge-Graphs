@@ -1,10 +1,21 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { ApiService, PaperSummary, SearchRequest, SearchResponse, ProgressEvent } from '../../core/api.service';
+import {
+  ApiService,
+  PaperSummary,
+  SearchRequest,
+  SearchResponse,
+  ProgressEvent,
+  CandidatePaperState,
+  OneHopExpansionResult,
+  Project,
+  AddPapersToProjectRequest
+} from '../../core/api.service';
 import { ToastService } from '../../core/toast.service';
 import { ResultsComponent } from './results/results.component';
+import { OneHopInspectionComponent } from './one-hop-inspection/one-hop-inspection.component';
 
 interface StreamEvent {
   type: string;
@@ -16,15 +27,16 @@ interface StreamEvent {
 @Component({
   selector: 'alrs-search',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ResultsComponent],
+  imports: [CommonModule, FormsModule, RouterLink, ResultsComponent, OneHopInspectionComponent],
   templateUrl: './search.page.html',
   styleUrl: './search.page.scss',
 })
-export class SearchPage implements OnDestroy {
+export class SearchPage implements OnInit, OnDestroy {
   // Step 1: Resolve title
   searchTitle = 'GraphSelect: Embedding-Guided Graph Traversal for Scalable Semantic Paper Search';
   candidates: PaperSummary[] = [];
   selectedDoi = '';
+  selectedSeedPaper: PaperSummary | null = null;
   resolving = false;
 
   // Step 2: Research questions
@@ -36,11 +48,19 @@ export class SearchPage implements OnDestroy {
   maxDepth = 2;
   mode: 'interactive' | 'automated' = 'automated';
 
-  // Step 3: Result
+  // Step 3: Result & 1-Hop Inspection State
   searchResult: SearchResponse | null = null;
   searching = false;
   error = '';
   currentStep = 1;
+
+  // 1-Hop HITL Traversal State
+  cycleCandidates: CandidatePaperState[] = [];
+  cycleResults: OneHopExpansionResult | null = null;
+  currentCycleLevel = 1;
+  isCyclePaused = false;
+  projects: Project[] = [];
+  selectedProjectId = '';
 
   // Step 4: BFS streaming progress
   streamEvents: StreamEvent[] = [];
@@ -57,8 +77,24 @@ export class SearchPage implements OnDestroy {
 
   constructor(private api: ApiService, private toast: ToastService) {}
 
+  ngOnInit(): void {
+    this.loadProjects();
+  }
+
   ngOnDestroy(): void {
     this.closeStream();
+  }
+
+  loadProjects(): void {
+    this.api.listProjects().subscribe({
+      next: (projects) => {
+        this.projects = projects;
+        if (projects.length > 0) {
+          this.selectedProjectId = projects[0].id;
+        }
+      },
+      error: () => {}
+    });
   }
 
   resolveTitle(): void {
@@ -84,6 +120,13 @@ export class SearchPage implements OnDestroy {
 
   selectPaper(doi: string): void {
     this.selectedDoi = doi;
+    this.selectedSeedPaper = this.candidates.find(c => c.doi === doi) || {
+      doi: doi,
+      title: this.searchTitle,
+      year: null,
+      cited_by_count: 0,
+      authors: []
+    };
     this.currentStep = 2;
   }
 
@@ -108,6 +151,10 @@ export class SearchPage implements OnDestroy {
 
     this.searching = true;
     this.error = '';
+    this.cycleCandidates = [];
+    this.cycleResults = null;
+    this.isCyclePaused = false;
+    this.currentCycleLevel = 1;
 
     const request: SearchRequest = {
       seed_doi: this.selectedDoi,
@@ -149,14 +196,58 @@ export class SearchPage implements OnDestroy {
 
       const eventTypeLower = data.event_type.toLowerCase();
 
-      if (eventTypeLower === 'search_complete') {
+      if (eventTypeLower === 'cycle_results' || eventTypeLower === 'level_complete') {
+        const payloadData = (data.data || {}) as any;
+        if (payloadData.candidates && Array.isArray(payloadData.candidates)) {
+          this.cycleCandidates = payloadData.candidates;
+        } else if (payloadData.top_papers && Array.isArray(payloadData.top_papers)) {
+          this.cycleCandidates = payloadData.top_papers.map((p: any) => ({
+            doi: p.doi || '',
+            title: p.title || '',
+            authors: p.authors || [],
+            year: p.year || null,
+            venue: p.venue || null,
+            abstract_snippet: p.abstract_snippet || p.abstract || '',
+            direction: p.direction || 'forward_citation',
+            citation_count: p.citation_count || p.cited_by_count || 0,
+            in_graph_degree: p.in_graph_degree || 1,
+            similarity_scores: p.similarity_scores || [],
+            max_similarity: p.max_similarity || p.similarity_score || 0.8,
+            mean_similarity: p.mean_similarity || p.similarity_score || 0.8,
+            already_in_library: p.already_in_library || false,
+            embedding_cached: p.embedding_cached !== false,
+            pagerank_score: p.pagerank_score || 0.5,
+            partition: p.partition || null,
+            recommendation_rationale: p.recommendation_rationale || ''
+          }));
+        }
+
+        this.currentCycleLevel = payloadData.level || this.currentCycleLevel;
+        this.cycleResults = {
+          seed_doi: this.selectedDoi,
+          seed_title: this.selectedSeedPaper?.title || this.searchTitle,
+          cycle_level: this.currentCycleLevel,
+          total_discovered: payloadData.papers_discovered || this.cycleCandidates.length,
+          total_new: payloadData.papers_new || this.cycleCandidates.length,
+          candidates: this.cycleCandidates,
+          strategic_recommendation: payloadData.strategic_recommendation || '',
+          steering_options: payloadData.steering_options || []
+        };
+
+        if (this.mode === 'interactive') {
+          this.isCyclePaused = true;
+        }
+      } else if (eventTypeLower === 'search_complete') {
         this.streamStatus = 'complete';
         this.closeStream();
-        this.currentStep = 4;
+        // If automated or no candidates were inspected, move to step 4
+        if (this.mode === 'automated' && this.cycleCandidates.length === 0) {
+          this.currentStep = 4;
+        }
       } else if (eventTypeLower === 'search_failed') {
         this.streamStatus = 'failed';
         this.closeStream();
-        
+
         if (data.message.includes('400') || data.message.toLowerCase().includes('api key')) {
           this.toast.error(
             'Invalid API Key', 'The Gemini API returned a 400 error.', 10000,
@@ -176,7 +267,12 @@ export class SearchPage implements OnDestroy {
       const data: ProgressEvent = JSON.parse(event.data);
       this.streamProgress = data.progress_percent;
       this.streamMessage = data.message;
-      this.streamEvents.push({ type: data.event_type, message: data.message, progress: data.progress_percent, timestamp: new Date() });
+      this.streamEvents.push({
+        type: data.event_type,
+        message: data.message,
+        progress: data.progress_percent,
+        timestamp: new Date()
+      });
     } catch (e) {}
   };
 
@@ -215,6 +311,78 @@ export class SearchPage implements OnDestroy {
     }
   }
 
+  // 1-Hop Steering Handlers
+  handleAddToProject(candidate: CandidatePaperState): void {
+    if (!this.selectedProjectId) {
+      this.toast.success('Added to Library', `Paper ${candidate.doi} marked in library.`);
+      return;
+    }
+
+    const req: AddPapersToProjectRequest = {
+      project_id: this.selectedProjectId,
+      dois: [candidate.doi]
+    };
+
+    this.api.addPapersToProject(req).subscribe({
+      next: () => {
+        this.toast.success('Import Successful', `Added "${candidate.title}" to project library.`);
+      },
+      error: (err) => {
+        this.toast.error('Import Failed', err.error?.detail || 'Could not import paper to project.');
+      }
+    });
+  }
+
+  handleExpand1Hop(candidate: CandidatePaperState): void {
+    if (!this.searchResult?.session_id) return;
+    this.toast.info('Expanding 1-Hop', `Enqueuing ${candidate.title} for next 1-hop traversal...`);
+    this.isCyclePaused = false;
+    this.currentCycleLevel += 1;
+
+    this.api.enqueuePapers(this.searchResult.session_id, [candidate.doi]).subscribe({
+      next: () => {
+        this.toast.success('Hop Enqueued', `Starting 1-hop traversal from ${candidate.doi}.`);
+      },
+      error: (err) => {
+        console.warn('Enqueue notice:', err);
+      }
+    });
+  }
+
+  handleBranchSeed(candidate: CandidatePaperState): void {
+    this.selectedDoi = candidate.doi;
+    this.searchTitle = candidate.title;
+    this.selectedSeedPaper = {
+      doi: candidate.doi,
+      title: candidate.title,
+      year: candidate.year,
+      cited_by_count: candidate.citation_count,
+      authors: candidate.authors
+    };
+    this.currentStep = 2;
+    this.toast.info('Seed Branched', `Search re-anchored on ${candidate.title}.`);
+  }
+
+  handleConcludeSynthesize(): void {
+    this.currentStep = 4;
+  }
+
+  handleBatchExpand(candidates: CandidatePaperState[]): void {
+    if (!this.searchResult?.session_id) return;
+    const dois = candidates.map(c => c.doi);
+    this.isCyclePaused = false;
+    this.currentCycleLevel += 1;
+
+    this.api.enqueuePapers(this.searchResult.session_id, dois).subscribe({
+      next: () => {
+        this.toast.success('Batch Enqueued', `Enqueued ${dois.length} papers for next traversal step.`);
+      },
+      error: (err) => {
+        console.warn('Batch enqueue notice:', err);
+      }
+    });
+  }
+
   resetSearch(): void {
     this.closeStream();
     this.currentStep = 1;
@@ -222,6 +390,11 @@ export class SearchPage implements OnDestroy {
     this.searchTitle = 'GraphSelect: Embedding-Guided Graph Traversal for Scalable Semantic Paper Search';
     this.candidates = [];
     this.selectedDoi = '';
+    this.selectedSeedPaper = null;
+    this.cycleCandidates = [];
+    this.cycleResults = null;
+    this.isCyclePaused = false;
+    this.currentCycleLevel = 1;
     this.questions = [
       'How does selective graph expansion compare to full vector database indexes?',
       'What is the performance benefit of combining cosine similarity with PageRank?'

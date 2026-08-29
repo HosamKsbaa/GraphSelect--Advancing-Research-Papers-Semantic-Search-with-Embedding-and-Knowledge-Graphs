@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 import httpx
 
-from features.retrieval.models import PaperCreate, PaperSummary
+from features.retrieval.models import AuthorCreate, PaperCreate, PaperSummary, VenueCreate
 
 if TYPE_CHECKING:
     from core.logging.log_service import LogService
@@ -221,7 +221,10 @@ class OpenAlexService:
             return []
 
         # Make unique and remove prefix
-        clean_dois = list(set(doi.replace("https://doi.org/", "") for doi in dois))
+        clean_dois = sorted(list({doi.replace("https://doi.org/", "").strip() for doi in dois if doi and doi.strip()}))
+        if not clean_dois:
+            return []
+
         papers: list[PaperCreate] = []
         chunk_size = 50
 
@@ -229,7 +232,7 @@ class OpenAlexService:
             chunk = clean_dois[i : i + chunk_size]
             joined_dois = "|".join(chunk)
             filter_val = f"doi:{joined_dois}"
-            
+
             data = await self._request(
                 "GET",
                 "/works",
@@ -239,11 +242,114 @@ class OpenAlexService:
                 },
                 session_id=session_id,
             )
-            
+
             results = data.get("results", [])
-            for res in results:
-                if isinstance(res, dict):
-                    papers.append(self._parse_work(res))
+            if isinstance(results, list):
+                for res in results:
+                    if isinstance(res, dict):
+                        papers.append(self._parse_work(res))
+
+        return papers
+
+    async def batch_get_rich_papers(
+        self,
+        dois: list[str],
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Batch fetch rich paper metadata (title, authors, venue, year, abstract, citations).
+
+        Chunks DOIs into batches of 50 using the OpenAlex OR filter to eliminate N+1 network requests.
+        """
+        if not dois:
+            return []
+
+        clean_dois = sorted(list({doi.replace("https://doi.org/", "").strip() for doi in dois if doi and doi.strip()}))
+        if not clean_dois:
+            return []
+
+        papers: list[dict[str, Any]] = []
+        chunk_size = 50
+
+        for i in range(0, len(clean_dois), chunk_size):
+            chunk = clean_dois[i : i + chunk_size]
+            joined_dois = "|".join(chunk)
+            filter_val = f"doi:{joined_dois}"
+
+            try:
+                data = await self._request(
+                    "GET",
+                    "/works",
+                    params={
+                        "filter": filter_val,
+                        "per_page": len(chunk),
+                    },
+                    session_id=session_id,
+                )
+                results = data.get("results", [])
+                if isinstance(results, list):
+                    for res in results:
+                        if not isinstance(res, dict):
+                            continue
+
+                        doi_raw = res.get("doi", "")
+                        doi = str(doi_raw).replace("https://doi.org/", "").strip() if doi_raw else ""
+                        if not doi:
+                            continue
+
+                        # Reconstruct abstract
+                        abstract = None
+                        if res.get("abstract"):
+                            abstract = str(res.get("abstract"))
+                        elif res.get("abstract_inverted_index"):
+                            abstract = OpenAlexService._reconstruct_abstract(
+                                res.get("abstract_inverted_index")  # type: ignore[arg-type]
+                            )
+
+                        # Extract authors
+                        authors: list[str] = []
+                        authorships = res.get("authorships", [])
+                        if isinstance(authorships, list):
+                            for auth in authorships:
+                                if isinstance(auth, dict):
+                                    author_obj = auth.get("author", {})
+                                    if isinstance(author_obj, dict) and author_obj.get("display_name"):
+                                        authors.append(str(author_obj["display_name"]).strip())
+
+                        # Extract venue
+                        venue = None
+                        primary_loc = res.get("primary_location", {})
+                        if isinstance(primary_loc, dict) and isinstance(primary_loc.get("source"), dict):
+                            source = primary_loc["source"]
+                            if isinstance(source, dict) and source.get("display_name"):
+                                venue = str(source["display_name"]).strip()
+                        elif isinstance(res.get("host_venue"), dict):
+                            h_venue = res.get("host_venue")
+                            if isinstance(h_venue, dict) and h_venue.get("display_name"):
+                                venue = str(h_venue["display_name"]).strip()
+
+                        # Referenced works
+                        raw_refs = res.get("referenced_works", [])
+                        referenced_works: list[str] = []
+                        if isinstance(raw_refs, list):
+                            for r in raw_refs:
+                                if r:
+                                    referenced_works.append(str(r).replace("https://openalex.org/", "").strip())
+
+                        papers.append({
+                            "doi": doi,
+                            "title": str(res.get("title") or "").strip(),
+                            "authors": authors[:10],
+                            "year": res.get("publication_year"),
+                            "venue": venue,
+                            "abstract": abstract,
+                            "abstract_snippet": (abstract or "")[:500],
+                            "cited_by_count": int(res.get("cited_by_count") or 0),
+                            "openalex_id": str(res.get("id", "")).replace("https://openalex.org/", "").strip() if res.get("id") else None,
+                            "publication_date": str(res.get("publication_date", "")) if res.get("publication_date") else None,
+                            "referenced_works": referenced_works,
+                        })
+            except Exception as exc:
+                logger.exception("batch_get_rich_papers failed for chunk: %s", exc)
 
         return papers
 
@@ -512,9 +618,16 @@ class OpenAlexService:
 
     @staticmethod
     def _parse_work(data: dict[str, object]) -> PaperCreate:
-        """Parse an OpenAlex work response into a PaperCreate model."""
+        """Parse an OpenAlex work response into a validated PaperCreate model with authors and venue.
+
+        Extracts:
+          - Canonical properties: DOI, title, abstract (plain text or reconstructed inverted index),
+            publication year, cited_by_count, OpenAlex ID, publication_date, referenced_works.
+          - Authorships: List of AuthorCreate objects with name, OpenAlex ID, ORCID, and institution.
+          - Venue: VenueCreate object with name, OpenAlex ID, ISSN, and venue type.
+        """
         doi_raw = data.get("doi", "")
-        doi = str(doi_raw).replace("https://doi.org/", "") if doi_raw else ""
+        doi = str(doi_raw).replace("https://doi.org/", "").strip() if doi_raw else ""
 
         abstract = None
         if data.get("abstract"):
@@ -524,9 +637,86 @@ class OpenAlexService:
                 data.get("abstract_inverted_index")  # type: ignore[arg-type]
             )
 
+        # 1. Extract Authors
+        authors: list[AuthorCreate] = []
+        raw_authorships = data.get("authorships") or []
+        if isinstance(raw_authorships, list):
+            for auth in raw_authorships:
+                if not isinstance(auth, dict):
+                    continue
+                author_info = auth.get("author") or {}
+                if not isinstance(author_info, dict):
+                    continue
+                name = author_info.get("display_name")
+                if not name:
+                    continue
+
+                auth_id = author_info.get("id")
+                openalex_id = str(auth_id).replace("https://openalex.org/", "").strip() if auth_id else None
+                orcid = author_info.get("orcid")
+                orcid_str = str(orcid).strip() if orcid else None
+
+                institution = None
+                institutions = auth.get("institutions") or []
+                if isinstance(institutions, list) and institutions:
+                    first_inst = institutions[0]
+                    if isinstance(first_inst, dict) and first_inst.get("display_name"):
+                        institution = str(first_inst["display_name"]).strip()
+
+                authors.append(
+                    AuthorCreate(
+                        name=str(name).strip(),
+                        openalex_id=openalex_id,
+                        orcid=orcid_str,
+                        institution=institution,
+                    )
+                )
+
+        # 2. Extract Venue (from primary_location, host_venue, or locations)
+        venue: VenueCreate | None = None
+        source: dict[str, object] | None = None
+
+        primary_loc = data.get("primary_location")
+        if isinstance(primary_loc, dict) and isinstance(primary_loc.get("source"), dict):
+            source = primary_loc["source"]  # type: ignore[assignment]
+        elif isinstance(data.get("host_venue"), dict):
+            source = data["host_venue"]  # type: ignore[assignment]
+        elif isinstance(data.get("locations"), list):
+            for loc in data["locations"]:
+                if isinstance(loc, dict) and isinstance(loc.get("source"), dict) and loc["source"].get("display_name"):
+                    source = loc["source"]  # type: ignore[assignment]
+                    break
+
+        if source and source.get("display_name"):
+            v_name = str(source["display_name"]).strip()
+            v_id = source.get("id")
+            v_openalex_id = str(v_id).replace("https://openalex.org/", "").strip() if v_id else None
+            issn_raw = source.get("issn_l") or source.get("issn")
+            v_issn: str | None = None
+            if isinstance(issn_raw, list) and issn_raw:
+                v_issn = str(issn_raw[0])
+            elif isinstance(issn_raw, str):
+                v_issn = issn_raw.strip()
+            v_type = str(source.get("type")).strip() if source.get("type") else None
+
+            venue = VenueCreate(
+                name=v_name,
+                openalex_id=v_openalex_id,
+                issn=v_issn,
+                venue_type=v_type,
+            )
+
+        # 3. Referenced works (clean IDs)
+        raw_refs = data.get("referenced_works") or []
+        referenced_works = [
+            str(r).replace("https://openalex.org/", "").strip()
+            for r in raw_refs
+            if r
+        ] if isinstance(raw_refs, list) else []
+
         return PaperCreate(
             doi=doi,
-            title=str(data.get("title", "")),
+            title=str(data.get("title", "")).strip(),
             abstract=abstract,
             year=data.get("publication_year"),  # type: ignore[arg-type]
             cited_by_count=int(data.get("cited_by_count") or 0),  # type: ignore[arg-type]
@@ -534,6 +724,8 @@ class OpenAlexService:
             publication_date=str(data.get("publication_date", ""))
             if data.get("publication_date")
             else None,
-            referenced_works=data.get("referenced_works", []),  # type: ignore[arg-type]
             source="openalex",
+            referenced_works=data.get("referenced_works", []),  # type: ignore[arg-type]
+            authors=authors,
+            venue=venue,
         )

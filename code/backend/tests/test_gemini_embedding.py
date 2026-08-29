@@ -53,7 +53,7 @@ def test_gemini_provider_initialization_modes() -> None:
         mock_settings.return_value.gemini_api_key = "studio_key_abc"
         with patch("features.embedding.providers.gemini_provider.genai.Client") as mock_client:
             provider = GeminiEmbeddingProvider(output_dimensionality=768)
-            mock_client.assert_called_once_with(api_key="studio_key_abc")
+            mock_client.assert_called_once_with(api_key="studio_key_abc", vertexai=False)
             assert provider.model_name == "gemini-embedding-2"
             assert provider.dimensions == 768
 

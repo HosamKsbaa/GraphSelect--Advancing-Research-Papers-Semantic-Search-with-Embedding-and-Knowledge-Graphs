@@ -30,3 +30,35 @@ class GroupedResults(BaseModel):
     similarity_threshold: float = 0.5
     similarity_weight: float = 0.7
     pagerank_weight: float = 0.3
+
+
+from features.search.models import CandidatePaperState  # noqa: E402
+
+
+class SteeringActionOption(BaseModel):
+    """Actionable steering choice presented to the user after 1-hop traversal."""
+
+    option_id: str
+    action_type: str = Field(
+        description="'expand_deeper' | 'add_to_library' | 'branch_seed' | 'conclude'"
+    )
+    target_doi: str | None = None
+    target_title: str | None = None
+    label: str
+    rationale: str
+
+
+class TraversalAppraisalResult(BaseModel):
+    """Structured appraisal payload returned by 1-hop traversal and agent evaluation."""
+
+    seed_doi: str
+    seed_title: str
+    cycle_level: int = 1
+    total_discovered: int = 0
+    total_new: int = 0
+    foundational_prior_art: list[CandidatePaperState] = Field(default_factory=list)
+    contemporary_breakthroughs: list[CandidatePaperState] = Field(default_factory=list)
+    topological_bridges: list[CandidatePaperState] = Field(default_factory=list)
+    strategic_recommendation: str = ""
+    steering_options: list[SteeringActionOption] = Field(default_factory=list)
+

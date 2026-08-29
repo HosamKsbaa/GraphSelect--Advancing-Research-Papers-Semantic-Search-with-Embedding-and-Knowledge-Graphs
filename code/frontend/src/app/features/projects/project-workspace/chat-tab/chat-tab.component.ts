@@ -115,8 +115,8 @@ export class ChatTabComponent implements OnInit, AfterViewChecked {
             this.selectChat(chats[0].id);
           }
         } else {
-          // Auto-create initial default research thread so chat is ready immediately
-          this.createNewChat(false);
+          this.activeChatId.set(null);
+          this.messages.set([]);
         }
       },
       error: err => {
@@ -326,5 +326,56 @@ export class ChatTabComponent implements OnInit, AfterViewChecked {
   getActiveChatTitle(): string {
     const active = this.activeChat();
     return active ? active.title : 'Project Chat';
+  }
+
+  extractActionChips(msg: ChatMessage): { label: string; prompt: string }[] {
+    if (msg.sender !== 'assistant' || !msg.content) return [];
+    const chips: { label: string; prompt: string }[] = [];
+    const seenDois = new Set<string>();
+
+    // Scan for DOIs in msg.content or citations
+    const doiRegex = /\b(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)\b/g;
+    let match: RegExpExecArray | null;
+    while ((match = doiRegex.exec(msg.content)) !== null) {
+      const doi = match[1].replace(/[.,;:)]+$/, '');
+      if (!seenDois.has(doi)) {
+        seenDois.add(doi);
+        chips.push({
+          label: `⚡ Expand ${doi} for Methodology`,
+          prompt: `Expand 1 hop deeper on paper ${doi} for methodology`
+        });
+        chips.push({
+          label: `⚡ Expand ${doi} for Benchmarks`,
+          prompt: `Expand 1 hop deeper on paper ${doi} for empirical benchmarks`
+        });
+        chips.push({
+          label: `+ Add ${doi} to Project`,
+          prompt: `Add paper ${doi} to project library`
+        });
+      }
+      if (chips.length >= 6) break;
+    }
+
+    if (msg.citations && msg.citations.length > 0) {
+      for (const cit of msg.citations) {
+        if (!seenDois.has(cit.doi)) {
+          seenDois.add(cit.doi);
+          chips.push({
+            label: `⚡ Expand ${cit.doi}`,
+            prompt: `Expand 1 hop deeper on paper ${cit.doi}`
+          });
+        }
+        if (chips.length >= 6) break;
+      }
+    }
+
+    if (chips.length > 0) {
+      chips.push({
+        label: `📊 Synthesize Current Graph`,
+        prompt: `Synthesize current findings from the citation graph`
+      });
+    }
+
+    return chips;
   }
 }

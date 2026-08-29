@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -55,6 +56,36 @@ class PaperCreate(BaseModel):
     publication_date: str | None = None
     source: str = 'openalex'
     referenced_works: list[str] = Field(default_factory=list)
+    authors: list[AuthorCreate] = Field(default_factory=list)
+    venue: VenueCreate | None = None
+
+    @field_validator('authors', mode='before')
+    @classmethod
+    def parse_authors(cls, v: Any) -> list[AuthorCreate]:
+        if not v:
+            return []
+        result: list[AuthorCreate] = []
+        for item in v:
+            if isinstance(item, str):
+                result.append(AuthorCreate(name=item.strip()))
+            elif isinstance(item, dict):
+                result.append(AuthorCreate(**item))
+            elif isinstance(item, AuthorCreate):
+                result.append(item)
+        return result
+
+    @field_validator('venue', mode='before')
+    @classmethod
+    def parse_venue(cls, v: Any) -> VenueCreate | None:
+        if not v:
+            return None
+        if isinstance(v, str):
+            return VenueCreate(name=v.strip())
+        if isinstance(v, dict):
+            return VenueCreate(**v)
+        if isinstance(v, VenueCreate):
+            return v
+        return None
 
 
 class PaperRead(BaseModel):

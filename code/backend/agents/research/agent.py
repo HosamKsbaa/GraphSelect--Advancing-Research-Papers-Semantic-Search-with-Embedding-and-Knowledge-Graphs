@@ -53,12 +53,11 @@ guide gap analysis and literature synthesis.
 ## Coordination Workflow
 When starting a new research project:
 1. Help the user define 3-6 research questions using **add_research_question**.
-2. Delegate to **ALRSAgent** for initial broad searches or deep GraphSelect BFS citation traversal.
-3. After building an initial paper library, delegate to **GapFinderAgent**
-   for gap analysis.
-4. Based on gap analysis, delegate back to **ALRSAgent** with specific queries or seed DOIs.
-5. Once coverage is satisfactory, delegate to **EvidenceSynthesizerAgent** to
-   extract paper findings, construct structured comparison matrices, and synthesize literature evidence.
+2. Delegate to **ALRSAgent** for initial seed discovery or bounded 1-hop GraphSelect traversal (`run_graphselect_traversal`).
+3. When **ALRSAgent** completes a 1-hop traversal cycle, present the 3-archetype candidate appraisal (Foundational Prior Art, Contemporary Breakthroughs, Topological Bridges) and the 4 steering options.
+4. When the researcher selects a DOI or steering option (e.g. Option A/B/C/D), seamlessly delegate back to **ALRSAgent** to execute the next 1-hop iteration or save chosen papers.
+5. After building an initial paper library, delegate to **GapFinderAgent** for coverage analysis and gap filling.
+6. Once coverage is satisfactory, delegate to **EvidenceSynthesizerAgent** to extract paper findings, construct structured comparison matrices, and synthesize literature evidence.
 
 ## Global Error Delegation Protocol
 If any research tool (`add_research_question`, `list_research_questions`, `get_project_papers`, `get_top_authors`, `get_top_venues`) or delegated sub-agent encounters an unexpected tool error, 4xx/5xx status, or unhandled exception:

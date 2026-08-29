@@ -1,0 +1,409 @@
+<div class="one-hop-inspection-root">
+  <!-- Pre-Flight Summary View -->
+  @if (isPreflight) {
+    <div class="card preflight-summary-card preflight-container animate-fade-in">
+      <div class="preflight-header">
+        <div class="preflight-badge-row">
+          <span class="badge badge-primary">Step 1 (1-Hop BFS)</span>
+          <span class="badge badge-info">Bounded Single-Hop Expansion</span>
+          <span class="badge badge-secondary">Threshold: {{ similarityThreshold.toFixed(2) }}</span>
+        </div>
+        <h2 class="preflight-title">1-Hop Traversal Pre-Flight Verification</h2>
+        <p class="text-secondary">Review the seed paper parameters and active research questions before executing the 1-hop traversal.</p>
+      </div>
+
+      <!-- Seed Paper Summary -->
+      <div class="seed-summary-box">
+        <div class="seed-box-label">Seed Paper Node</div>
+        <div class="preflight-seed-title">{{ seedTitle || seedPaper?.title || 'Selected Seed Paper' }}</div>
+        <div class="seed-meta-row">
+          <span class="preflight-seed-doi mono text-accent">{{ seedDoi || seedPaper?.doi }}</span>
+          @if (seedPaper?.year) {
+            <span class="badge badge-info">{{ seedPaper?.year }}</span>
+          }
+          @if (seedPaper?.cited_by_count !== undefined) {
+            <span class="meta-item text-muted">📊 {{ seedPaper?.cited_by_count }} citations</span>
+          }
+        </div>
+        @if (seedPaper?.authors && seedPaper!.authors.length > 0) {
+          <div class="seed-authors text-muted">
+            {{ getAuthorsSummary(seedPaper!.authors) }}
+          </div>
+        }
+      </div>
+
+      <!-- Research Questions List -->
+      <div class="preflight-questions-section">
+        <h3>Active Project Research Questions ({{ questions.length }})</h3>
+        <div class="preflight-questions-list">
+          @for (q of questions; track $index; let i = $index) {
+            <div class="preflight-question-item">
+              <span class="badge badge-secondary mono">Q{{ i + 1 }}</span>
+              <span class="question-text">{{ q }}</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Trigger Action -->
+      <div class="preflight-actions">
+        <button
+          class="btn btn-primary btn-lg btn-start-1hop"
+          (click)="onStart1Hop()"
+          [disabled]="isRunning"
+        >
+          @if (isRunning) {
+            <span class="animate-pulse">⏳ Executing 1-Hop Expansion...</span>
+          } @else {
+            <span>⚡ Start 1-Hop Traversal</span>
+          }
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- 1-Hop Results Inspection View -->
+  @if (!isPreflight) {
+    <div class="one-hop-inspection-container cycle-results-view animate-fade-in">
+      <!-- Cycle Summary Bar -->
+      <div class="cycle-summary-bar card">
+        <div class="summary-left">
+          <span class="badge badge-success level-badge">Level {{ currentLevel }} Complete</span>
+          <h2 class="cycle-title">1-Hop Candidate Inspection</h2>
+        </div>
+        <div class="summary-stats">
+          <div class="stat-pill stat-discovered">
+            <span class="stat-num">{{ totalDiscovered() }}</span>
+            <span class="stat-label">Discovered</span>
+          </div>
+          <div class="stat-pill stat-new">
+            <span class="stat-num text-accent">{{ totalNew() }}</span>
+            <span class="stat-label">New Nodes</span>
+          </div>
+          <div class="stat-pill stat-avg-similarity">
+            <span class="stat-num">{{ getSimilarityPercent(avgSimilarity()) }}</span>
+            <span class="stat-label">Avg Similarity</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Strategic Multi-Agent Appraisal Banner (if available) -->
+      @if (strategicRecommendation() || steeringOptions().length > 0) {
+        <div class="strategic-appraisal-section card glass animate-fade-in">
+          <div class="appraisal-header">
+            <div class="appraisal-badge">
+              <span class="badge badge-primary">🧠 Multi-Agent Strategic Appraisal</span>
+            </div>
+            <p class="strategic-recommendation-text">{{ strategicRecommendation() }}</p>
+          </div>
+
+          @if (steeringOptions().length > 0) {
+            <div class="steering-options-list">
+              <span class="steering-label text-xs text-muted">Recommended Steering Options:</span>
+              <div class="steering-chips">
+                @for (opt of steeringOptions(); track opt.option_id) {
+                  <button
+                    class="btn-chip btn-steering-option"
+                    (click)="onSteeringOptionClick(opt)"
+                    [title]="opt.rationale"
+                  >
+                    {{ opt.label }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Filter and Sort Toolbar -->
+      <div class="inspection-toolbar card">
+        <div class="toolbar-row">
+          <!-- Direction Filter -->
+          <div class="filter-group">
+            <label class="text-xs text-muted">Direction</label>
+            <select [ngModel]="directionFilter()" (ngModelChange)="directionFilter.set($event)" class="form-select-sm">
+              <option value="all">All Directions</option>
+              <option value="forward">Forward Citations (Citing) ▲</option>
+              <option value="backward">Backward References (Cited) ▼</option>
+            </select>
+          </div>
+
+          <!-- Status Filter -->
+          <div class="filter-group">
+            <label class="text-xs text-muted">Library Status</label>
+            <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)" class="form-select-sm">
+              <option value="all">All Candidates</option>
+              <option value="not_in_library">New (Not in Library)</option>
+              <option value="in_library">Already in Library</option>
+            </select>
+          </div>
+
+          <!-- Partition Filter -->
+          <div class="filter-group">
+            <label class="text-xs text-muted">Archetype</label>
+            <select [ngModel]="partitionFilter()" (ngModelChange)="partitionFilter.set($event)" class="form-select-sm">
+              <option value="all">All Archetypes</option>
+              <option value="foundational_prior_art">🏛️ Foundational Prior Art</option>
+              <option value="contemporary_breakthroughs">🚀 Contemporary Breakthroughs</option>
+              <option value="topological_bridges">🌉 Topological Bridges</option>
+            </select>
+          </div>
+
+          <!-- Sort By -->
+          <div class="filter-group">
+            <label class="text-xs text-muted">Sort By</label>
+            <select [ngModel]="sortBy()" (ngModelChange)="sortBy.set($event)" class="form-select-sm">
+              <option value="similarity">Similarity (High to Low)</option>
+              <option value="pagerank">PageRank (High to Low)</option>
+              <option value="citations">Citations (High to Low)</option>
+              <option value="year">Year (Newest)</option>
+            </select>
+          </div>
+
+          <!-- Search Query Filter -->
+          <div class="filter-group search-filter-group">
+            <label class="text-xs text-muted">Filter Search</label>
+            <input
+              type="text"
+              [ngModel]="filterSearch()"
+              (ngModelChange)="filterSearch.set($event)"
+              placeholder="Search title, DOI, author..."
+              class="form-input-sm"
+            />
+          </div>
+        </div>
+
+        <!-- Secondary Toolbar Row (Threshold & Selection Actions) -->
+        <div class="toolbar-subrow">
+          <div class="threshold-slider-group">
+            <span class="text-xs text-muted">Similarity Cutoff:</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              [ngModel]="activeThreshold()"
+              (ngModelChange)="activeThreshold.set($event)"
+            />
+            <span class="mono text-xs">{{ activeThreshold().toFixed(2) }}</span>
+          </div>
+
+          <div class="selection-actions">
+            <button class="btn btn-secondary btn-xs" (click)="selectAllVisible()">Select All Visible</button>
+            @if (selectedDois().size > 0) {
+              <button class="btn btn-ghost btn-xs" (click)="clearSelection()">Clear Selection ({{ selectedDois().size }})</button>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate Cards List -->
+      <div class="candidate-cards-list">
+        @if (filteredCandidates().length === 0) {
+          <div class="empty-candidates card text-center">
+            <p class="text-secondary">No candidates match the active filters or similarity cutoff.</p>
+          </div>
+        }
+
+        @for (cand of filteredCandidates(); track cand.doi) {
+          <div
+            class="candidate-paper-card paper-card-1hop card"
+            [class.selected]="isCandidateSelected(cand.doi)"
+            [class.in-library]="cand.already_in_library || addedToProjectDois().has(cand.doi)"
+          >
+            <!-- Card Top Header -->
+            <div class="card-header-row">
+              <div class="card-checkbox-and-title">
+                <input
+                  type="checkbox"
+                  [checked]="isCandidateSelected(cand.doi)"
+                  (click)="toggleSelection(cand.doi, $event)"
+                  class="candidate-checkbox"
+                />
+                <div class="title-and-doi">
+                  <h3 class="card-title paper-title">{{ cand.title }}</h3>
+                  <div class="card-meta-line">
+                    <a
+                      [href]="'https://doi.org/' + cand.doi"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="card-doi paper-doi mono text-accent"
+                    >{{ cand.doi }}</a>
+                    @if (cand.year) {
+                      <span class="badge badge-info">{{ cand.year }}</span>
+                    }
+                    @if (cand.venue) {
+                      <span class="badge badge-secondary">{{ cand.venue }}</span>
+                    }
+                    <span class="citation-count-badge badge badge-muted">📊 {{ cand.citation_count }} citations</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Badges Group -->
+              <div class="card-badges-group">
+                <!-- Direction Badge -->
+                @if (cand.direction === 'forward_citation') {
+                  <span class="direction-badge badge-forward badge badge-info" title="Citing Seed Paper">Forward Citation ▲</span>
+                } @else if (cand.direction === 'backward_reference') {
+                  <span class="direction-badge badge-backward badge badge-purple" title="Referenced by Seed Paper">Backward Reference ▼</span>
+                } @else {
+                  <span class="direction-badge badge-both badge badge-secondary" title="Bidirectional Reference">Both Directions ⇄</span>
+                }
+
+                <!-- Similarity Badge -->
+                <span class="similarity-badge badge badge-success font-semibold">
+                  {{ getSimilarityPercent(cand.max_similarity) }} Sim
+                </span>
+
+                <!-- PageRank & Degree Badges -->
+                @if (cand.pagerank_score > 0) {
+                  <span class="pagerank-badge badge badge-muted" title="Local PageRank">PR: {{ cand.pagerank_score.toFixed(3) }}</span>
+                }
+                @if (cand.in_graph_degree > 0) {
+                  <span class="degree-badge badge badge-muted" title="In-Graph Degree">Deg: {{ cand.in_graph_degree }}</span>
+                }
+
+                <!-- Status Badges -->
+                @if (cand.already_in_library || addedToProjectDois().has(cand.doi)) {
+                  <span class="badge-in-library badge badge-success">In Library ✔</span>
+                } @else {
+                  <span class="badge-discovered badge badge-neutral">Discovered Candidate</span>
+                }
+
+                @if (cand.embedding_cached) {
+                  <span class="badge-cached badge badge-info" title="Gemini-embedding-2 vector cached">Embedding Cached ✔</span>
+                }
+
+                <!-- Partition / Archetype Badge -->
+                @if (cand.partition) {
+                  <span class="archetype-badge badge badge-primary">
+                    {{ getPartitionLabel(cand.partition) }}
+                  </span>
+                }
+              </div>
+            </div>
+
+            <!-- Authors Row -->
+            @if (cand.authors && cand.authors.length > 0) {
+              <div class="card-authors text-secondary text-xs">
+                <span>Authors:</span> {{ getAuthorsSummary(cand.authors) }}
+              </div>
+            }
+
+            <!-- Academic Recommendation Rationale (if present) -->
+            @if (cand.recommendation_rationale) {
+              <div class="candidate-rationale-box alert-info text-xs">
+                <strong>Academic Rationale:</strong> {{ cand.recommendation_rationale }}
+              </div>
+            }
+
+            <!-- Per-Research-Question Similarity Score Breakdown -->
+            @if (cand.similarity_scores && cand.similarity_scores.length > 0) {
+              <div class="rq-breakdown">
+                <span class="rq-breakdown-title text-xs text-muted">Per-Question Relevance Breakdown:</span>
+                <div class="rq-scores-grid">
+                  @for (scoreObj of cand.similarity_scores; track $index; let qi = $index) {
+                    <div class="rq-score-bar">
+                      <span class="rq-label text-xs">
+                        {{ scoreObj.question_id || 'Q' + (qi + 1) }}
+                      </span>
+                      <div class="rq-bar-track">
+                        <div
+                          class="rq-bar-fill"
+                          [style.width.%]="(scoreObj.similarity_score ?? scoreObj.score ?? 0) * 100"
+                        ></div>
+                      </div>
+                      <span class="rq-score-val mono text-xs">
+                        {{ getSimilarityPercent(scoreObj.similarity_score ?? scoreObj.score) }}
+                      </span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Collapsible Abstract Section -->
+            @if (cand.abstract_snippet) {
+              <div class="abstract-section">
+                <button
+                  type="button"
+                  class="btn-toggle-abstract btn-ghost btn-xs text-accent"
+                  (click)="toggleAbstract(cand.doi)"
+                >
+                  {{ isAbstractExpanded(cand.doi) ? '▲ Hide Abstract' : '▼ Show Abstract Preview' }}
+                </button>
+                @if (isAbstractExpanded(cand.doi)) {
+                  <div class="abstract-preview text-secondary text-sm animate-fade-in">
+                    {{ cand.abstract_snippet }}
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- Steering Action Buttons -->
+            <div class="card-steering-actions">
+              <!-- Add to Project -->
+              <button
+                type="button"
+                class="btn btn-secondary btn-sm btn-add-project"
+                [class.btn-success]="cand.already_in_library || addedToProjectDois().has(cand.doi)"
+                (click)="onAddCandidateToProject(cand, $event)"
+              >
+                @if (cand.already_in_library || addedToProjectDois().has(cand.doi)) {
+                  <span>✔ In Project</span>
+                } @else {
+                  <span>+ Add to Project</span>
+                }
+              </button>
+
+              <!-- Expand 1 Hop Deeper -->
+              <button
+                type="button"
+                class="btn btn-primary btn-sm btn-expand-hop"
+                (click)="onExpand1HopDeeper(cand, $event)"
+                title="Anchor the next 1-hop BFS traversal on this paper node"
+              >
+                ⚡ Expand 1 Hop Deeper
+              </button>
+
+              <!-- Branch as New Seed -->
+              <button
+                type="button"
+                class="btn btn-outline btn-sm btn-branch-seed"
+                (click)="onBranchAsSeed(cand, $event)"
+                title="Restart search with this candidate as the primary root seed"
+              >
+                🌱 Branch to New Seed
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Bottom Traversal Cycle Controls Bar -->
+      <div class="cycle-bottom-controls card">
+        <div class="bottom-left">
+          <button class="btn btn-secondary btn-reset-search" (click)="onReset()">
+            ↻ Start Over
+          </button>
+          @if (selectedDois().size > 0) {
+            <button class="btn btn-primary btn-batch-expand" (click)="onBatchExpandSelected()">
+              ⚡ Batch Expand Selected ({{ selectedDois().size }})
+            </button>
+          }
+        </div>
+
+        <div class="bottom-right">
+          <button
+            class="btn btn-primary btn-lg btn-conclude"
+            (click)="onConcludeAndSynthesize()"
+          >
+            📊 Conclude & Synthesize →
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

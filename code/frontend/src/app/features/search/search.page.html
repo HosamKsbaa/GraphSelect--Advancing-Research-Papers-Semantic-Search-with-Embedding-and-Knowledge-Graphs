@@ -90,7 +90,7 @@
     </div>
   }
 
-  <!-- Step 2: Research Questions -->
+  <!-- Step 2: Research Questions & Pre-Flight Settings -->
   @if (currentStep === 2) {
     <div class="card step-card animate-fade-in">
       <div class="selected-paper-badge">
@@ -155,9 +155,26 @@
         </div>
       </div>
 
+      <!-- Pre-Flight Summary Card -->
+      <div class="preflight-summary-card preflight-container card glass" style="margin-top: var(--space-5);">
+        <div class="preflight-badge-row" style="display: flex; gap: var(--space-2); margin-bottom: var(--space-2);">
+          <span class="badge badge-primary">Step 1 (1-Hop BFS)</span>
+          <span class="badge badge-secondary">Threshold: {{ similarityThreshold.toFixed(2) }}</span>
+        </div>
+        <div class="preflight-seed-title" style="font-size: var(--text-md); font-weight: 600; margin-bottom: var(--space-1);">
+          {{ selectedSeedPaper?.title || searchTitle }}
+        </div>
+        <div class="preflight-seed-doi mono text-accent text-xs" style="margin-bottom: var(--space-2);">
+          {{ selectedDoi }}
+        </div>
+        <div class="preflight-active-rqs text-xs text-secondary">
+          <strong>Active Questions:</strong> {{ questions.filter(q => q.trim().length > 0).join('; ') }}
+        </div>
+      </div>
+
       <div class="step-actions">
         <button class="btn-secondary" (click)="currentStep = 1">← Back</button>
-        <button class="btn-primary" (click)="startSearch()" [disabled]="searching">
+        <button class="btn-primary btn-start-1hop" (click)="startSearch()" [disabled]="searching">
           @if (searching) {
             <span class="animate-pulse">Starting...</span>
           } @else {
@@ -168,7 +185,7 @@
     </div>
   }
 
-  <!-- Step 3: BFS Crawl Progress -->
+  <!-- Step 3: BFS Crawl Progress & 1-Hop Results Inspection -->
   @if (currentStep === 3) {
     <div class="card step-card animate-fade-in">
       <!-- Header -->
@@ -236,6 +253,33 @@
               [class.badge-warning]="streamStatus === 'failed'"
             >{{ streamStatus | uppercase }}</span>
           </div>
+        </div>
+      }
+
+      <!-- Interactive 1-Hop Inspection Component (when candidates are discovered or stream is active) -->
+      @if (cycleCandidates.length > 0 || cycleResults) {
+        <div style="margin-top: var(--space-6);">
+          <alrs-one-hop-inspection
+            [seedDoi]="selectedDoi"
+            [seedTitle]="selectedSeedPaper?.title || searchTitle"
+            [seedPaper]="selectedSeedPaper"
+            [questions]="questions"
+            [similarityThreshold]="similarityThreshold"
+            [candidates]="cycleCandidates"
+            [expansionResult]="cycleResults"
+            [currentLevel]="currentCycleLevel"
+            [isPreflight]="false"
+            [isPaused]="isCyclePaused"
+            [sessionId]="searchResult?.session_id || ''"
+            [projects]="projects"
+            [selectedProjectId]="selectedProjectId"
+            (addToProject)="handleAddToProject($event)"
+            (expand1Hop)="handleExpand1Hop($event)"
+            (branchSeed)="handleBranchSeed($event)"
+            (concludeSynthesize)="handleConcludeSynthesize()"
+            (batchExpand)="handleBatchExpand($event)"
+            (resetSearch)="resetSearch()"
+          ></alrs-one-hop-inspection>
         </div>
       }
 

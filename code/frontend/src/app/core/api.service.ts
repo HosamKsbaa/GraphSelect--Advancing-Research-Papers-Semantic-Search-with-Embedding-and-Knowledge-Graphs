@@ -17,6 +17,62 @@ export interface PaperSummary {
   authors: string[];
 }
 
+export interface CandidateSimilarityScore {
+  question_id?: string;
+  question?: string;
+  question_text?: string;
+  similarity_score?: number;
+  score?: number;
+}
+
+export interface CandidatePaperState {
+  doi: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string | null;
+  abstract_snippet: string;
+  direction: 'forward_citation' | 'backward_reference' | 'both' | string;
+  citation_count: number;
+  in_graph_degree: number;
+  similarity_scores: CandidateSimilarityScore[];
+  max_similarity: number;
+  mean_similarity: number;
+  already_in_library: boolean;
+  embedding_cached: boolean;
+  pagerank_score: number;
+  partition?: 'foundational_prior_art' | 'contemporary_breakthroughs' | 'topological_bridges' | string | null;
+  archetype_scores?: Record<string, number>;
+  recommendation_rationale?: string;
+  primary_rq?: string;
+}
+
+export interface SteeringActionOption {
+  option_id: string;
+  action_type: 'expand_deeper' | 'add_to_library' | 'branch_seed' | 'conclude' | string;
+  target_doi?: string | null;
+  target_title?: string | null;
+  label: string;
+  rationale: string;
+}
+
+export interface OneHopExpansionResult {
+  seed_doi: string;
+  seed_title: string;
+  cycle_level: number;
+  total_discovered: number;
+  total_new: number;
+  forward_count?: number;
+  backward_count?: number;
+  both_count?: number;
+  candidates: CandidatePaperState[];
+  new_dois?: string[];
+  traversal_summary?: string[];
+  errors?: string[];
+  strategic_recommendation?: string;
+  steering_options?: SteeringActionOption[];
+}
+
 export interface SearchRequest {
   seed_doi: string | null;
   seed_title: string | null;
@@ -89,6 +145,13 @@ export class ApiService {
 
   startSearch(request: SearchRequest): Observable<SearchResponse> {
     return this.http.post<SearchResponse>(`${this.baseUrl}/search/start`, request);
+  }
+
+  enqueuePapers(sessionId: string, dois: string[]): Observable<{ enqueued: number; status: string; session_id: string }> {
+    return this.http.post<{ enqueued: number; status: string; session_id: string }>(
+      `${this.baseUrl}/search/${sessionId}/enqueue`,
+      dois
+    );
   }
 
   // --- Sessions ---
