@@ -17,9 +17,13 @@ if TYPE_CHECKING:
     from core.logging.log_service import LogService
     from core.paper_retrieval.service import PaperRetrievalService
     from features.embedding.providers.base import EmbeddingProvider
+    from features.graphrag.service import EpistemicGraphService
 
 
 _ALIAS_MAP = {
+    "graphrag_service": "graphrag",
+    "graphrag": "graphrag",
+    "epistemic_graph_service": "graphrag",
     "openalex_service": "openalex",
     "openalex": "openalex",
     "neo4j_service": "neo4j",
@@ -83,6 +87,7 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
     """
 
     _neo4j: Neo4jService
+    _graphrag: EpistemicGraphService
     _openalex: OpenAlexService
     _paper_retrieval: PaperRetrievalService
     _llm: LLMService
@@ -293,6 +298,9 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
             )
             cls._crawler_service = crawler
             cls._ranking_service = ranking
+
+            from features.graphrag.service import EpistemicGraphService
+            cls._graphrag = EpistemicGraphService(neo4j=neo4j)
 
             logger.info("ServiceRegistry: on-demand initialization complete")
         except Exception as e:

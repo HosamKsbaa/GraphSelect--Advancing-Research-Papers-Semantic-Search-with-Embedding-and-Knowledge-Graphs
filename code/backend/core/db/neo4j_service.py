@@ -1,8 +1,10 @@
 from __future__ import annotations
+import asyncio
 import logging
+import random
 from typing import Any  # Only for neo4j Record type boundary
 from neo4j import AsyncGraphDatabase, AsyncDriver
-from neo4j.exceptions import ServiceUnavailable, AuthError
+from neo4j.exceptions import ServiceUnavailable, AuthError, TransientError
 
 from features.retrieval.models import PaperCreate
 
@@ -45,24 +47,70 @@ class Neo4jService:
         query: str,
         parameters: dict[str, object] | None = None,
         database: str = 'neo4j',
+        max_retries: int = 3,
+        base_delay: float = 0.05,
+        max_delay: float = 0.5,
     ) -> list[dict[str, Any]]:  # Any: neo4j Record values are dynamically typed
-        """Execute a read-only Cypher query and return results as dicts."""
-        async with self.driver.session(database=database) as session:
-            result = await session.run(query, parameters or {})
-            records = await result.data()
-            return records  # type: ignore[return-value]
+        """Execute a read-only Cypher query with transient retry resilience."""
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.driver.session(database=database) as session:
+                    result = await session.run(query, parameters or {})
+                    records = await result.data()
+                    return records  # type: ignore[return-value]
+            except (TransientError, ServiceUnavailable) as exc:
+                if attempt == max_retries:
+                    logger.error("Exhausted %d retries executing Cypher read: %s", max_retries, exc)
+                    raise exc
+                delay = min(max_delay, base_delay * (2 ** attempt))
+                jittered = random.uniform(0.5 * delay, delay)
+                logger.warning(
+                    "Transient error in Cypher read (attempt %d/%d): %s. Retrying in %.3fs...",
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                    jittered,
+                )
+                await asyncio.sleep(jittered)
 
     async def execute_write(
         self,
         query: str,
         parameters: dict[str, object] | None = None,
         database: str = 'neo4j',
+        max_retries: int = 5,
+        base_delay: float = 0.05,
+        max_delay: float = 1.0,
     ) -> list[dict[str, Any]]:  # Any: neo4j Record values are dynamically typed
-        """Execute a write Cypher query within a transaction."""
-        async with self.driver.session(database=database) as session:
-            result = await session.run(query, parameters or {})
-            records = await result.data()
-            return records  # type: ignore[return-value]
+        """Execute a write Cypher query with automatic retry on transient errors/deadlocks.
+
+        Retries on TransientError (e.g. DeadlockDetected) and ServiceUnavailable using
+        exponential backoff with full jitter to resolve concurrency lock contention.
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                async with self.driver.session(database=database) as session:
+                    result = await session.run(query, parameters or {})
+                    records = await result.data()
+                    return records  # type: ignore[return-value]
+            except (TransientError, ServiceUnavailable) as exc:
+                if attempt == max_retries:
+                    logger.error(
+                        "Exhausted %d retries executing Cypher write due to transient error: %s",
+                        max_retries,
+                        exc,
+                    )
+                    raise exc
+                delay = min(max_delay, base_delay * (2 ** attempt))
+                jittered = random.uniform(0.5 * delay, delay)
+                logger.warning(
+                    "Transient error in Cypher write (attempt %d/%d): %s. Retrying in %.3fs...",
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                    jittered,
+                )
+                await asyncio.sleep(jittered)
 
     async def execute_query(
         self,
