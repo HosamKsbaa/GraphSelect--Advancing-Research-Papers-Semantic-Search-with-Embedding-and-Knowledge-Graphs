@@ -41,6 +41,8 @@ Thumbs.db
 
 # Test Screenshots
 e2e/screenshots/
+old/e2e_selenium/screenshots/
+e2e_playwright/test-results/
 
 logs/*
 
