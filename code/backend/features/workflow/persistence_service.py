@@ -219,13 +219,6 @@ class ProjectPersistenceService:
 
         if state_container is not None and hasattr(state_container, "__setitem__"):
             dumped = state.model_dump(mode="json")
-            stages_dict = {
-                "stage_1_research": dumped.get("stage_1_research", {}),
-                "stage_2_analysis": dumped.get("stage_2_analysis", {}),
-                "stage_3_planning": dumped.get("stage_3_planning", {}),
-                "stage_4_writing": dumped.get("stage_4_writing", {}),
-                "stage_5_export": dumped.get("stage_5_export", {}),
-            }
             current = None
             if hasattr(state_container, "get"):
                 current = state_container.get("project_state")
@@ -234,13 +227,6 @@ class ProjectPersistenceService:
             items_to_set = [
                 ("project_id", str(state.project_id)),
                 ("project_state", target_ps),
-                ("stages", stages_dict),
-                ("stage_1_research", stages_dict["stage_1_research"]),
-                ("stage_2_analysis", stages_dict["stage_2_analysis"]),
-                ("stage_3_planning", stages_dict["stage_3_planning"]),
-                ("stage_4_writing", stages_dict["stage_4_writing"]),
-                ("stage_5_export", stages_dict["stage_5_export"]),
-                ("message_board", dumped.get("message_board", [])),
             ]
             for k, v in items_to_set:
                 try:

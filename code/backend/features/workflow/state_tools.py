@@ -139,21 +139,8 @@ async def _resolve_project_state(
                 if state_container is not None and hasattr(state_container, "__setitem__"):
                     try:
                         dumped = loaded.model_dump(mode="json")
-                        stages_dict = {
-                            "stage_1_research": dumped.get("stage_1_research", {}),
-                            "stage_2_analysis": dumped.get("stage_2_analysis", {}),
-                            "stage_3_planning": dumped.get("stage_3_planning", {}),
-                            "stage_4_writing": dumped.get("stage_4_writing", {}),
-                            "stage_5_export": dumped.get("stage_5_export", {}),
-                        }
                         state_container["project_state"] = dumped if original_was_dict else loaded
-                        state_container["stages"] = stages_dict
-                        state_container["stage_1_research"] = stages_dict["stage_1_research"]
-                        state_container["stage_2_analysis"] = stages_dict["stage_2_analysis"]
-                        state_container["stage_3_planning"] = stages_dict["stage_3_planning"]
-                        state_container["stage_4_writing"] = stages_dict["stage_4_writing"]
-                        state_container["stage_5_export"] = stages_dict["stage_5_export"]
-                        state_container["message_board"] = dumped.get("message_board", [])
+                        state_container["project_id"] = pid_str
                     except Exception:
                         pass
                 return loaded, agent_name or "system", False
@@ -175,21 +162,8 @@ async def _resolve_project_state(
                     if state_container is not None and hasattr(state_container, "__setitem__"):
                         try:
                             dumped = state_obj.model_dump(mode="json")
-                            stages_dict = {
-                                "stage_1_research": dumped.get("stage_1_research", {}),
-                                "stage_2_analysis": dumped.get("stage_2_analysis", {}),
-                                "stage_3_planning": dumped.get("stage_3_planning", {}),
-                                "stage_4_writing": dumped.get("stage_4_writing", {}),
-                                "stage_5_export": dumped.get("stage_5_export", {}),
-                            }
                             state_container["project_state"] = dumped if original_was_dict else state_obj
-                            state_container["stages"] = stages_dict
-                            state_container["stage_1_research"] = stages_dict["stage_1_research"]
-                            state_container["stage_2_analysis"] = stages_dict["stage_2_analysis"]
-                            state_container["stage_3_planning"] = stages_dict["stage_3_planning"]
-                            state_container["stage_4_writing"] = stages_dict["stage_4_writing"]
-                            state_container["stage_5_export"] = stages_dict["stage_5_export"]
-                            state_container["message_board"] = dumped.get("message_board", [])
+                            state_container["project_id"] = pid_str
                         except Exception:
                             pass
                     return state_obj, agent_name or "system", False
@@ -219,26 +193,12 @@ def _sync_project_state(
             state_container = tool_context
 
         dumped = state.model_dump(mode="json")
-        stages_dict = {
-            "stage_1_research": dumped.get("stage_1_research", {}),
-            "stage_2_analysis": dumped.get("stage_2_analysis", {}),
-            "stage_3_planning": dumped.get("stage_3_planning", {}),
-            "stage_4_writing": dumped.get("stage_4_writing", {}),
-            "stage_5_export": dumped.get("stage_5_export", {}),
-        }
         if state_container is not None and hasattr(state_container, "__setitem__"):
             state_dict: Any = state_container
             if original_was_dict:
                 state_dict["project_state"] = dumped
             else:
                 state_dict["project_state"] = state
-            state_dict["stages"] = stages_dict
-            state_dict["stage_1_research"] = stages_dict["stage_1_research"]
-            state_dict["stage_2_analysis"] = stages_dict["stage_2_analysis"]
-            state_dict["stage_3_planning"] = stages_dict["stage_3_planning"]
-            state_dict["stage_4_writing"] = stages_dict["stage_4_writing"]
-            state_dict["stage_5_export"] = stages_dict["stage_5_export"]
-            state_dict["message_board"] = dumped.get("message_board", [])
             try:
                 state_dict["project_id"] = str(state.project_id)
             except Exception:

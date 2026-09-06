@@ -183,22 +183,7 @@ def create_orchestrator_agent(
                             logger.debug("Auto-hydrate project lookup failed: %s", e)
 
                     if p_state is not None:
-                        dumped = p_state.model_dump(mode="json")
-                        stages_dict = {
-                            "stage_1_research": dumped.get("stage_1_research", {}),
-                            "stage_2_analysis": dumped.get("stage_2_analysis", {}),
-                            "stage_3_planning": dumped.get("stage_3_planning", {}),
-                            "stage_4_writing": dumped.get("stage_4_writing", {}),
-                            "stage_5_export": dumped.get("stage_5_export", {}),
-                        }
-                        state_container["project_state"] = dumped
-                        state_container["stages"] = stages_dict
-                        state_container["stage_1_research"] = stages_dict["stage_1_research"]
-                        state_container["stage_2_analysis"] = stages_dict["stage_2_analysis"]
-                        state_container["stage_3_planning"] = stages_dict["stage_3_planning"]
-                        state_container["stage_4_writing"] = stages_dict["stage_4_writing"]
-                        state_container["stage_5_export"] = stages_dict["stage_5_export"]
-                        state_container["message_board"] = dumped.get("message_board", [])
+                        state_container["project_state"] = p_state.model_dump(mode="json")
         except Exception as exc:
             logger.debug("Auto-hydrate state callback error: %s", exc)
         return None

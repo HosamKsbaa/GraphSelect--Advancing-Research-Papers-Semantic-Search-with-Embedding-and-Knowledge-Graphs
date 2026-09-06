@@ -71,23 +71,8 @@ async def create_new_project(
 
         # Set the active project and full state in tool context state
         if tool_context is not None and hasattr(tool_context, "state") and tool_context.state is not None:
-            dumped = p_state.model_dump(mode="json")
-            stages_dict = {
-                "stage_1_research": dumped.get("stage_1_research", {}),
-                "stage_2_analysis": dumped.get("stage_2_analysis", {}),
-                "stage_3_planning": dumped.get("stage_3_planning", {}),
-                "stage_4_writing": dumped.get("stage_4_writing", {}),
-                "stage_5_export": dumped.get("stage_5_export", {}),
-            }
             tool_context.state["project_id"] = project.id
-            tool_context.state["project_state"] = dumped
-            tool_context.state["stages"] = stages_dict
-            tool_context.state["stage_1_research"] = stages_dict["stage_1_research"]
-            tool_context.state["stage_2_analysis"] = stages_dict["stage_2_analysis"]
-            tool_context.state["stage_3_planning"] = stages_dict["stage_3_planning"]
-            tool_context.state["stage_4_writing"] = stages_dict["stage_4_writing"]
-            tool_context.state["stage_5_export"] = stages_dict["stage_5_export"]
-            tool_context.state["message_board"] = dumped.get("message_board", [])
+            tool_context.state["project_state"] = p_state.model_dump(mode="json")
 
         return {
             "status": "created",
@@ -149,23 +134,8 @@ async def select_project(
 
         # Set the active project and full state in tool context state
         if tool_context is not None and hasattr(tool_context, "state") and tool_context.state is not None:
-            dumped = p_state.model_dump(mode="json")
-            stages_dict = {
-                "stage_1_research": dumped.get("stage_1_research", {}),
-                "stage_2_analysis": dumped.get("stage_2_analysis", {}),
-                "stage_3_planning": dumped.get("stage_3_planning", {}),
-                "stage_4_writing": dumped.get("stage_4_writing", {}),
-                "stage_5_export": dumped.get("stage_5_export", {}),
-            }
             tool_context.state["project_id"] = project.id
-            tool_context.state["project_state"] = dumped
-            tool_context.state["stages"] = stages_dict
-            tool_context.state["stage_1_research"] = stages_dict["stage_1_research"]
-            tool_context.state["stage_2_analysis"] = stages_dict["stage_2_analysis"]
-            tool_context.state["stage_3_planning"] = stages_dict["stage_3_planning"]
-            tool_context.state["stage_4_writing"] = stages_dict["stage_4_writing"]
-            tool_context.state["stage_5_export"] = stages_dict["stage_5_export"]
-            tool_context.state["message_board"] = dumped.get("message_board", [])
+            tool_context.state["project_state"] = p_state.model_dump(mode="json")
 
         return {
             "status": "activated",
