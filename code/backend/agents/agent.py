@@ -34,7 +34,13 @@ from agents.debugger.agent import (
     create_debugger_agent,
     debugger_agent,
 )
-from agents.orchestrator.agent import create_orchestrator_agent
+from agents.orchestrator.agent import ProjectAgent, create_orchestrator_agent
+from features.workflow.state_tools import (
+    get_project_state,
+    post_to_message_board,
+    read_message_board,
+    update_stage_substate,
+)
 
 
 def create_root_agent() -> LlmAgent:
@@ -54,15 +60,22 @@ def create_root_agent() -> LlmAgent:
 
 # ADK entry point — this is what ADK looks for when loading the agent
 root_agent = create_root_agent()
+project_agent = root_agent
 
 import sys
 agent = sys.modules[__name__]
 
 __all__ = [
+    "ProjectAgent",
     "create_root_agent",
     "root_agent",
+    "project_agent",
     "agent",
     "DebuggerAgent",
     "debugger_agent",
     "create_debugger_agent",
+    "get_project_state",
+    "post_to_message_board",
+    "read_message_board",
+    "update_stage_substate",
 ]

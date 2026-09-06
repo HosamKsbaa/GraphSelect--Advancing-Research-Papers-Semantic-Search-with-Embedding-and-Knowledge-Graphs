@@ -19,6 +19,12 @@ from agents.planner.tools.outline_tools import (
     get_ranked_papers,
 )
 from config import get_settings
+from features.workflow.state_tools import (
+    get_project_state,
+    post_to_message_board,
+    read_message_board,
+    update_stage_substate,
+)
 
 _settings = get_settings()
 
@@ -70,11 +76,27 @@ def create_planner_agent() -> LlmAgent:
             "ranked papers and research questions."
         ),
         instruction=PLANNER_INSTRUCTION,
-        tools=[get_project_summary, get_ranked_papers, generate_outline],
+        tools=[
+            get_project_summary,
+            get_ranked_papers,
+            generate_outline,
+            get_project_state,
+            post_to_message_board,
+            read_message_board,
+            update_stage_substate,
+        ],
         output_key="planner_result",
     )
 
 
+PlannerAgent = create_planner_agent
 planner_agent = create_planner_agent()
+
+__all__ = [
+    "PLANNER_INSTRUCTION",
+    "PlannerAgent",
+    "create_planner_agent",
+    "planner_agent",
+]
 
 

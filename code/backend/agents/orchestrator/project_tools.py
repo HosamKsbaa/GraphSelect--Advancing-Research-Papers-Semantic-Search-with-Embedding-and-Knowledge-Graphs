@@ -52,9 +52,42 @@ async def create_new_project(
 
         project = await create_project(data, mysql, neo4j)
 
-        # Set the active project in tool context state
+        # Initialize and persist authoritative ProjectState
+        from features.workflow.state_models import ProjectState
+        from features.workflow.persistence_service import ProjectPersistenceService
+
+        p_state = ProjectState(
+            project_id=project.id,
+            name=project.name,
+            topic=project.topic or "",
+            target_level=getattr(project, "target_level", "master") or "master",
+            token_budget=getattr(project, "token_budget", 500000) or 500000,
+        )
+        try:
+            persistence = ProjectPersistenceService.get_instance()
+            await persistence.save_state_async(p_state, tool_context)
+        except Exception as p_err:
+            logger.debug("Project state persistence deferred: %s", p_err)
+
+        # Set the active project and full state in tool context state
         if tool_context is not None and hasattr(tool_context, "state") and tool_context.state is not None:
+            dumped = p_state.model_dump(mode="json")
+            stages_dict = {
+                "stage_1_research": dumped.get("stage_1_research", {}),
+                "stage_2_analysis": dumped.get("stage_2_analysis", {}),
+                "stage_3_planning": dumped.get("stage_3_planning", {}),
+                "stage_4_writing": dumped.get("stage_4_writing", {}),
+                "stage_5_export": dumped.get("stage_5_export", {}),
+            }
             tool_context.state["project_id"] = project.id
+            tool_context.state["project_state"] = dumped
+            tool_context.state["stages"] = stages_dict
+            tool_context.state["stage_1_research"] = stages_dict["stage_1_research"]
+            tool_context.state["stage_2_analysis"] = stages_dict["stage_2_analysis"]
+            tool_context.state["stage_3_planning"] = stages_dict["stage_3_planning"]
+            tool_context.state["stage_4_writing"] = stages_dict["stage_4_writing"]
+            tool_context.state["stage_5_export"] = stages_dict["stage_5_export"]
+            tool_context.state["message_board"] = dumped.get("message_board", [])
 
         return {
             "status": "created",
@@ -95,9 +128,44 @@ async def select_project(
         if project is None:
             return {"error": f"Project with ID '{project_id}' not found."}
 
-        # Set the active project in tool context state
+        # Load or initialize authoritative ProjectState
+        from features.workflow.state_models import ProjectState
+        from features.workflow.persistence_service import ProjectPersistenceService
+
+        persistence = ProjectPersistenceService.get_instance()
+        p_state = await persistence.load_state(project.id, tool_context)
+        if p_state is None:
+            p_state = ProjectState(
+                project_id=project.id,
+                name=project.name,
+                topic=project.topic or "",
+                target_level=getattr(project, "target_level", "master") or "master",
+                token_budget=getattr(project, "token_budget", 500000) or 500000,
+            )
+            try:
+                await persistence.save_state_async(p_state, tool_context)
+            except Exception as p_err:
+                logger.debug("Project state initialization save deferred: %s", p_err)
+
+        # Set the active project and full state in tool context state
         if tool_context is not None and hasattr(tool_context, "state") and tool_context.state is not None:
+            dumped = p_state.model_dump(mode="json")
+            stages_dict = {
+                "stage_1_research": dumped.get("stage_1_research", {}),
+                "stage_2_analysis": dumped.get("stage_2_analysis", {}),
+                "stage_3_planning": dumped.get("stage_3_planning", {}),
+                "stage_4_writing": dumped.get("stage_4_writing", {}),
+                "stage_5_export": dumped.get("stage_5_export", {}),
+            }
             tool_context.state["project_id"] = project.id
+            tool_context.state["project_state"] = dumped
+            tool_context.state["stages"] = stages_dict
+            tool_context.state["stage_1_research"] = stages_dict["stage_1_research"]
+            tool_context.state["stage_2_analysis"] = stages_dict["stage_2_analysis"]
+            tool_context.state["stage_3_planning"] = stages_dict["stage_3_planning"]
+            tool_context.state["stage_4_writing"] = stages_dict["stage_4_writing"]
+            tool_context.state["stage_5_export"] = stages_dict["stage_5_export"]
+            tool_context.state["message_board"] = dumped.get("message_board", [])
 
         return {
             "status": "activated",

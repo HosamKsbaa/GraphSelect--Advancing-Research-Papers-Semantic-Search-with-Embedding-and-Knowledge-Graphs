@@ -1,4 +1,13 @@
-"""Writing agent package for literature review drafting, reviewing, and export."""
-from __future__ import annotations
+from agents.writing.agent import (
+    WriterAgent,
+    create_writer_agent,
+    writer_agent,
+    writer_reviewer_loop,
+)
 
-__all__: list[str] = []
+__all__: list[str] = [
+    "WriterAgent",
+    "create_writer_agent",
+    "writer_agent",
+    "writer_reviewer_loop",
+]

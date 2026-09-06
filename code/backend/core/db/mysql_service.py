@@ -115,6 +115,12 @@ DDL_STATEMENTS: list[str] = [
         CONSTRAINT fk_chat_messages_chat FOREIGN KEY (chat_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
         CONSTRAINT fk_chat_messages_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )''',
+    '''CREATE TABLE IF NOT EXISTS project_states (
+        project_id VARCHAR(36) PRIMARY KEY,
+        state JSON NOT NULL,
+        version INT DEFAULT 1,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )''',
 ]
 
 

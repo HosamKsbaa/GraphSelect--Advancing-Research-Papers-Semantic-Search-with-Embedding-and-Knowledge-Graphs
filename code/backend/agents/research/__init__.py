@@ -6,7 +6,7 @@ and their shared tool functions and data models.
 """
 from __future__ import annotations
 
-from agents.research.agent import create_research_agent
+from agents.research.agent import ResearchAgent, create_research_agent
 from agents.research.alrs_agent import create_alrs_agent
 from agents.research.evidence_synthesizer import (
     create_evidence_synthesizer_agent,
@@ -20,6 +20,7 @@ from agents.research.models import (
 )
 
 __all__ = [
+    "ResearchAgent",
     "create_research_agent",
     "create_alrs_agent",
     "create_gap_finder_agent",

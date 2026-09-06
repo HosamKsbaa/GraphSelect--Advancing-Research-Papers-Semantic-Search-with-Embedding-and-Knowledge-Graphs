@@ -20,6 +20,12 @@ from agents.writing.drafting_agent import create_drafting_agent, drafting_agent
 from agents.writing.reviewer_agent import create_reviewer_agent, reviewer_agent
 from agents.writing.tools.export_tools import export_bibtex, export_latex, export_citation_graph
 from config import get_settings
+from features.workflow.state_tools import (
+    get_project_state,
+    post_to_message_board,
+    read_message_board,
+    update_stage_substate,
+)
 
 _settings = get_settings()
 
@@ -98,12 +104,29 @@ def create_writer_agent() -> LlmAgent:
         ),
         instruction=WRITER_INSTRUCTION,
         sub_agents=[loop],
-        tools=[export_bibtex, export_latex, export_citation_graph],
+        tools=[
+            export_bibtex,
+            export_latex,
+            export_citation_graph,
+            get_project_state,
+            post_to_message_board,
+            read_message_board,
+            update_stage_substate,
+        ],
         output_key="writer_result",
     )
 
 
+WriterAgent = create_writer_agent
 writer_agent = create_writer_agent()
 writer_reviewer_loop = writer_agent.sub_agents[0]
+
+__all__ = [
+    "WRITER_INSTRUCTION",
+    "WriterAgent",
+    "create_writer_agent",
+    "writer_agent",
+    "writer_reviewer_loop",
+]
 
 

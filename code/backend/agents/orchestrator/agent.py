@@ -20,6 +20,12 @@ from agents.planner.agent import create_planner_agent
 from agents.research.agent import create_research_agent
 from agents.writing.agent import create_writer_agent
 from config import get_settings
+from features.workflow.state_tools import (
+    get_project_state,
+    post_to_message_board,
+    read_message_board,
+    update_stage_substate,
+)
 
 _settings = get_settings()
 
@@ -142,6 +148,77 @@ def create_orchestrator_agent(
     debugger_agent = create_debugger_agent()
 
     current_settings = get_settings()
+
+    async def _auto_hydrate_state_callback(
+        callback_context: Any,
+        llm_request: Any,
+    ) -> Any:
+        """Ensure project_state is hydrated into session.state if project_id is present."""
+        try:
+            state_container = getattr(callback_context, "state", None)
+            if state_container is not None and hasattr(state_container, "get"):
+                project_id = state_container.get("project_id")
+                if project_id and not state_container.get("project_state"):
+                    from features.workflow.persistence_service import ProjectPersistenceService
+                    from features.workflow.state_models import ProjectState
+
+                    svc = ProjectPersistenceService.get_instance()
+                    p_state = await svc.load_state(str(project_id), callback_context)
+                    if p_state is None:
+                        try:
+                            from agents._service_registry import ServiceRegistry
+                            from projects.service import get_project
+                            mysql = ServiceRegistry.log_service._mysql
+                            p = await get_project(str(project_id), mysql)
+                            if p:
+                                p_state = ProjectState(
+                                    project_id=p.id,
+                                    name=p.name,
+                                    topic=p.topic or "",
+                                    target_level=getattr(p, "target_level", "master") or "master",
+                                    token_budget=getattr(p, "token_budget", 500000) or 500000,
+                                )
+                                await svc.save_state_async(p_state, callback_context)
+                        except Exception as e:
+                            logger.debug("Auto-hydrate project lookup failed: %s", e)
+
+                    if p_state is not None:
+                        dumped = p_state.model_dump(mode="json")
+                        stages_dict = {
+                            "stage_1_research": dumped.get("stage_1_research", {}),
+                            "stage_2_analysis": dumped.get("stage_2_analysis", {}),
+                            "stage_3_planning": dumped.get("stage_3_planning", {}),
+                            "stage_4_writing": dumped.get("stage_4_writing", {}),
+                            "stage_5_export": dumped.get("stage_5_export", {}),
+                        }
+                        state_container["project_state"] = dumped
+                        state_container["stages"] = stages_dict
+                        state_container["stage_1_research"] = stages_dict["stage_1_research"]
+                        state_container["stage_2_analysis"] = stages_dict["stage_2_analysis"]
+                        state_container["stage_3_planning"] = stages_dict["stage_3_planning"]
+                        state_container["stage_4_writing"] = stages_dict["stage_4_writing"]
+                        state_container["stage_5_export"] = stages_dict["stage_5_export"]
+                        state_container["message_board"] = dumped.get("message_board", [])
+        except Exception as exc:
+            logger.debug("Auto-hydrate state callback error: %s", exc)
+        return None
+
+    def _attach_callback_recursively(agent: Any, cb: Any) -> None:
+        if isinstance(agent, LlmAgent):
+            existing = getattr(agent, "before_model_callback", None)
+            if existing is None:
+                agent.before_model_callback = cb
+            elif isinstance(existing, list):
+                if cb not in existing:
+                    existing.append(cb)
+            else:
+                agent.before_model_callback = [existing, cb]
+        for sub in getattr(agent, "sub_agents", []):
+            _attach_callback_recursively(sub, cb)
+
+    for agent_inst in [research_agent, planner_agent, writer_agent, debugger_agent]:
+        _attach_callback_recursively(agent_inst, _auto_hydrate_state_callback)
+
     kwargs: dict[str, Any] = {
         "name": "ProjectAgent",
         "model": getattr(current_settings, "adk_tier1_model", current_settings.adk_model_name),
@@ -153,7 +230,16 @@ def create_orchestrator_agent(
         ),
         "instruction": ORCHESTRATOR_INSTRUCTION,
         "sub_agents": [research_agent, planner_agent, writer_agent, debugger_agent],
-        "tools": [create_new_project, select_project, list_projects],
+        "before_model_callback": _auto_hydrate_state_callback,
+        "tools": [
+            create_new_project,
+            select_project,
+            list_projects,
+            get_project_state,
+            post_to_message_board,
+            read_message_board,
+            update_stage_substate,
+        ],
     }
 
     # Attach tracing callbacks with token budget enforcement
@@ -168,10 +254,15 @@ def create_orchestrator_agent(
         kwargs["after_model_callback"] = callbacks["after_model_callback"]
         kwargs["after_tool_callback"] = callbacks["after_tool_callback"]
 
-    return LlmAgent(**kwargs)
+    root_agent = LlmAgent(**kwargs)
+    _attach_callback_recursively(root_agent, _auto_hydrate_state_callback)
+    return root_agent
 
+
+ProjectAgent = create_orchestrator_agent
 
 __all__ = [
     "ORCHESTRATOR_INSTRUCTION",
+    "ProjectAgent",
     "create_orchestrator_agent",
 ]

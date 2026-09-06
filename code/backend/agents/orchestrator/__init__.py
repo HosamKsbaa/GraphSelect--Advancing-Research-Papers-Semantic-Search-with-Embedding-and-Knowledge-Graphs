@@ -192,4 +192,10 @@ def create_tracing_callbacks(
     }
 
 
-__all__: list[str] = ["create_tracing_callbacks"]
+from agents.orchestrator.agent import ProjectAgent, create_orchestrator_agent
+
+__all__: list[str] = [
+    "ProjectAgent",
+    "create_orchestrator_agent",
+    "create_tracing_callbacks",
+]

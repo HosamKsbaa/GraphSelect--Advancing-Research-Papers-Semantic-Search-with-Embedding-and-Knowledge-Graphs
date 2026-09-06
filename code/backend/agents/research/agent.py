@@ -19,6 +19,12 @@ from agents.research.tools.search_tools import (
     get_top_venues,
 )
 from config import get_settings
+from features.workflow.state_tools import (
+    get_project_state,
+    post_to_message_board,
+    read_message_board,
+    update_stage_substate,
+)
 
 _settings = get_settings()
 
@@ -106,6 +112,21 @@ def create_research_agent() -> LlmAgent:
             get_project_papers,
             get_top_authors,
             get_top_venues,
+            get_project_state,
+            post_to_message_board,
+            read_message_board,
+            update_stage_substate,
         ],
         sub_agents=[alrs_agent, gap_finder_agent, evidence_synthesizer_agent],
     )
+
+
+ResearchAgent = create_research_agent
+research_agent = create_research_agent()
+
+__all__ = [
+    "RESEARCH_AGENT_INSTRUCTION",
+    "ResearchAgent",
+    "create_research_agent",
+    "research_agent",
+]
