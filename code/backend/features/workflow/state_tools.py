@@ -767,3 +767,130 @@ async def update_stage_substate(
         "quadrant": q_clean,
         "data": validated_quadrant.model_dump(mode="json"),
     }
+
+
+# ---------------------------------------------------------------------------
+# Tool 5: transition_to_stage (Lifecycle Stage Gating & Progression)
+# ---------------------------------------------------------------------------
+
+async def transition_to_stage(
+    target_stage: str,
+    summary: str = "",
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Transition the active project to a target workflow stage.
+
+    Enforces sequential stage progression:
+    stage_1_research -> stage_2_analysis -> stage_3_planning -> stage_4_writing -> stage_5_export.
+
+    Args:
+        target_stage: The stage to transition to (e.g. 'stage_2_analysis').
+        summary: Summary of progress and artifacts completed in the previous stage.
+        tool_context: ADK ToolContext (auto-injected).
+
+    Returns:
+        A dict with transition confirmation, previous stage, new stage, and lifecycle timestamps.
+    """
+    state, detected_agent, original_was_dict = await _resolve_project_state(tool_context)
+    if state is None:
+        return {"status": "error", "message": "No active project state found."}
+
+    try:
+        norm_target = normalize_stage_name(target_stage)
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+    if norm_target not in VALID_STAGES or not hasattr(state, norm_target):
+        return {
+            "status": "error",
+            "message": f"Unknown stage '{target_stage}'. Must be one of: {sorted(list(VALID_STAGES))}",
+        }
+
+    prev_stage = state.current_stage
+    now = utc_now()
+
+    # Mark previous stage completed
+    if prev_stage and prev_stage != norm_target and hasattr(state, prev_stage):
+        prev_sub = getattr(state, prev_stage)
+        prev_sub.meta.status = "completed"
+        prev_sub.meta.completed_at = now
+        prev_sub.meta.progress_percentage = 100.0
+        prev_sub.meta.updated_at = now
+
+    # Mark new stage in_progress
+    if hasattr(state, norm_target):
+        new_sub = getattr(state, norm_target)
+        if new_sub.meta.status in ("not_started", "pending"):
+            new_sub.meta.status = "in_progress"
+            new_sub.meta.started_at = now
+        new_sub.meta.updated_at = now
+        if detected_agent:
+            new_sub.meta.agent_name = detected_agent
+
+    state.current_stage = norm_target
+    state.touch()
+
+    # Record decision on message board
+    state.post_message(
+        author_agent=detected_agent or "ProjectAgent",
+        message_type="decision",
+        title=f"Stage Transition: {prev_stage} -> {norm_target}",
+        content=summary or f"Project progressed from {prev_stage} to {norm_target}.",
+        stage=norm_target,
+        tags=["lifecycle", "stage_transition", norm_target],
+    )
+
+    _sync_project_state(state, tool_context, original_was_dict)
+
+    return {
+        "status": "success",
+        "previous_stage": prev_stage,
+        "current_stage": norm_target,
+        "summary": summary,
+        "message": f"Successfully transitioned project to {norm_target}.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tool 6: get_stage_status (Lifecycle Status & Stage Inspector)
+# ---------------------------------------------------------------------------
+
+async def get_stage_status(
+    tool_context: ToolContext | None = None,
+) -> dict[str, Any]:
+    """Get the current workflow stage, status, progress, and checklist requirements."""
+    state, detected_agent, _ = await _resolve_project_state(tool_context)
+    if state is None:
+        return {"status": "error", "message": "No active project state found."}
+
+    curr = state.current_stage or "stage_1_research"
+    sub = getattr(state, curr, None)
+    meta = sub.meta if sub else None
+
+    stage_order = [
+        "stage_1_research",
+        "stage_2_analysis",
+        "stage_3_planning",
+        "stage_4_writing",
+        "stage_5_export",
+    ]
+
+    all_stages: dict[str, Any] = {}
+    for st_name in stage_order:
+        s = getattr(state, st_name, None)
+        if s:
+            all_stages[st_name] = {
+                "status": s.meta.status,
+                "progress_percentage": s.meta.progress_percentage,
+                "agent_name": s.meta.agent_name,
+            }
+
+    return {
+        "status": "success",
+        "project_id": state.project_id,
+        "project_name": state.name,
+        "current_stage": curr,
+        "stage_status": meta.status if meta else "not_started",
+        "progress_percentage": meta.progress_percentage if meta else 0.0,
+        "all_stages": all_stages,
+    }

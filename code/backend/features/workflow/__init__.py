@@ -66,9 +66,11 @@ from features.workflow.execution_pipeline import (
 from features.workflow.state_tools import (
     get_active_project_state,
     get_project_state,
+    get_stage_status,
     post_to_message_board,
     read_message_board,
     set_active_project_state,
+    transition_to_stage,
     update_stage_substate,
 )
 
@@ -84,7 +86,8 @@ __all__ = [
     "StageExecutionResult",
     "PipelineExecutionResult",
     "run_pipeline",
-    "run_stage",
+    "transition_to_stage",
+    "get_stage_status",
     "STAGE_ORDER",
     "STAGE_SEQUENCE",
     "STAGE_AGENT_MAP",

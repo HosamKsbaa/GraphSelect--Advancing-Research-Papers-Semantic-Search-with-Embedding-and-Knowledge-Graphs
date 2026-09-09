@@ -27,9 +27,11 @@ from features.workflow.state_models import (
 from features.workflow.state_tools import (
     deep_merge,
     get_project_state,
+    get_stage_status,
     post_to_message_board,
     read_message_board,
     set_active_project_state,
+    transition_to_stage,
     update_stage_substate,
 )
 
@@ -714,3 +716,70 @@ class TestUpdateStageSubstate:
         # Assert raw dict in context was updated
         updated_dict = ctx.state["project_state"]
         assert updated_dict["stage_1_research"]["inputs"]["max_depth"] == 4
+
+
+class TestStageLifecycleTools:
+    """Tests for transition_to_stage and get_stage_status lifecycle tools."""
+
+    @pytest.mark.asyncio
+    async def test_transition_to_stage_sequential_progression(self) -> None:
+        project = ProjectState(name="Lifecycle Test")
+        ctx = DummyToolContext(state={"project_state": project}, agent_name="ResearchAgent")
+
+        # Check initial status
+        status_res = await get_stage_status(tool_context=ctx)
+        assert status_res["status"] == "success"
+        assert status_res["current_stage"] == "stage_1_research"
+        assert status_res["stage_status"] == "not_started"
+
+        # Transition to stage 2
+        res = await transition_to_stage(
+            target_stage="stage_2_analysis",
+            summary="Stage 1 research questions and initial papers collected.",
+            tool_context=ctx,
+        )
+        assert res["status"] == "success"
+        assert res["previous_stage"] == "stage_1_research"
+        assert res["current_stage"] == "stage_2_analysis"
+
+        # Verify stage 1 is marked completed and stage 2 is in_progress
+        assert project.stage_1_research.meta.status == "completed"
+        assert project.stage_1_research.meta.progress_percentage == 100.0
+        assert project.stage_2_analysis.meta.status == "in_progress"
+        assert project.current_stage == "stage_2_analysis"
+
+        # Verify decision was logged on message board
+        board_posts = [m for m in project.message_board if m.message_type == "decision"]
+        assert len(board_posts) >= 1
+        assert "Stage Transition" in board_posts[0].title
+
+        # Verify read_message_board tool returns the transition decision
+        board_res = await read_message_board(message_type="decision", tool_context=ctx)
+        assert board_res["status"] == "success"
+        assert len(board_res["messages"]) >= 1
+
+        # Verify get_stage_status reports new stage
+        status_res2 = await get_stage_status(tool_context=ctx)
+        assert status_res2["status"] == "success"
+        assert status_res2["current_stage"] == "stage_2_analysis"
+        assert status_res2["stage_status"] == "in_progress"
+
+    @pytest.mark.asyncio
+    async def test_transition_to_stage_invalid_stage(self) -> None:
+        project = ProjectState(name="Invalid Stage Test")
+        ctx = DummyToolContext(state={"project_state": project})
+
+        res = await transition_to_stage(
+            target_stage="non_existent_stage",
+            tool_context=ctx,
+        )
+        assert res["status"] == "error"
+        assert "Unknown stage" in res["message"]
+
+    @pytest.mark.asyncio
+    async def test_transition_to_stage_no_state(self) -> None:
+        ctx = DummyToolContext(state={})
+        res = await transition_to_stage(target_stage="stage_2_analysis", tool_context=ctx)
+        assert res["status"] == "error"
+        assert "No active project state found" in res["message"]
+

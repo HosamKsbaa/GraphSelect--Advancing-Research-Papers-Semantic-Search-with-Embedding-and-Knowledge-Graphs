@@ -1,0 +1,388 @@
+digraph ADK_Swarm_Hierarchy {
+    graph [
+        rankdir="TB",
+        nodesep=0.40,
+        ranksep=0.45,
+        splines=ortho,
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=10,
+        dpi=300,
+        bgcolor="#FFFFFF",
+        compound=true,
+        pad="0.25,0.25"
+    ];
+
+    node [
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=9,
+        shape=none,
+        margin=0
+    ];
+
+    edge [
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=8,
+        color="#334155",
+        penwidth=1.4,
+        arrowsize=0.75
+    ];
+
+    // =========================================================================
+    // 1. TOP HEADER: TITLE & COMPACT LEGEND
+    // =========================================================================
+    header_node [
+        shape=none,
+        margin=0,
+        label=<
+            <table border="1" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#F8FAFC" color="#94A3B8" style="rounded">
+                <tr>
+                    <td align="center" colspan="4" bgcolor="#0F172A">
+                        <font color="#F8FAFC" point-size="11"><b>ALRS v2: Google ADK 4-Tier Swarm Architecture &amp; Execution Topology</b></font>
+                    </td>
+                </tr>
+                <tr>
+                    <td bgcolor="#1E3A8A" width="20" align="center"><font color="#FFFFFF"><b>T1</b></font></td>
+                    <td align="left"><font color="#0F172A" point-size="8"><b>Tier 1: Orchestration &amp; Reasoning</b> (gemini-2.5-flash, Temp=0.2)</font></td>
+                    <td bgcolor="#065F46" width="20" align="center"><font color="#FFFFFF"><b>T2</b></font></td>
+                    <td align="left"><font color="#0F172A" point-size="8"><b>Tier 2: Discovery &amp; Execution</b> (gemini-3.5-flash-lite, Temp=0.7)</font></td>
+                </tr>
+                <tr>
+                    <td bgcolor="#991B1B" width="20" align="center"><font color="#FFFFFF"><b>D</b></font></td>
+                    <td align="left"><font color="#0F172A" point-size="8"><b>Self-Healing / Diagnostics</b> (Global Error Delegation Protocol)</font></td>
+                    <td bgcolor="#D97706" width="20" align="center"><font color="#FFFFFF"><b>L</b></font></td>
+                    <td align="left"><font color="#0F172A" point-size="8"><b>Iterative Loop Container</b> (ADK LoopAgent, Max 3 Iterations)</font></td>
+                </tr>
+            </table>
+        >
+    ];
+
+    // =========================================================================
+    // 2. TIER 1 ROW: PROJECTAGENT (ROOT) & DEBUGGERAGENT (DIAGNOSTICS)
+    // =========================================================================
+    subgraph cluster_root_tier {
+        graph [
+            style="rounded,filled",
+            fillcolor="#EFF6FF",
+            color="#3B82F6",
+            penwidth=1.5,
+            margin=10
+        ];
+
+        ProjectAgent [
+            label=<
+                <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#1E3A8A" style="rounded">
+                    <tr>
+                        <td bgcolor="#1E3A8A" align="center" colspan="2">
+                            <font color="#FFFFFF" point-size="11"><b>👑 ProjectAgent (Root Swarm Orchestrator)</b></font><br/>
+                            <font color="#BFDBFE" point-size="8">Model: <b>gemini-2.5-flash</b> | Tier: <b>Tier 1</b> | Temp: 0.2</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" colspan="2" cellpadding="4">
+                            <font color="#1E293B" point-size="8">
+                            • <b>Cognitive Role:</b> Sequential 5-Stage Lifecycle Gating &amp; Session Supervision<br/>
+                            • <b>Assigned Tools:</b> create_new_project, select_project, get_project_state, transition_to_stage,<br/>
+                            &nbsp;&nbsp;get_stage_status, update_stage_substate, post_to_message_board, read_message_board<br/>
+                            • <b>Hydration Hook:</b> _auto_hydrate_state_callback (recursive before_model_callback)
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+
+        DebuggerAgent [
+            label=<
+                <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#991B1B" style="rounded">
+                    <tr>
+                        <td bgcolor="#991B1B" align="center">
+                            <font color="#FFFFFF" point-size="10"><b>🛠️ DebuggerAgent (Autonomous Self-Repair)</b></font><br/>
+                            <font color="#FECACA" point-size="8">Model: <b>gemini-2.5-flash</b> | Tier 1 | Temp: 0.1</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" cellpadding="4">
+                            <font color="#1E293B" point-size="8">
+                            • <b>Protocol:</b> Global Error Delegation Protocol<br/>
+                            • <b>Capabilities:</b> Sandboxed AST Syntax Verification,<br/>
+                            &nbsp;&nbsp;Traceback Triage, Patch Proposal &amp; Test Suite Execution<br/>
+                            • <b>Tools:</b> read_agent_code, fetch_error_logs, run_agent_tests,<br/>
+                            &nbsp;&nbsp;validate_and_propose_patch
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+    }
+
+    // =========================================================================
+    // 3. PERSISTENT BLACKBOARD & STATE SYNCHRONIZATION BUS
+    // =========================================================================
+    ProjectState_Bus [
+        shape=rectangle,
+        style="filled,rounded",
+        fillcolor="#DBEAFE",
+        color="#2563EB",
+        penwidth=2.0,
+        fontcolor="#1E40AF",
+        fontsize=9,
+        label="⚡ Tri-Layer State Persistence & Shared Blackboard: tool_context.state['project_state'] ◄► Atomic JSON Disk ◄► MySQL Relational Audit Store ⚡"
+    ];
+
+    // =========================================================================
+    // 4. LOWER TIERS: TWO BALANCED COLUMNS
+    // =========================================================================
+
+    // LEFT COLUMN: Research Sub-Swarm
+    subgraph cluster_research_swarm {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#065F46" point-size="10"><b>RESEARCH SUB-SWARM (Stage 1: Research &amp; Stage 2: Analysis)</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#ECFDF5",
+            color="#10B981",
+            penwidth=1.3,
+            margin=8
+        ];
+
+        ResearchAgent [
+            label=<
+                <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#065F46" style="rounded">
+                    <tr>
+                        <td bgcolor="#065F46" align="center">
+                            <font color="#FFFFFF" point-size="10"><b>🔬 ResearchAgent (Domain Coordinator)</b></font><br/>
+                            <font color="#A7F3D0" point-size="8">Model: <b>gemini-3.5-flash-lite</b> | Tier 2 | Temp: 0.7</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" cellpadding="3">
+                            <font color="#1E293B" point-size="8">
+                            • <b>Role:</b> Manages Research Questions &amp; Paper Library Growth<br/>
+                            • <b>Tools:</b> add_research_question, list_research_questions,<br/>
+                            &nbsp;&nbsp;get_project_papers, get_top_authors, get_top_venues
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+
+        ALRSAgent [
+            label=<
+                <table border="1" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                    <tr>
+                        <td bgcolor="#10B981" align="center">
+                            <font color="#FFFFFF" point-size="9"><b>🤖 ALRSAgent</b> (Paper Discovery Specialist)</font><br/>
+                            <font color="#ECFDF5" point-size="7">Tier 2 | gemini-3.5-flash-lite</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" cellpadding="3">
+                            <font color="#334155" point-size="8">
+                            • Bounded 1-Hop GraphSelect BFS Citation Traversal<br/>
+                            • OpenAlex API Polite Pool Search (cites / cited_by)<br/>
+                            • Candidate Appraisal into 3 Archetypes (Found/Contemp/Bridge)<br/>
+                            • 768-dim Gemini MRL Vector Embeddings
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+
+        GapFinderAgent [
+            label=<
+                <table border="1" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                    <tr>
+                        <td bgcolor="#10B981" align="center">
+                            <font color="#FFFFFF" point-size="9"><b>🔍 GapFinderAgent</b> (Analysis &amp; Centrality Specialist)</font><br/>
+                            <font color="#ECFDF5" point-size="7">Tier 2 | gemini-3.5-flash-lite</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" cellpadding="3">
+                            <font color="#334155" point-size="8">
+                            • Pairwise Cosine Similarity Matrix Evaluation<br/>
+                            • Uncovered RQ Deficit Detection &amp; Gap Formulation<br/>
+                            • 3-Tier Centrality Engine (Neo4j GDS / NetworkX / In-Degree)<br/>
+                            • Hybrid Relevance Ranking (Score = 0.70 Sim + 0.30 PR)
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+
+        EvidenceSynthesizerAgent [
+            label=<
+                <table border="1" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                    <tr>
+                        <td bgcolor="#10B981" align="center">
+                            <font color="#FFFFFF" point-size="9"><b>📊 EvidenceSynthesizerAgent</b> (Literature Synthesis)</font><br/>
+                            <font color="#ECFDF5" point-size="7">Tier 2 | gemini-3.5-flash-lite</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" cellpadding="3">
+                            <font color="#334155" point-size="8">
+                            • Structured Findings &amp; Benchmark Metrics Extraction<br/>
+                            • Multi-Dimensional Cross-Study Comparison Matrix<br/>
+                            • Qualitative Synthesis &amp; Trade-off Analysis<br/>
+                            • Epistemic Grounding of Claims &amp; Limitations
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+    }
+
+    // RIGHT COLUMN: Planning, Writing & Review Loop
+    subgraph cluster_writing_swarm {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#9A3412" point-size="10"><b>PLANNING &amp; WRITING SUBSYSTEM (Stage 3, Stage 4 &amp; Stage 5)</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#FFF7ED",
+            color="#EA580C",
+            penwidth=1.3,
+            margin=8
+        ];
+
+        PlannerAgent [
+            label=<
+                <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#1E3A8A" style="rounded">
+                    <tr>
+                        <td bgcolor="#1E3A8A" align="center">
+                            <font color="#FFFFFF" point-size="10"><b>📐 PlannerAgent (Outline Blueprints)</b></font><br/>
+                            <font color="#BFDBFE" point-size="8">Model: <b>gemini-2.5-flash</b> | Tier 1 | Temp: 0.2</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" cellpadding="3">
+                            <font color="#1E293B" point-size="8">
+                            • <b>Role:</b> Formulates Narrative Arc &amp; Section Blueprints<br/>
+                            • <b>Requirements:</b> Assigns &ge;3 Valid DOIs per Section<br/>
+                            • <b>Styles:</b> Thematic, Chronological, Methodological<br/>
+                            • <b>Tools:</b> get_project_summary, get_ranked_papers, generate_outline
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+
+        WriterAgent [
+            label=<
+                <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#C2410C" style="rounded">
+                    <tr>
+                        <td bgcolor="#EA580C" align="center">
+                            <font color="#FFFFFF" point-size="10"><b>✍️ WriterAgent (Writing Coordinator &amp; Exporter)</b></font><br/>
+                            <font color="#FFEDD5" point-size="8">Model: <b>gemini-3.5-flash-lite</b> | Tier 2 | Temp: 0.7</font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="left" cellpadding="3">
+                            <font color="#1E293B" point-size="8">
+                            • <b>Role:</b> Supervises Draft-Review Loop &amp; Publication Exports<br/>
+                            • <b>Sub-Agent:</b> Coordinates WriterReviewerLoop<br/>
+                            • <b>Export Tools:</b> export_latex, export_bibtex, export_citation_graph
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+
+        subgraph cluster_loop {
+            graph [
+                label=<<table border="0" cellborder="0"><tr><td><font color="#B45309" point-size="9"><b>🔄 WriterReviewerLoop (ADK LoopAgent, Max 3 Iterations)</b></font></td></tr></table>>,
+                style="rounded,dashed",
+                fillcolor="#FEF3C7",
+                color="#D97706",
+                penwidth=1.5,
+                margin=6
+            ];
+
+            DraftingAgent [
+                label=<
+                    <table border="1" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#D97706" style="rounded">
+                        <tr>
+                            <td bgcolor="#F59E0B" align="center">
+                                <font color="#FFFFFF" point-size="9"><b>📝 DraftingAgent</b> (Scientific Prose Specialist)</font><br/>
+                                <font color="#FEF3C7" point-size="7">Tier 2 | gemini-3.5-flash-lite</font>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align="left" cellpadding="3">
+                                <font color="#334155" point-size="8">
+                                • High-throughput academic section drafting<br/>
+                                • Rigorous inline (Author, Year) citation placement<br/>
+                                • Grounded paper abstracts &amp; findings injection<br/>
+                                • Tools: get_paper_abstracts, draft_section
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            ReviewerAgent [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#1E3A8A" style="rounded">
+                        <tr>
+                            <td bgcolor="#1E3A8A" align="center">
+                                <font color="#FFFFFF" point-size="9"><b>🛡️ ReviewerAgent</b> (Quality &amp; Grounding Gatekeeper)</font><br/>
+                                <font color="#BFDBFE" point-size="7">Tier 1 | gemini-2.5-flash (Temp 0.0)</font>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align="left" cellpadding="3">
+                                <font color="#334155" point-size="8">
+                                • <b>5-Dimension Rubric:</b> Coverage (0.25), Coherence (0.20),<br/>
+                                &nbsp;&nbsp;Synthesis (0.25), Tone (0.15), Completeness (0.15)<br/>
+                                • <b>Strict Gate:</b> All 5 scores &ge; 4.0/5.0 &amp; Zero Missing DOIs<br/>
+                                • <b>GCDL Grounding Invariant:</b> HR = 0.0% (Zero Hallucinations)<br/>
+                                • <b>Termination:</b> exit_loop (tool_context.actions.escalate=True)
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+        }
+    }
+
+    // =========================================================================
+    // 5. EDGES AND DELEGATIONS
+    // =========================================================================
+
+    header_node -> ProjectAgent [style="invis"];
+
+    // ProjectAgent state hydration
+    ProjectAgent -> ProjectState_Bus [penwidth=2.0, color="#2563EB", label=" Session Context Hydration "];
+
+    // ProjectAgent delegations
+    ProjectAgent -> ResearchAgent [penwidth=1.8, color="#059669", label=" 1. Research Delegation "];
+    ProjectAgent -> PlannerAgent  [penwidth=1.8, color="#1D4ED8", label=" 2. Planning Delegation "];
+    ProjectAgent -> WriterAgent   [penwidth=1.8, color="#EA580C", label=" 3. Writing Delegation "];
+    ProjectAgent -> DebuggerAgent [penwidth=1.5, color="#DC2626", label=" Diagnostic Escalation "];
+
+    // Research sub-swarm vertical delegations
+    ResearchAgent -> ALRSAgent                [color="#059669", penwidth=1.4, label=" 1-Hop Traversal "];
+    ALRSAgent -> GapFinderAgent               [color="#059669", penwidth=1.2, label=" Candidate Pool "];
+    GapFinderAgent -> EvidenceSynthesizerAgent [color="#059669", penwidth=1.2, label=" Ranked Papers "];
+
+    // Planning to Writer
+    PlannerAgent -> WriterAgent [color="#64748B", style="dashed", penwidth=1.2, label=" Blueprint Hand-off "];
+
+    // Writing loop inner flow
+    WriterAgent -> DraftingAgent   [color="#EA580C", penwidth=1.4, label=" Section Blueprint "];
+    DraftingAgent -> ReviewerAgent [color="#D97706", penwidth=2.0, label=" Draft Prose T "];
+    ReviewerAgent -> DraftingAgent [color="#DC2626", style="dashed", penwidth=1.2, label=" Revise (&lt;4.0 or Missing DOIs) "];
+    ReviewerAgent -> WriterAgent   [color="#10B981", penwidth=2.0, label=" exit_loop (&ge;4.0 &amp; HR=0) "];
+
+    // Global Error Delegation Protocol (Red Dashed lines to DebuggerAgent)
+    ResearchAgent -> DebuggerAgent [style="dashed", color="#DC2626", penwidth=1.0, constraint=false];
+    WriterAgent   -> DebuggerAgent [style="dashed", color="#DC2626", penwidth=1.0, constraint=false];
+    PlannerAgent  -> DebuggerAgent [style="dashed", color="#DC2626", penwidth=1.0, constraint=false];
+}

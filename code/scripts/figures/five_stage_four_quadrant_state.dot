@@ -1,0 +1,375 @@
+digraph FiveStage_FourQuadrant_State {
+    graph [
+        rankdir="TB",
+        nodesep=0.45,
+        ranksep=0.50,
+        splines=spline,
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=10,
+        dpi=300,
+        bgcolor="#FFFFFF",
+        compound=true,
+        pad="0.3,0.3"
+    ];
+
+    node [
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=9,
+        shape=none,
+        margin=0
+    ];
+
+    edge [
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=8,
+        color="#334155",
+        penwidth=1.5,
+        arrowsize=0.8
+    ];
+
+    // =========================================================================
+    // 1. TITLE & HEADER
+    // =========================================================================
+    header_card [
+        label=<
+            <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="#0F172A" color="#334155" style="rounded">
+                <tr>
+                    <td align="center" colspan="5">
+                        <font color="#FFFFFF" point-size="12"><b>ALRS v2: Unified ProjectState Architecture, 4-Quadrant Topology &amp; Blackboard Synchronization</b></font><br/>
+                        <font color="#94A3B8" point-size="9">Root Schema: ProjectState (Pydantic v2) | UUID Session Context | Strict Sequential Stage Lifecycle Gating</font>
+                    </td>
+                </tr>
+            </table>
+        >
+    ];
+
+    // =========================================================================
+    // 2. FIVE SEQUENTIAL STAGES (LIFECYCLE GATING)
+    // =========================================================================
+    subgraph cluster_stages {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#1E3A8A" point-size="11"><b>1. FIVE SEQUENTIAL WORKFLOW STAGES (Sequential Lifecycle Gating)</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#F8FAFC",
+            color="#CBD5E1",
+            penwidth=1.2,
+            margin=10
+        ];
+
+        // Rank same for horizontal pipeline
+        subgraph pipeline_stages {
+            graph [rank="same"];
+
+            Stage1 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                        <tr><td bgcolor="#059669" align="center"><font color="#FFFFFF"><b>Stage 1: Research</b></font></td></tr>
+                        <tr><td bgcolor="#ECFDF5" align="center"><font color="#065F46" point-size="8"><b>stage_1_research</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • Seed Paper Intake &amp; RQs<br/>
+                                • OpenAlex API Discovery<br/>
+                                • 1-Hop GraphSelect BFS<br/>
+                                • Paper Library Metadata
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Stage2 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#0284C7" style="rounded">
+                        <tr><td bgcolor="#0284C7" align="center"><font color="#FFFFFF"><b>Stage 2: Analysis</b></font></td></tr>
+                        <tr><td bgcolor="#F0F9FF" align="center"><font color="#0369A1" point-size="8"><b>stage_2_analysis</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • 768-dim Gemini MRL Embeddings<br/>
+                                • Cosine Similarity Matrix<br/>
+                                • 3-Tier Centrality (GDS/NX)<br/>
+                                • Gap Deficit Detection
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Stage3 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#4F46E5" style="rounded">
+                        <tr><td bgcolor="#4F46E5" align="center"><font color="#FFFFFF"><b>Stage 3: Planning</b></font></td></tr>
+                        <tr><td bgcolor="#EEF2FF" align="center"><font color="#3730A3" point-size="8"><b>stage_3_planning</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • Thematic / Chronological Arc<br/>
+                                • Section Blueprints Synthesis<br/>
+                                • Mandatory DOI Allocations (&ge;3)<br/>
+                                • Target Word Counts
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Stage4 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#D97706" style="rounded">
+                        <tr><td bgcolor="#D97706" align="center"><font color="#FFFFFF"><b>Stage 4: Writing</b></font></td></tr>
+                        <tr><td bgcolor="#FFFBEB" align="center"><font color="#92400E" point-size="8"><b>stage_4_writing</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • Closed-Loop Drafting Loop<br/>
+                                • 5-Dimension Rubric Critique<br/>
+                                • GCDL Zero Hallucination Gate<br/>
+                                • Full Markdown Synthesis
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Stage5 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#DC2626" style="rounded">
+                        <tr><td bgcolor="#DC2626" align="center"><font color="#FFFFFF"><b>Stage 5: Export</b></font></td></tr>
+                        <tr><td bgcolor="#FEF2F2" align="center"><font color="#991B1B" point-size="8"><b>stage_5_export</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • IEEE / ACM / Article Templates<br/>
+                                • Deterministic BibTeX Clean<br/>
+                                • Headless pdflatex Compile<br/>
+                                • GraphML Network Export
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+        }
+
+        Stage1 -> Stage2 [penwidth=2.0, color="#059669", label=" transition_to_stage
+(Papers &amp; Graph) "];
+        Stage2 -> Stage3 [penwidth=2.0, color="#0284C7", label=" transition_to_stage
+(Gaps &amp; Rankings) "];
+        Stage3 -> Stage4 [penwidth=2.0, color="#4F46E5", label=" transition_to_stage
+(Outline &amp; Blueprints) "];
+        Stage4 -> Stage5 [penwidth=2.0, color="#D97706", label=" transition_to_stage
+(Approved Drafts) "];
+    }
+
+    // =========================================================================
+    // 3. UNIFORM 4-QUADRANT SUBSTATE TOPOLOGY DETAIL
+    // =========================================================================
+    subgraph cluster_quadrants {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#1E3A8A" point-size="11"><b>2. UNIFORM 4-QUADRANT SUBSTATE MODEL (Replicated Across All 5 Stages)</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#EFF6FF",
+            color="#3B82F6",
+            penwidth=1.3,
+            margin=10
+        ];
+
+        quadrant_detail [
+            label=<
+                <table border="0" cellborder="1" cellspacing="6" cellpadding="6" bgcolor="#FFFFFF" color="#93C5FD" style="rounded">
+                    <tr>
+                        <td bgcolor="#DBEAFE" align="left" width="280">
+                            <font color="#1E40AF" point-size="10"><b>Quadrant 1 (Q1): META</b></font><br/>
+                            <font color="#1E293B" point-size="8">
+                            • <b>Schema:</b> StageMeta<br/>
+                            • <b>status:</b> not_started | in_progress | completed | failed<br/>
+                            • <b>agent_name:</b> Active execution agent tag<br/>
+                            • <b>timestamps:</b> started_at, completed_at, updated_at<br/>
+                            • <b>telemetry:</b> progress_percentage, iteration_count, error_message
+                            </font>
+                        </td>
+                        <td bgcolor="#FEF3C7" align="left" width="280">
+                            <font color="#92400E" point-size="10"><b>Quadrant 2 (Q2): INPUTS</b></font><br/>
+                            <font color="#1E293B" point-size="8">
+                            • <b>Schema:</b> Stage-Specific Pydantic Inputs<br/>
+                            • <b>Parameters:</b> target_level ('master' | 'phd'), word_count<br/>
+                            • <b>Thresholds:</b> similarity_threshold, max_depth, max_papers<br/>
+                            • <b>Weights:</b> similarity_weight (0.70), pagerank_weight (0.30)<br/>
+                            • <b>Directives:</b> active research questions, seed DOIs, style
+                            </font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td bgcolor="#D1FAE5" align="left" width="280">
+                            <font color="#065F46" point-size="10"><b>Quadrant 3 (Q3): ARTIFACTS</b></font><br/>
+                            <font color="#1E293B" point-size="8">
+                            • <b>Schema:</b> Concrete Produced Deliverables<br/>
+                            • <b>Stage 1:</b> papers (dict[doi, PaperMetadata]), citation_edges<br/>
+                            • <b>Stage 2:</b> similarity_matrix, clusters, gaps, rankings<br/>
+                            • <b>Stage 3:</b> outline (OutlineStructure), section_blueprints<br/>
+                            • <b>Stage 4:</b> section_drafts, section_reviews, full_draft_markdown<br/>
+                            • <b>Stage 5:</b> tex_path, bib_path, compiled PDF, graphml
+                            </font>
+                        </td>
+                        <td bgcolor="#F1F5F9" align="left" width="280">
+                            <font color="#334155" point-size="10"><b>Quadrant 4 (Q4): NOTES</b></font><br/>
+                            <font color="#1E293B" point-size="8">
+                            • <b>Schema:</b> list[StageNote]<br/>
+                            • <b>Fields:</b> id, timestamp, author, category, content, tags<br/>
+                            • <b>Agent Reflections:</b> Qualitative caveats &amp; heuristics<br/>
+                            • <b>Trade-off Logs:</b> Traversal pruning rationale, cluster limits<br/>
+                            • <b>Contextual Memory:</b> Preserved across LLM turns
+                            </font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2" align="center" bgcolor="#F8FAFC" border="0">
+                            <font color="#2563EB" point-size="9">
+                                <b>Selective Dot-Path Navigation:</b> 
+                                <font face="Courier">ProjectState.get_by_dot_path('stage_1_research.artifacts.papers.10.1145/3292500.title')</font>
+                                &nbsp;► Prevents Context Overflow
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+    }
+
+    // =========================================================================
+    // 4. PUBLIC MESSAGE BOARD (SHARED BLACKBOARD)
+    // =========================================================================
+    subgraph cluster_blackboard {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#92400E" point-size="11"><b>3. PUBLIC MESSAGE BOARD: ASYNCHRONOUS BLACKBOARD COMMUNICATION</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#FEF3C7",
+            color="#D97706",
+            penwidth=1.3,
+            margin=10
+        ];
+
+        blackboard_node [
+            label=<
+                <table border="0" cellborder="1" cellspacing="4" cellpadding="5" bgcolor="#FFFFFF" color="#FCD34D" style="rounded">
+                    <tr>
+                        <td colspan="6" align="center" bgcolor="#78350F">
+                            <font color="#FFFFFF" point-size="10"><b>message_board: list[BoardMessage] (Persistent Cross-Agent Communication Channel)</b></font>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td bgcolor="#EFF6FF" align="center"><font color="#1D4ED8"><b>💡 insight</b></font><br/><font point-size="7" color="#475569">Cross-paper synthesis</font></td>
+                        <td bgcolor="#ECFDF5" align="center"><font color="#047857"><b>🍀 serendipity</b></font><br/><font point-size="7" color="#475569">Unexpected citation link</font></td>
+                        <td bgcolor="#FEF2F2" align="center"><font color="#B91C1C"><b>🕳️ gap</b></font><br/><font point-size="7" color="#475569">Literature deficit / RQ void</font></td>
+                        <td bgcolor="#FFF7ED" align="center"><font color="#C2410C"><b>⚠️ warning</b></font><br/><font point-size="7" color="#475569">Contradictory findings</font></td>
+                        <td bgcolor="#F3E8FF" align="center"><font color="#6D28D9"><b>⚖️ decision</b></font><br/><font point-size="7" color="#475569">Scope / Narrative choice</font></td>
+                        <td bgcolor="#FDF4FF" align="center"><font color="#A21CAF"><b>🧪 hypothesis</b></font><br/><font point-size="7" color="#475569">Testable proposition</font></td>
+                    </tr>
+                    <tr>
+                        <td colspan="6" align="left" bgcolor="#FFFBEB">
+                            <font color="#1E293B" point-size="8">
+                            • <b>Payload Structure:</b> id (UUID), timestamp (UTC), author_agent, message_type, title, content (Markdown), stage, tags, related_paper_dois<br/>
+                            • <b>DOI Grounding:</b> Strict automatic regex normalization (strip url, prefix, punct) guaranteeing canonical <font face="Courier">10.xxxx/...</font> linkage<br/>
+                            • <b>Acknowledgment Tracking:</b> acknowledged_by: list[str] vectors track subscriber awareness (e.g. ['PlannerAgent', 'WriterAgent'])<br/>
+                            • <b>State Tools:</b> <font face="Courier">post_to_message_board(type, title, content, dois)</font> &nbsp;|&nbsp; <font face="Courier">read_message_board(type, stage, unacknowledged_only)</font>
+                            </font>
+                        </td>
+                    </tr>
+                </table>
+            >
+        ];
+    }
+
+    // =========================================================================
+    // 5. TRI-LAYER PERSISTENCE ARCHITECTURE
+    // =========================================================================
+    subgraph cluster_persistence {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#065F46" point-size="11"><b>4. TRI-LAYER PERSISTENCE ARCHITECTURE &amp; RECOVERY HIERARCHY</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#ECFDF5",
+            color="#10B981",
+            penwidth=1.3,
+            margin=10
+        ];
+
+        subgraph persistence_layers {
+            graph [rank="same"];
+
+            Layer1 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="#FFFFFF" color="#2563EB" style="rounded">
+                        <tr><td bgcolor="#2563EB" align="center"><font color="#FFFFFF"><b>Layer 1: ADK ToolContext</b></font></td></tr>
+                        <tr><td bgcolor="#EFF6FF" align="center"><font color="#1E40AF" point-size="8"><b>In-Memory Session State</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • Zero-latency dictionary access<br/>
+                                • <font face="Courier">tool_context.state['project_state']</font><br/>
+                                • Live agent invocation scope<br/>
+                                • Pre-model hydration hook
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Layer2 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                        <tr><td bgcolor="#059669" align="center"><font color="#FFFFFF"><b>Layer 2: Atomic Disk JSON</b></font></td></tr>
+                        <tr><td bgcolor="#ECFDF5" align="center"><font color="#065F46" point-size="8"><b>Canonical Storage File</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • <font face="Courier">project_state.json</font> per project<br/>
+                                • Atomic swap: <font face="Courier">.tmp.{uuid}</font> fsync<br/>
+                                • Zero risk of corrupted state writes<br/>
+                                • Path traversal validation
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Layer3 [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="#FFFFFF" color="#4F46E5" style="rounded">
+                        <tr><td bgcolor="#4F46E5" align="center"><font color="#FFFFFF"><b>Layer 3: Relational MySQL</b></font></td></tr>
+                        <tr><td bgcolor="#EEF2FF" align="center"><font color="#3730A3" point-size="8"><b>Audit &amp; Historical Storage</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • <font face="Courier">project_states</font> audit table<br/>
+                                • JSON document column + versioning<br/>
+                                • Async background write dispatch<br/>
+                                • Disaster recovery fallback
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+        }
+
+        Layer1 -> Layer2 [penwidth=2.0, color="#059669", label=" 1. Atomic Disk Commit "];
+        Layer2 -> Layer3 [penwidth=2.0, color="#4F46E5", label=" 2. Async DB Audit Write "];
+        Layer3 -> Layer2 [style="dashed", color="#DC2626", label=" Fallback Recovery "];
+        Layer2 -> Layer1 [style="dashed", color="#2563EB", label=" Session Hydration "];
+    }
+
+    // =========================================================================
+    // CONNECTIONS BETWEEN MAJOR SECTIONS
+    // =========================================================================
+    header_card -> Stage3 [style="invis"];
+    Stage3 -> quadrant_detail [penwidth=2.0, color="#3B82F6", label=" Each Stage Contains 4 Uniform Quadrants "];
+    quadrant_detail -> blackboard_node [penwidth=2.0, color="#D97706", label=" Cross-Cutting Insights Dispatched to Shared Board "];
+    blackboard_node -> Layer2 [penwidth=2.0, color="#10B981", label=" State &amp; Messages Persisted Atomically "];
+}

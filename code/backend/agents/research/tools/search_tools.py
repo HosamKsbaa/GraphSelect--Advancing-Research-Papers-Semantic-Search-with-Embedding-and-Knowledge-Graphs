@@ -112,6 +112,32 @@ async def search_papers_by_keyword(
                     "authors": (getattr(p, "authors", []) or [])[:5],
                 })
 
+        if ctx is not None and papers:
+            try:
+                from features.workflow.state_tools import _resolve_project_state, _sync_project_state
+                from features.workflow.state_models import PaperMetadata, utc_now
+
+                p_state, a_name, was_dict = await _resolve_project_state(ctx)
+                if p_state is not None:
+                    p_dict = p_state.stage_1_research.artifacts.papers
+                    for p_item in papers:
+                        doi = p_item.get("doi")
+                        if doi and doi not in p_dict:
+                            p_dict[doi] = PaperMetadata(
+                                doi=doi,
+                                title=p_item.get("title", "") or "",
+                                authors=p_item.get("authors", []) or [],
+                                year=p_item.get("year"),
+                                citation_count=p_item.get("cited_by_count", 0) or 0,
+                            )
+                    p_state.stage_1_research.artifacts.total_discovered = len(p_dict)
+                    p_state.stage_1_research.artifacts.total_relevant = len(p_dict)
+                    p_state.stage_1_research.meta.updated_at = utc_now()
+                    p_state.touch()
+                    _sync_project_state(p_state, ctx, was_dict)
+            except Exception as sync_err:
+                logger.debug("search_papers_by_keyword state sync skipped: %s", sync_err)
+
         return {"papers": papers, "total_returned": len(papers)}
     except Exception as exc:
         logger.error("search_papers_by_keyword failed: %s", exc)
@@ -335,12 +361,35 @@ async def add_research_question(
     try:
         from features.research.service import add_research_question as _add_rq
 
-        return await _add_rq(
+        res = await _add_rq(
             project_id=project_id,
             question_text=actual_text,
             neo4j=ServiceRegistry.neo4j,
             embedding_provider=ServiceRegistry.embedding_provider,
         )
+
+        if ctx is not None:
+            try:
+                from features.workflow.state_tools import _resolve_project_state, _sync_project_state
+                from features.workflow.state_models import utc_now
+
+                p_state, a_name, was_dict = await _resolve_project_state(ctx)
+                if p_state is not None:
+                    rq_list = p_state.stage_1_research.inputs.research_questions
+                    if actual_text and actual_text not in rq_list:
+                        rq_list.append(actual_text)
+                    meta = p_state.stage_1_research.meta
+                    if meta.status in ("not_started", "pending"):
+                        meta.status = "in_progress"
+                        meta.started_at = utc_now()
+                    meta.updated_at = utc_now()
+                    meta.progress_percentage = min(100.0, len(rq_list) * 20.0)
+                    p_state.touch()
+                    _sync_project_state(p_state, ctx, was_dict)
+            except Exception as sync_err:
+                logger.debug("add_research_question state sync skipped: %s", sync_err)
+
+        return res
     except Exception as exc:
         logger.error("add_research_question failed: %s", exc)
         return {"error": str(exc)}

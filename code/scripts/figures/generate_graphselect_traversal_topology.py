@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""
+generate_graphselect_traversal_topology.py
+Generates publication-ready vector PDF, 300 DPI PNG, and SVG for:
+Figure 3: GraphSelect BFS Traversal, Candidate Appraisal & Steering Topology.
+"""
+
+import os
+import subprocess
+import sys
+
+def build_dot():
+    dot_content = """digraph GraphSelect_Topology {
+    graph [
+        rankdir="TB",
+        nodesep=0.40,
+        ranksep=0.45,
+        splines=spline,
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=10,
+        dpi=300,
+        bgcolor="#FFFFFF",
+        compound=true,
+        pad="0.25,0.25"
+    ];
+
+    node [
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=9,
+        shape=none,
+        margin=0
+    ];
+
+    edge [
+        fontname="Helvetica,Arial,sans-serif",
+        fontsize=8,
+        color="#334155",
+        penwidth=1.4,
+        arrowsize=0.75
+    ];
+
+    // =========================================================================
+    // 1. TITLE & FORMULA HEADER
+    // =========================================================================
+    header_box [
+        label=<
+            <table border="1" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="#0F172A" color="#334155" style="rounded">
+                <tr>
+                    <td align="center" colspan="4">
+                        <font color="#FFFFFF" point-size="12"><b>GraphSelect: Bounded 1-Hop BFS Citation Traversal, Candidate Appraisal &amp; Steering Topology</b></font><br/>
+                        <font color="#94A3B8" point-size="9">Hybrid Ranking: <b>Score<sub>hybrid</sub>(p) = 0.70 · S̄(p) + 0.30 · PR<sub>norm</sub>(p)</b> | Gemini 768-dim MRL Embeddings | Neo4j GDS / NetworkX</font>
+                    </td>
+                </tr>
+            </table>
+        >
+    ];
+
+    // =========================================================================
+    // 2. PHASE 1: BOUNDED 1-HOP DIRECTIONAL EXPANSION
+    // =========================================================================
+    subgraph cluster_phase1 {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#1E3A8A" point-size="11"><b>PHASE 1: BOUNDED 1-HOP BIDIRECTIONAL EXPANSION FROM SEED</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#EFF6FF",
+            color="#3B82F6",
+            penwidth=1.3,
+            margin=8
+        ];
+
+        subgraph phase1_nodes {
+            graph [rank="same"];
+
+            Seed_Paper [
+                label=<
+                    <table border="3" cellborder="0" cellspacing="0" cellpadding="6" bgcolor="#FFFFFF" color="#1E3A8A" style="rounded">
+                        <tr><td bgcolor="#1E3A8A" align="center"><font color="#FFFFFF" point-size="10"><b>🎯 Seed Paper (p<sub>seed</sub>)</b></font></td></tr>
+                        <tr><td bgcolor="#DBEAFE" align="center"><font color="#1E40AF" point-size="8">Depth = 0 Anchor Node</font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • User topic / initial corpus anchor<br/>
+                                • High citation baseline (c<sub>p</sub>)<br/>
+                                • Asymmetric vector embedding: e<sub>seed</sub><br/>
+                                • OpenAlex ID / Canonical DOI
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Expansion_Engine [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#2563EB" style="rounded">
+                        <tr><td bgcolor="#2563EB" align="center" colspan="3"><font color="#FFFFFF" point-size="9"><b>1-Hop Expansion: N<sub>1</sub>(p<sub>seed</sub>) = N<sub>bwd</sub> ∪ N<sub>fwd</sub></b></font></td></tr>
+                        <tr>
+                            <td bgcolor="#FEF3C7" align="center" width="140">
+                                <font color="#92400E" point-size="8"><b>Backward References</b><br/><b>N<sub>bwd</sub></b> (cites:doi)</font><br/>
+                                <font point-size="7" color="#475569">Prior Art, Foundations,<br/>Lineage antecedents</font>
+                            </td>
+                            <td bgcolor="#E0E7FF" align="center" width="140">
+                                <font color="#3730A3" point-size="8"><b>Co-Citation Bridge</b><br/><b>N<sub>both</sub></b> (N<sub>bwd</sub> ∩ N<sub>fwd</sub>)</font><br/>
+                                <font point-size="7" color="#475569">Topological bridges,<br/>Mutual grounding</font>
+                            </td>
+                            <td bgcolor="#DCFCE7" align="center" width="140">
+                                <font color="#166534" point-size="8"><b>Forward Citations</b><br/><b>N<sub>fwd</sub></b> (cited_by:doi)</font><br/>
+                                <font point-size="7" color="#475569">Contemporary extensions,<br/>Breakthrough empiricals</font>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="3" align="center" bgcolor="#F8FAFC" cellpadding="3">
+                                <font color="#475569" point-size="8">Batch OpenAlex Metadata Fetch &amp; Citation Graph Upsert into Neo4j</font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+        }
+
+        Seed_Paper -> Expansion_Engine [penwidth=2.0, color="#2563EB", label=" Concurrent Traversal "];
+    }
+
+    // =========================================================================
+    // 3. PHASE 2: VECTOR EMBEDDING, PRUNING & CENTRALITY ENGINE
+    // =========================================================================
+    subgraph cluster_phase2 {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#065F46" point-size="11"><b>PHASE 2: GEMINI ASYMMETRIC EMBEDDING, PRUNING &amp; 3-TIER CENTRALITY</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#ECFDF5",
+            color="#10B981",
+            penwidth=1.3,
+            margin=8
+        ];
+
+        subgraph phase2_nodes {
+            graph [rank="same"];
+
+            Embedding_Engine [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                        <tr><td bgcolor="#059669" align="center"><font color="#FFFFFF" point-size="9"><b>Asymmetric Gemini Embeddings</b></font></td></tr>
+                        <tr><td bgcolor="#ECFDF5" align="center"><font color="#065F46" point-size="8">gemini-embedding-2 (768 dims, MRL)</font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • <b>Query:</b> <font face="Courier">task: search result | query: {RQ}</font><br/>
+                                • <b>Doc:</b> <font face="Courier">title: {title} | text: {abstract}</font><br/>
+                                • <b>Cosine Sim:</b> S(p, q<sub>j</sub>) = (e<sub>p</sub> · q<sub>j</sub>) / (||e<sub>p</sub>|| ||q<sub>j</sub>||)<br/>
+                                • <b>Adaptive Pruning:</b> τ<sub>sim</sub> = μ<sub>sim</sub> - σ<sub>sim</sub>
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Centrality_Engine [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                        <tr><td bgcolor="#059669" align="center"><font color="#FFFFFF" point-size="9"><b>3-Tier PageRank Centrality Engine</b></font></td></tr>
+                        <tr><td bgcolor="#ECFDF5" align="center"><font color="#065F46" point-size="8">Neo4j Service Multi-Level Fallback</font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#334155" point-size="8">
+                                • <b>Tier 1:</b> Neo4j GDS (<font face="Courier">gds.pageRank.stream</font>, d=0.85)<br/>
+                                • <b>Tier 2:</b> Pure-Python NetworkX DiGraph Fallback<br/>
+                                • <b>Tier 3:</b> In-Degree Centrality Normalization<br/>
+                                • <b>Centrality Normalization:</b> PR<sub>norm</sub>(p) ∈ [0, 1]
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+        }
+
+        Expansion_Engine -> Embedding_Engine [penwidth=1.6, color="#059669", label=" Candidate Texts "];
+        Expansion_Engine -> Centrality_Engine [penwidth=1.6, color="#059669", label=" Citation Subgraph "];
+    }
+
+    // =========================================================================
+    // 4. PHASE 3: 3-ARCHETYPE CANDIDATE APPRAISAL ENGINE
+    // =========================================================================
+    subgraph cluster_phase3 {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#9A3412" point-size="11"><b>PHASE 3: THREE-ARCHETYPE CANDIDATE APPRAISAL ENGINE</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#FFF7ED",
+            color="#EA580C",
+            penwidth=1.3,
+            margin=8
+        ];
+
+        subgraph phase3_archetypes {
+            graph [rank="same"];
+
+            Archetype_Foundational [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#D97706" style="rounded">
+                        <tr>
+                            <td bgcolor="#D97706" align="center">
+                                <font color="#FFFFFF" point-size="9"><b>🏛️ Archetype 1: Foundational Prior Art</b></font><br/>
+                                <font color="#FEF3C7" point-size="7">Theoretical Lineage &amp; Seminal Grounding</font>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#1E293B" point-size="8">
+                                • <b>Formula:</b> H<sub>found</sub>(p) = w<sub>1</sub> c̃<sub>p</sub> + w<sub>2</sub> I(p∈N<sub>bwd</sub>) +<br/>
+                                &nbsp;&nbsp;&nbsp;&nbsp;w<sub>3</sub> min(1, age/5) + w<sub>4</sub> S̄(p) + δ<sub>mature</sub><br/>
+                                • <b>Weights:</b> w = (0.35, 0.25, 0.20, 0.20)<br/>
+                                • <b>Maturity Bonus:</b> δ<sub>mature</sub> = +0.10 if age &ge; 3 yrs<br/>
+                                • <b>Profile:</b> Highly cited, mature, backward lineage
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Archetype_Contemporary [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#2563EB" style="rounded">
+                        <tr>
+                            <td bgcolor="#2563EB" align="center">
+                                <font color="#FFFFFF" point-size="9"><b>⚡ Archetype 2: Contemporary Breakthrough</b></font><br/>
+                                <font color="#DBEAFE" point-size="7">Recent Advances &amp; SOTA Benchmarks</font>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#1E293B" point-size="8">
+                                • <b>Formula:</b> H<sub>contemp</sub>(p) = μ<sub>1</sub> S<sub>max</sub>(p) +<br/>
+                                &nbsp;&nbsp;&nbsp;&nbsp;μ<sub>2</sub> max(0, 1 - age/3) + μ<sub>3</sub> c̃<sub>p</sub> + δ<sub>recent</sub><br/>
+                                • <b>Weights:</b> μ = (0.50, 0.35, 0.15)<br/>
+                                • <b>Velocity Bonus:</b> δ<sub>recent</sub> = +0.15 if age &le; 2 &amp; S &ge; 0.6<br/>
+                                • <b>Profile:</b> Published 2024–2026, peak similarity
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Archetype_Bridge [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="5" bgcolor="#FFFFFF" color="#7C3AED" style="rounded">
+                        <tr>
+                            <td bgcolor="#7C3AED" align="center">
+                                <font color="#FFFFFF" point-size="9"><b>🌉 Archetype 3: Topological Bridge</b></font><br/>
+                                <font color="#EDE9FE" point-size="7">Cross-Cutting &amp; Multi-Disciplinary Link</font>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td align="left" cellpadding="4">
+                                <font color="#1E293B" point-size="8">
+                                • <b>Formula:</b> H<sub>bridge</sub>(p) = γ<sub>1</sub> PR̃(p) + γ<sub>2</sub> d̃<sub>p</sub> +<br/>
+                                &nbsp;&nbsp;&nbsp;&nbsp;γ<sub>3</sub> B<sub>Q</sub>(p) + 0.05 · I(deg &gt; 1)<br/>
+                                • <b>Weights:</b> γ = (0.40, 0.30, 0.30)<br/>
+                                • <b>RQ Balance B<sub>Q</sub>(p):</b> High similarity across &ge;2 RQs<br/>
+                                • <b>Profile:</b> Structural hub connecting distinct clusters
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+        }
+
+        Embedding_Engine -> Archetype_Foundational   [penwidth=1.4, color="#EA580C", label=" Vector S̄(p) "];
+        Embedding_Engine -> Archetype_Contemporary   [penwidth=1.4, color="#EA580C", label=" S<sub>max</sub>(p) "];
+        Centrality_Engine -> Archetype_Bridge        [penwidth=1.4, color="#EA580C", label=" PR(p) &amp; Deg "];
+    }
+
+    // =========================================================================
+    // 5. PHASE 4: 4 STRATEGIC STEERING ACTION OPTIONS
+    // =========================================================================
+    subgraph cluster_phase4 {
+        graph [
+            label=<<table border="0" cellborder="0"><tr><td><font color="#0F172A" point-size="11"><b>PHASE 4: STRATEGIC HUMAN-IN-THE-LOOP STEERING ACTIONS</b></font></td></tr></table>>,
+            style="rounded,filled",
+            fillcolor="#F8FAFC",
+            color="#64748B",
+            penwidth=1.3,
+            margin=8
+        ];
+
+        subgraph phase4_actions {
+            graph [rank="same"];
+
+            Option_A [
+                label=<
+                    <table border="1" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#D97706" style="rounded">
+                        <tr><td bgcolor="#D97706" align="center"><font color="#FFFFFF" point-size="8"><b>Option A: Foundational Deep-Dive</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="3">
+                                <font color="#334155" point-size="7">
+                                Action: <font face="Courier">expand_deeper(top_foundational)</font><br/>
+                                Traces theoretical roots &amp; seminal lineage
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Option_B [
+                label=<
+                    <table border="1" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#2563EB" style="rounded">
+                        <tr><td bgcolor="#2563EB" align="center"><font color="#FFFFFF" point-size="8"><b>Option B: Contemporary Deep-Dive</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="3">
+                                <font color="#334155" point-size="7">
+                                Action: <font face="Courier">expand_deeper(top_contemporary)</font><br/>
+                                Captures state-of-the-art 2025–2026 empiricals
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Option_C [
+                label=<
+                    <table border="1" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#7C3AED" style="rounded">
+                        <tr><td bgcolor="#7C3AED" align="center"><font color="#FFFFFF" point-size="8"><b>Option C: Bridge Deep-Dive</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="3">
+                                <font color="#334155" point-size="7">
+                                Action: <font face="Courier">expand_deeper(top_bridge)</font><br/>
+                                Uncovers inter-disciplinary connections
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+
+            Option_D [
+                label=<
+                    <table border="2" cellborder="0" cellspacing="0" cellpadding="4" bgcolor="#FFFFFF" color="#059669" style="rounded">
+                        <tr><td bgcolor="#059669" align="center"><font color="#FFFFFF" point-size="8"><b>Option D: Adopt &amp; Conclude</b></font></td></tr>
+                        <tr>
+                            <td align="left" cellpadding="3">
+                                <font color="#334155" point-size="7">
+                                Action: <font face="Courier">add_to_library(candidates)</font><br/>
+                                Finalizes candidate pool &amp; commits to Stage 2
+                                </font>
+                            </td>
+                        </tr>
+                    </table>
+                >
+            ];
+        }
+
+        Archetype_Foundational -> Option_A [penwidth=1.2, color="#D97706"];
+        Archetype_Contemporary -> Option_B [penwidth=1.2, color="#2563EB"];
+        Archetype_Bridge       -> Option_C [penwidth=1.2, color="#7C3AED"];
+        Archetype_Contemporary -> Option_D [penwidth=1.2, color="#059669", style="dashed"];
+    }
+
+    // =========================================================================
+    // LOOPBACK TO NEXT BFS HOP OR STAGE 2 COMMIT
+    // =========================================================================
+    Next_Hop [
+        shape=rectangle,
+        style="filled,rounded",
+        fillcolor="#EFF6FF",
+        color="#2563EB",
+        penwidth=1.5,
+        fontcolor="#1E40AF",
+        fontsize=9,
+        label="🔁 Next BFS Traversal Depth (Hop = Hop + 1) — Bounded by Theorem 3.1 (|V| ≤ (b^(D+1) - 1)/(b - 1))"
+    ];
+
+    Library_Commit [
+        shape=rectangle,
+        style="filled,rounded",
+        fillcolor="#ECFDF5",
+        color="#059669",
+        penwidth=1.5,
+        fontcolor="#065F46",
+        fontsize=9,
+        label="✅ Library Commit: Papers Persisted to Neo4j & stage_1_research.artifacts.papers (Stage 2 Analysis Ready)"
+    ];
+
+    Option_A -> Next_Hop [penwidth=1.2, color="#2563EB", label=" New Seed Paper "];
+    Option_B -> Next_Hop [penwidth=1.2, color="#2563EB"];
+    Option_C -> Next_Hop [penwidth=1.2, color="#2563EB"];
+    Option_D -> Library_Commit [penwidth=1.8, color="#059669", label=" Advance to Stage 2 "];
+
+    Next_Hop:w -> Seed_Paper:w [color="#2563EB", style="dashed", constraint=false, label=" Recurse Depth "];
+    header_box -> Seed_Paper [style="invis"];
+}
+"""
+    return dot_content
+
+def main():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    dot_content = build_dot()
+    
+    dot_file = os.path.join(script_dir, "graphselect_traversal_topology.dot")
+    pdf_file = os.path.join(script_dir, "graphselect_traversal_topology.pdf")
+    png_file = os.path.join(script_dir, "graphselect_traversal_topology.png")
+    svg_file = os.path.join(script_dir, "graphselect_traversal_topology.svg")
+
+    with open(dot_file, "w") as f:
+        f.write(dot_content)
+    print(f"Wrote {dot_file}")
+
+    cmd_pdf = ["dot", "-Tpdf", dot_file, "-o", pdf_file]
+    cmd_png = ["dot", "-Tpng", "-Gdpi=300", dot_file, "-o", png_file]
+    cmd_svg = ["dot", "-Tsvg", dot_file, "-o", svg_file]
+
+    for cmd in [cmd_pdf, cmd_png, cmd_svg]:
+        res = subprocess.run(cmd, capture_output=True, text=True)
+        if res.returncode != 0:
+            print(f"Error executing {' '.join(cmd)}:\n{res.stderr}", file=sys.stderr)
+            sys.exit(1)
+
+    print(f"Successfully generated:")
+    print(f"  - {pdf_file} ({os.path.getsize(pdf_file)} bytes)")
+    print(f"  - {png_file} ({os.path.getsize(png_file)} bytes)")
+    print(f"  - {svg_file} ({os.path.getsize(svg_file)} bytes)")
+
+if __name__ == "__main__":
+    main()

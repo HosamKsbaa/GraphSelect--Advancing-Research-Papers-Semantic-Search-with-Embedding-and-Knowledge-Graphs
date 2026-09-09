@@ -328,6 +328,47 @@ async def run_graphselect_traversal(
         appraisal = appraise_1hop_candidate_pool(result)
         appraisal_dump = appraisal.model_dump()
 
+        if ctx is not None:
+            try:
+                from features.workflow.state_tools import _resolve_project_state, _sync_project_state
+                from features.workflow.state_models import PaperMetadata, utc_now
+
+                p_state, a_name, was_dict = await _resolve_project_state(ctx)
+                if p_state is not None:
+                    papers_dict = p_state.stage_1_research.artifacts.papers
+                    if actual_doi and actual_doi not in papers_dict:
+                        papers_dict[actual_doi] = PaperMetadata(
+                            doi=actual_doi,
+                            title=result.seed_title or f"Seed Paper: {actual_doi}",
+                            is_seed=True,
+                            hop_distance=0,
+                        )
+                    for c in result.candidates:
+                        c_doi = getattr(c, "doi", None)
+                        if c_doi and c_doi not in papers_dict:
+                            papers_dict[c_doi] = PaperMetadata(
+                                doi=c_doi,
+                                title=getattr(c, "title", "") or "",
+                                authors=getattr(c, "authors", []) or [],
+                                year=getattr(c, "year", None),
+                                citation_count=getattr(c, "cited_by_count", 0) or 0,
+                                venue=getattr(c, "venue", None),
+                                is_seed=(c_doi == actual_doi),
+                                hop_distance=getattr(c, "hop_distance", 1) or 1,
+                            )
+                    p_state.stage_1_research.artifacts.total_discovered = len(papers_dict)
+                    p_state.stage_1_research.artifacts.total_relevant = len(papers_dict)
+                    meta = p_state.stage_1_research.meta
+                    if meta.status in ("not_started", "pending"):
+                        meta.status = "in_progress"
+                        meta.started_at = utc_now()
+                    meta.updated_at = utc_now()
+                    meta.progress_percentage = min(100.0, 40.0 + len(papers_dict) * 3.0)
+                    p_state.touch()
+                    _sync_project_state(p_state, ctx, was_dict)
+            except Exception as sync_err:
+                logger.debug("run_graphselect_traversal state sync skipped: %s", sync_err)
+
         return {
             "status": "completed",
             "seed_doi": result.seed_doi,

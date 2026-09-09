@@ -22,8 +22,10 @@ from agents.writing.agent import create_writer_agent
 from config import get_settings
 from features.workflow.state_tools import (
     get_project_state,
+    get_stage_status,
     post_to_message_board,
     read_message_board,
+    transition_to_stage,
     update_stage_substate,
 )
 
@@ -78,26 +80,44 @@ If you or any sub-agent encounter an unexpected tool failure, 4xx/5xx HTTP error
    - Execution context (project_id, operation)
 3. Delegate directly to the **DebuggerAgent** to diagnose the root cause with `fetch_error_logs` and `read_agent_code`, execute reproducing tests with `run_agent_tests`, and formulate an AST-validated fix with `validate_and_propose_patch`.
 
+## Strict 5-Stage Sequential Pipeline & Gating
+The literature review MUST strictly progress through 5 sequential stages in order. You and your sub-agents must NEVER skip stages or jump ahead:
+1. **stage_1_research**: Define 3-5 research questions with user approval, search literature, and run citation graph traversal until at least 5 relevant papers are collected.
+2. **stage_2_analysis**: Compute embeddings, PageRank paper rankings, identify coverage gaps, and build structured literature comparison matrix.
+3. **stage_3_planning**: Synthesize narrative arc, section blueprints, DOI assignments, and outline.
+4. **stage_4_writing**: Draft sections, execute peer review feedback loop, and verify citation groundings.
+5. **stage_5_export**: Generate LaTeX templates, compile BibTeX, and finalize publication artifacts.
+
+## Pacing & Turn-Taking Rules (DO NOT JUMP AHEAD)
+- **ONE STEP PER TURN**: Never execute multiple workflow phases in a single turn without waiting for user input.
+- **PROPOSE BEFORE PROCEEDING**: When formulating research questions, present them clearly to the user and WAIT for their confirmation or modification. Do NOT immediately run paper discovery or citation traversal in the same turn!
+- **CONFIRM BEFORE TRANSITION**: When literature discovery yields papers, present the library to the user and ask for confirmation before transitioning.
+- Use `transition_to_stage` when moving to the next stage.
+- Use `get_stage_status` to verify current stage requirements and completion.
+
 ## Workflow Overview
 When a user starts a new session:
 1. Greet them and explain available capabilities.
-2. If a project_id is set in state, report on the current project status.
-3. Guide them to define research questions (via ResearchAgent).
-4. Help them search for and explore papers (via ResearchAgent).
-5. Periodically suggest running gap analysis (via ResearchAgent).
-6. When ready, generate an outline (via PlannerAgent).
-7. Draft and review sections (via WriterAgent).
-8. Export final documents (via WriterAgent).
+2. If a project_id is set in state, report on the current project status using `get_stage_status`.
+3. Guide them through Stage 1: define research questions with user confirmation (via ResearchAgent).
+4. Once questions are approved, search for and explore papers (via ResearchAgent / ALRSAgent).
+5. When Stage 1 is complete, transition to Stage 2 (`transition_to_stage("stage_2_analysis")`).
+6. Run gap analysis and comparison matrix synthesis (via GapFinderAgent / EvidenceSynthesizerAgent).
+7. When Stage 2 is complete, transition to Stage 3 (`transition_to_stage("stage_3_planning")`).
+8. Generate outline (via PlannerAgent).
+9. Transition to Stage 4: draft and review sections (via WriterAgent).
+10. Transition to Stage 5: export final documents (via WriterAgent).
 
 ## Full Pipeline Mode
-If the user says "run the full pipeline autonomously":
+If the user explicitly says "run the full pipeline autonomously":
 1. Start with research question verification.
 2. Search and explore papers until adequate coverage.
-3. Run gap analysis and fill gaps iteratively (up to 3 iterations).
-4. Generate an outline.
-5. Draft all sections with review cycles.
-6. Export BibTeX and LaTeX.
-7. Present a final summary with statistics.
+3. Transition through each stage sequentially using `transition_to_stage`.
+4. Run gap analysis and fill gaps iteratively (up to 3 iterations).
+5. Generate an outline.
+6. Draft all sections with review cycles.
+7. Export BibTeX and LaTeX.
+8. Present a final summary with statistics.
 
 IMPORTANT: Monitor the token budget throughout.  If you receive a budget
 warning, prioritize completing the current phase and present results.
@@ -221,6 +241,8 @@ def create_orchestrator_agent(
             select_project,
             list_projects,
             get_project_state,
+            get_stage_status,
+            transition_to_stage,
             post_to_message_board,
             read_message_board,
             update_stage_substate,
