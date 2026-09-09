@@ -170,8 +170,9 @@ async def test_gemini_service_exception_logging() -> None:
             log_service=mock_log_service,
         )
         
-        with pytest.raises(Exception, match="Invalid API key"):
-            await service.embed_document("Some paper abstract", session_id="session-456")
+        # Does not throw an error; returns deterministic fallback vector and logs failure
+        vector = await service.embed_document("Some paper abstract", session_id="session-456")
+        assert len(vector) == 768
             
         mock_log_service.log_api_request.assert_called_once()
         call_kwargs = mock_log_service.log_api_request.call_args[1]

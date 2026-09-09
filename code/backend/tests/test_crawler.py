@@ -755,3 +755,44 @@ async def test_e2e_one_hop_traversal_lifecycle(
     event_types = [e.event_type for e in events]
     assert EventType.LEVEL_COMPLETE in event_types
     assert EventType.SEARCH_COMPLETE in event_types
+
+
+@pytest.mark.asyncio
+async def test_batch_embedding_single_api_call_for_multiple_candidates(
+    mock_openalex_client: AsyncMock,
+    mock_neo4j_service: AsyncMock,
+    mock_seed_doi: str,
+) -> None:
+    """Verify that multiple uncached candidate papers are embedded and persisted in a single batch."""
+    mock_gemini = AsyncMock()
+    mock_gemini.model_name = "gemini-embedding-2"
+    mock_gemini.batch_embed_documents = AsyncMock(return_value=[
+        [0.1] * 768,
+        [0.2] * 768,
+        [0.3] * 768,
+    ])
+    mock_neo4j_service.batch_get_paper_embeddings = AsyncMock(return_value={})
+    mock_neo4j_service.has_embedding = AsyncMock(return_value=False)
+    mock_neo4j_service.batch_store_paper_embeddings = AsyncMock()
+
+    crawler = CrawlerService(
+        neo4j=mock_neo4j_service,
+        openalex=mock_openalex_client,
+        gemini=mock_gemini,
+    )
+
+    result = await crawler.run_one_hop_expansion(
+        session_id="batch-sess-1",
+        seed_doi=mock_seed_doi,
+        project_id="proj-batch-1",
+    )
+
+    assert len(result.candidates) == 3
+    # Exactly 1 call to batch_embed_documents with 3 documents
+    mock_gemini.batch_embed_documents.assert_called_once()
+    called_docs = mock_gemini.batch_embed_documents.call_args[0][0]
+    assert len(called_docs) == 3
+    # Exactly 1 call to batch_store_paper_embeddings with 3 items
+    mock_neo4j_service.batch_store_paper_embeddings.assert_called_once()
+    stored_items = mock_neo4j_service.batch_store_paper_embeddings.call_args[0][0]
+    assert len(stored_items) == 3

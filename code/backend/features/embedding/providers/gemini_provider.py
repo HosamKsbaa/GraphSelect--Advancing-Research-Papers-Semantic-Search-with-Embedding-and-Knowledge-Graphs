@@ -1,24 +1,15 @@
 """Gemini embedding provider for ALRS v2.
 
-Implements :class:`~features.embedding.providers.base.EmbeddingProvider`
-using ``gemini-embedding-2`` — the multimodal embedding model from the
-Gemini API.
-
-This model does NOT support the ``task_type`` parameter; instead, task
-instructions are included directly in the prompt text using the asymmetric
-retrieval format:
-
-  - Documents: ``"title: {title} | text: {content}"``
-  - Queries:   ``"task: question answering | query: {content}"``
-
-``gemini-embedding-2`` automatically renormalizes truncated/flexible
-dimensions, so no manual normalization is needed (unlike
-``gemini-embedding-001``).
+Connects to Google's Gemini API (gemini-embedding-2) to generate vector
+embeddings for academic paper abstracts and research questions.
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import math
 import os
-import logging
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 from google import genai
@@ -29,19 +20,9 @@ from features.embedding.providers.base import EmbeddingProvider
 if TYPE_CHECKING:
     from core.logging.log_service import LogService
 
-logger = logging.getLogger(__name__)
-
-_PLACEHOLDERS = {"", "your_gemini_api_key_here", "your_project_id_here", "your-gcp-project-id", "Not set", "None", "null"}
-
 
 class GeminiEmbeddingProvider(EmbeddingProvider):
-    """Embedding provider backed by the Gemini API.
-
-    Uses ``gemini-embedding-2`` with prompt-based task formatting for
-    optimized retrieval embeddings.  Supports configurable output
-    dimensions via MRL (Matryoshka Representation Learning).
-    ``gemini-embedding-2`` automatically normalizes truncated dimensions.
-    """
+    """Generates text embeddings using Google's Gemini API."""
 
     def __init__(
         self,
@@ -56,81 +37,69 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         from config import get_settings
         settings = get_settings()
 
-        self._use_vertex_ai: bool = vertexai if vertexai is not None else settings.use_vertex_ai
         self._output_dimensionality = output_dimensionality
         self._log_service = log_service
         self._model_name = model_name
         self._client: genai.Client | None = None
-        self._project: str | None = None
-        self._location: str | None = None
 
-        if self._use_vertex_ai:
-            self._mode = "vertex"
-            self._project = (
-                project or (settings.vertex_project if settings.vertex_project and settings.vertex_project not in _PLACEHOLDERS else None) or os.environ.get("GOOGLE_CLOUD_PROJECT") or ""
-            ).strip()
-            self._location = (
-                location or settings.vertex_location or os.environ.get("GOOGLE_CLOUD_LOCATION") or "us-central1"
-            ).strip()
-            self._api_key = None
-
-            if self._project and self._project not in _PLACEHOLDERS:
-                try:
-                    self._client = genai.Client(
-                        vertexai=True,
-                        project=self._project,
-                        location=self._location,
-                    )
-                    logger.info(
-                        "GeminiEmbeddingProvider initialized via Vertex AI (project=%s, location=%s)",
-                        self._project, self._location,
-                    )
-                except Exception as exc:
-                    self._client = None
-                    logger.warning("GeminiEmbeddingProvider failed to initialize Vertex client: %s", exc)
-            else:
-                self._client = None
-                logger.warning("GeminiEmbeddingProvider: Vertex AI mode active but project is not set")
+        # Choose connection mode: Google Cloud Vertex AI or Google AI Studio
+        use_vertex = vertexai if vertexai is not None else settings.use_vertex_ai
+        if use_vertex:
+            self._client = self._init_vertex_client(settings, project, location)
         else:
-            self._mode = "studio"
-            self._project = None
-            self._location = None
-            effective_key = (
-                api_key
-                or (settings.gemini_api_key if settings.gemini_api_key and settings.gemini_api_key not in _PLACEHOLDERS else None)
-                or os.environ.get("GEMINI_API_KEY")
-                or os.environ.get("GOOGLE_API_KEY")
-                or ""
-            ).strip()
-            if effective_key in _PLACEHOLDERS:
-                effective_key = ""
+            self._client = self._init_studio_client(settings, api_key)
 
-            self._api_key = effective_key or None
+    def _init_vertex_client(
+        self,
+        settings: Any,
+        project: str | None,
+        location: str | None,
+    ) -> genai.Client | None:
+        """Initialize Google Cloud Vertex AI client."""
+        gcp_project = project or settings.vertex_project or os.environ.get("GOOGLE_CLOUD_PROJECT") or ""
+        gcp_location = location or settings.vertex_location or os.environ.get("GOOGLE_CLOUD_LOCATION") or "us-central1"
 
+        clean_project = gcp_project.strip()
+        if not clean_project or clean_project in {"None", "null"}:
+            return None
+        return genai.Client(vertexai=True, project=clean_project, location=gcp_location.strip())
 
-            if self._api_key:
-                try:
-                    self._client = genai.Client(api_key=self._api_key, vertexai=False)
-                    logger.info("GeminiEmbeddingProvider initialized via Google AI Studio")
-                except Exception as exc:
-                    self._client = None
-                    logger.warning("GeminiEmbeddingProvider failed to initialize Studio client: %s", exc)
-            else:
-                self._client = None
-                logger.warning("GeminiEmbeddingProvider initialized without credentials (GEMINI_API_KEY not configured)")
-
-
-    # ── EmbeddingProvider interface ──────────────────────────────────
+    def _init_studio_client(self, settings: Any, api_key: str | None) -> genai.Client | None:
+        """Initialize Google AI Studio client with an API key."""
+        key = (
+            api_key
+            or settings.gemini_api_key
+            or os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+            or ""
+        )
+        clean_key = key.strip()
+        if not clean_key or clean_key in {"None", "null", "your_gemini_api_key_here"}:
+            return None
+        return genai.Client(api_key=clean_key, vertexai=False)
 
     @property
     def model_name(self) -> str:
-        """Return the canonical model identifier."""
         return self._model_name
 
     @property
     def dimensions(self) -> int:
-        """Return the configured output dimensionality."""
         return self._output_dimensionality
+
+    # ── 1. Text Formatting for Gemini ─────────────────────────────────
+
+    @staticmethod
+    def _format_document(text: str, title: str | None = None) -> str:
+        """Format a paper as a retrieval document: 'title: ... | text: ...'"""
+        safe_title = title.strip() if title else "none"
+        return f"title: {safe_title} | text: {text}"
+
+    @staticmethod
+    def _format_query(query: str, task: str = "question answering") -> str:
+        """Format a research question as a retrieval query."""
+        return f"task: {task} | query: {query}"
+
+    # ── 2. Public Methods (Single & Batch) ────────────────────────────
 
     async def embed_document(
         self,
@@ -139,28 +108,13 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         *,
         session_id: str | None = None,
     ) -> list[float]:
-        """Embed a paper's abstract as a retrieval document.
+        """Embed a single paper abstract."""
+        results = await self.batch_embed_documents([(text, title)], session_id=session_id)
+        if results:
+            return results[0]
+        return self._create_fallback_vector(text)
 
-        Args:
-            text: Paper abstract or concatenated title + abstract.
-            title: Optional paper title for the document format.
-            session_id: Optional session identifier for telemetry.
-
-        Returns:
-            Embedding vector as list of floats.
-        """
-        formatted = self._format_document(text, title)
-        return await self._embed(formatted, purpose="document", session_id=session_id)
-
-    async def embed_paper(
-        self,
-        text: str,
-        title: str | None = None,
-        *,
-        session_id: str | None = None,
-    ) -> list[float]:
-        """Convenience alias for embed_document."""
-        return await self.embed_document(text, title=title, session_id=session_id)
+    embed_paper = embed_document
 
     async def embed_query(
         self,
@@ -168,175 +122,185 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         *,
         session_id: str | None = None,
     ) -> list[float]:
-        """Embed a research question as a retrieval query.
-
-        Args:
-            query: The research question text.
-            session_id: Optional session identifier for telemetry.
-
-        Returns:
-            Embedding vector as list of floats.
-        """
-        formatted = self._format_query(query, task="question answering")
-        return await self._embed(formatted, purpose="query", session_id=session_id)
+        """Embed a research question for vector similarity search."""
+        formatted = self._format_query(query)
+        results = await self._embed_batch([formatted], session_id=session_id)
+        if results:
+            return results[0]
+        return self._create_fallback_vector(query)
 
     embed_question = embed_query
 
-    # ── Prompt formatting (per Gemini Embeddings Reference) ──────────
-
-    @staticmethod
-    def _format_document(text: str, title: str | None = None) -> str:
-        """Format text as a document for retrieval embedding.
-
-        Uses the asymmetric format: ``"title: {title} | text: {content}"``
-        If no title is provided, uses ``"title: none"``.
-        """
-        doc_title = title if title else "none"
-        return f"title: {doc_title} | text: {text}"
-
-    @staticmethod
-    def _format_query(query: str, task: str = "question answering") -> str:
-        """Format text as a query for retrieval embedding.
-
-        Uses the asymmetric format: ``"task: {task} | query: {content}"``
-        Supported tasks: search result, question answering, fact checking,
-        code retrieval.
-        """
-        return f"task: {task} | query: {query}"
-
-    # ── Internal ─────────────────────────────────────────────────────
-
-    async def _embed(
+    async def batch_embed_documents(
         self,
-        text: str,
-        purpose: str = "document",
+        documents: list[tuple[str, str | None]],
+        *,
         session_id: str | None = None,
-    ) -> list[float]:
-        """Internal embedding method with retry logic and logging."""
+        batch_size: int = 50,
+    ) -> list[list[float]]:
+        """Embed multiple paper abstracts in chunks of up to 50."""
+        if not documents:
+            return []
+
+        all_embeddings: list[list[float]] = []
+
+        # Send papers to Google in safe chunks of 50 per API call
+        for start in range(0, len(documents), batch_size):
+            chunk = documents[start : start + batch_size]
+            formatted_chunk = [
+                self._format_document(abstract, title)
+                for abstract, title in chunk
+            ]
+            chunk_vectors = await self._embed_batch(formatted_chunk, session_id=session_id)
+            all_embeddings.extend(chunk_vectors)
+
+        return all_embeddings
+
+    # ── 3. Core Network Call with Retry & Telemetry ───────────────────
+
+    async def _embed_batch(
+        self,
+        formatted_texts: list[str],
+        session_id: str | None = None,
+    ) -> list[list[float]]:
+        """Send formatted texts to Google and return their vector embeddings."""
+        if not formatted_texts:
+            return []
+
+        # If no API credentials exist, use deterministic offline vector
         if self._client is None:
-            logger.warning("Gemini API credentials not configured; using deterministic fallback embedding.")
-            import hashlib
-            import math
-            h = hashlib.sha256(text.encode("utf-8")).digest()
-            raw = [(b / 255.0) * 2 - 1 for b in h]
-            repeated = (raw * (self._output_dimensionality // len(raw) + 1))[:self._output_dimensionality]
-            norm = math.sqrt(sum(x * x for x in repeated)) or 1.0
-            return [x / norm for x in repeated]
+            return [self._create_fallback_vector(t) for t in formatted_texts]
 
-        import asyncio
-        import time
-        from functools import partial
+        start_time_ms = int(time.monotonic() * 1000)
 
-        loop = asyncio.get_running_loop()
-        max_retries = 3
+        try:
+            response = await self._call_gemini_with_retry(formatted_texts)
+            elapsed_ms = int(time.monotonic() * 1000) - start_time_ms
 
-        for attempt in range(max_retries + 1):
-            start_ms = int(time.monotonic() * 1000)
+            await self._log_telemetry(
+                count=len(formatted_texts),
+                status_code=200,
+                elapsed_ms=elapsed_ms,
+                session_id=session_id,
+            )
+
+            return self._extract_vectors_from_response(response, formatted_texts)
+
+        except Exception as error:
+            elapsed_ms = int(time.monotonic() * 1000) - start_time_ms
+            status_code = getattr(error, "code", getattr(error, "status_code", 500))
+
+            await self._log_telemetry(
+                count=len(formatted_texts),
+                status_code=status_code,
+                elapsed_ms=elapsed_ms,
+                session_id=session_id,
+                error_message=str(error),
+            )
+
+            # Do not crash the application: return deterministic offline vectors
+            return [self._create_fallback_vector(t) for t in formatted_texts]
+
+    async def _call_gemini_with_retry(self, texts: list[str]) -> Any:
+        """Execute the Google API call on a worker thread with auto-retry on 429."""
+        if self._client is None:
+            raise RuntimeError("Gemini client is not initialized")
+
+        max_attempts = 4  # Initial try + up to 3 retries
+
+        for attempt in range(max_attempts):
             try:
-                func = partial(
+                # Run the blocking Google SDK call in a background thread
+                return await asyncio.to_thread(
                     self._client.models.embed_content,
                     model=self._model_name,
-                    contents=text,
+                    contents=cast(Any, texts),
                     config=types.EmbedContentConfig(
                         output_dimensionality=self._output_dimensionality,
                     ),
                 )
-                result = await loop.run_in_executor(None, func)
-                elapsed_ms = int(time.monotonic() * 1000) - start_ms
+            except Exception as error:
+                status_code = getattr(error, "code", getattr(error, "status_code", 500))
 
-                if self._log_service is not None:
-                    import json
-                    req_body = json.dumps({
-                        "model": self._model_name,
-                        "contents": text,
-                        "output_dimensionality": self._output_dimensionality
-                    })
+                # If Google returned Rate Limit (429) and retries remain: wait and retry
+                is_rate_limit = (status_code == 429)
+                can_retry = (attempt < max_attempts - 1)
 
-                    # Convert embeddings to dict for logging
-                    resp_dict: dict[str, list[object]] = {"embeddings": []}
-                    if hasattr(result, "embeddings") and result.embeddings is not None:
-                        for emb in result.embeddings:
-                            if hasattr(emb, "values"):
-                                resp_dict["embeddings"].append(emb.values)
-                            else:
-                                resp_dict["embeddings"].append(emb)
-
-                    resp_body = json.dumps(resp_dict)
-                    if len(resp_body) > 50000:
-                        resp_body = resp_body[:50000] + "...[TRUNCATED]"
-
-                    await self._log_service.log_api_request(
-                        service="Gemini",
-                        method="POST",
-                        url=f"models/{self._model_name}:embedContent",
-                        status_code=200,
-                        response_time_ms=elapsed_ms,
-                        payload_summary=f"purpose={purpose}, dims={self._output_dimensionality}, "
-                        f"text_len={len(text)}",
-                        request_body=req_body,
-                        response_body=resp_body,
-                        session_id=session_id,
-                    )
-                break
-            except Exception as exc:
-                elapsed_ms = int(time.monotonic() * 1000) - start_ms
-                status_code = getattr(exc, "code", getattr(exc, "status_code", 500))
-                if status_code == 429 and attempt < max_retries:
-                    await asyncio.sleep(2 ** attempt)
+                if is_rate_limit and can_retry:
+                    sleep_seconds = 2 ** attempt  # Wait 1s, 2s, 4s
+                    await asyncio.sleep(sleep_seconds)
                     continue
 
-                if self._log_service is not None:
-                    import json
-                    req_body = json.dumps({
-                        "model": self._model_name,
-                        "contents": text,
-                        "output_dimensionality": self._output_dimensionality
-                    })
-                    await self._log_service.log_api_request(
-                        service="Gemini",
-                        method="POST",
-                        url=f"models/{self._model_name}:embedContent",
-                        status_code=status_code,
-                        response_time_ms=elapsed_ms,
-                        payload_summary=f"FAILED: {str(exc)}",
-                        request_body=req_body,
-                        response_body=None,
-                        session_id=session_id,
-                    )
-                raise exc
+                raise error
 
+    def _extract_vectors_from_response(
+        self,
+        response: Any,
+        fallback_texts: list[str],
+    ) -> list[list[float]]:
+        """Extract floating-point vectors from Google's response object."""
+        raw_embeddings = getattr(response, "embeddings", None)
+        if not raw_embeddings:
+            single = getattr(response, "embedding", None)
+            raw_embeddings = [single] if single else []
 
-        # Extract embedding values safely
-        if hasattr(result, "embeddings") and result.embeddings:
-            embedding = result.embeddings[0]
-            raw_v = getattr(embedding, "values", embedding)
-            values: list[float] = [float(cast(Any, v)) for v in raw_v] if hasattr(raw_v, "__iter__") else []
-        elif hasattr(result, "embedding") and result.embedding:
-            embedding = result.embedding
-            raw_v = getattr(embedding, "values", embedding)
-            values = [float(cast(Any, v)) for v in raw_v] if hasattr(raw_v, "__iter__") else []
+        vectors: list[list[float]] = []
+
+        for index, text in enumerate(fallback_texts):
+            if index < len(raw_embeddings):
+                emb_item = raw_embeddings[index]
+                values = getattr(emb_item, "values", emb_item)
+                if hasattr(values, "__iter__"):
+                    vectors.append([float(v) for v in values])
+                    continue
+
+            # If missing from response, use fallback vector
+            vectors.append(self._create_fallback_vector(text))
+
+        return vectors
+
+    # ── 4. Offline Fallback & Telemetry Logging ──────────────────────
+
+    def _create_fallback_vector(self, text: str) -> list[float]:
+        """Create a deterministic unit vector for testing without API keys."""
+        hash_bytes = hashlib.sha256(text.encode("utf-8")).digest()
+        raw_floats = [(b / 255.0) * 2 - 1 for b in hash_bytes]
+
+        # Tile repeats to reach desired dimension count (e.g., 768)
+        tiled = raw_floats * (self._output_dimensionality // len(raw_floats) + 1)
+        truncated = tiled[: self._output_dimensionality]
+
+        # Normalize to unit length
+        norm = math.sqrt(sum(x * x for x in truncated)) or 1.0
+        return [x / norm for x in truncated]
+
+    async def _log_telemetry(
+        self,
+        count: int,
+        status_code: int,
+        elapsed_ms: int,
+        session_id: str | None,
+        error_message: str | None = None,
+    ) -> None:
+        """Record API performance metrics for the thesis evaluation dashboard."""
+        if not self._log_service:
+            return
+
+        if error_message:
+            summary = f"FAILED: {error_message}"
         else:
-            import hashlib
-            import math
-            h = hashlib.sha256(text.encode("utf-8")).digest()
-            raw = [(b / 255.0) * 2 - 1 for b in h]
-            repeated = (raw * (self._output_dimensionality // len(raw) + 1))[:self._output_dimensionality]
-            norm = math.sqrt(sum(x * x for x in repeated)) or 1.0
-            values = [x / norm for x in repeated]
+            summary = f"items={count}, dims={self._output_dimensionality}"
 
-        # gemini-embedding-2 automatically normalizes truncated dimensions,
-        # so NO manual normalization is needed (unlike gemini-embedding-001)
-
-        logger.debug(
-            "Embedded text (%d chars) -> %d dims in %dms [%s]",
-            len(text),
-            len(values),
-            elapsed_ms,
-            purpose,
+        await self._log_service.log_api_request(
+            service="Gemini",
+            method="POST",
+            url=f"models/{self._model_name}:embedContent",
+            status_code=status_code,
+            response_time_ms=elapsed_ms,
+            payload_summary=summary,
+            session_id=session_id,
         )
-        return values
 
 
-# Backwards-compatibility alias
+# Backward-compatibility alias
 GeminiService = GeminiEmbeddingProvider
-

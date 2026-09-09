@@ -238,3 +238,95 @@ async def test_paper_embedding_service_embed_questions() -> None:
         embedding=[0.3] * 768,
         model="gemini-embedding-2",
     )
+
+
+# ==============================================================================
+# SECTION 4: BATCH EMBEDDING CAPABILITIES
+# ==============================================================================
+
+@pytest.mark.asyncio
+async def test_gemini_provider_batch_embed_documents_success() -> None:
+    """Test batch_embed_documents issues a single API call for multiple documents."""
+    with patch("config.get_settings") as mock_settings:
+        mock_settings.return_value.use_vertex_ai = False
+        mock_settings.return_value.gemini_api_key = "dummy_key"
+
+        with patch("features.embedding.providers.gemini_provider.genai.Client") as mock_client_cls:
+            mock_client = mock_client_cls.return_value
+            mock_emb1 = MagicMock()
+            mock_emb1.values = [0.1] * 768
+            mock_emb2 = MagicMock()
+            mock_emb2.values = [0.2] * 768
+
+            mock_result = MagicMock()
+            mock_result.embeddings = [mock_emb1, mock_emb2]
+            mock_client.models.embed_content.return_value = mock_result
+
+            provider = GeminiEmbeddingProvider(api_key="dummy_key", output_dimensionality=768)
+
+            docs = [
+                ("Abstract 1", "Title 1"),
+                ("Abstract 2", "Title 2"),
+            ]
+            vectors = await provider.batch_embed_documents(docs, session_id="sess-batch")
+
+            assert len(vectors) == 2
+            assert vectors[0] == [0.1] * 768
+            assert vectors[1] == [0.2] * 768
+
+            # Exactly 1 single embed_content call for both documents
+            assert mock_client.models.embed_content.call_count == 1
+            call_kwargs = mock_client.models.embed_content.call_args.kwargs
+            assert call_kwargs["contents"] == [
+                "title: Title 1 | text: Abstract 1",
+                "title: Title 2 | text: Abstract 2",
+            ]
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_batch_embed_documents_chunking() -> None:
+    """Test batch_embed_documents chunks requests according to batch_size."""
+    with patch("config.get_settings") as mock_settings:
+        mock_settings.return_value.use_vertex_ai = False
+        mock_settings.return_value.gemini_api_key = "dummy_key"
+
+        with patch("features.embedding.providers.gemini_provider.genai.Client") as mock_client_cls:
+            mock_client = mock_client_cls.return_value
+
+            def make_mock_result(*args, **kwargs):
+                contents = kwargs.get("contents", [])
+                res = MagicMock()
+                res.embeddings = [MagicMock(values=[0.5] * 768) for _ in contents]
+                return res
+
+            mock_client.models.embed_content.side_effect = make_mock_result
+
+            provider = GeminiEmbeddingProvider(api_key="dummy_key", output_dimensionality=768)
+
+            docs = [(f"Abstract {i}", f"Title {i}") for i in range(5)]
+            vectors = await provider.batch_embed_documents(docs, batch_size=2)
+
+            assert len(vectors) == 5
+            # 5 items with batch_size=2 -> ceil(5/2) = 3 calls
+            assert mock_client.models.embed_content.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_batch_embed_deterministic_fallback() -> None:
+    """Test batch_embed_documents deterministic fallback when client is None."""
+    with patch("config.get_settings") as mock_settings, patch.dict(
+        "os.environ", {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}
+    ):
+        mock_settings.return_value.use_vertex_ai = False
+        mock_settings.return_value.gemini_api_key = ""
+
+        provider = GeminiEmbeddingProvider(api_key="", output_dimensionality=768)
+        assert provider._client is None
+
+        docs = [("Unauthenticated text 1", "T1"), ("Unauthenticated text 2", "T2")]
+        vectors = await provider.batch_embed_documents(docs)
+
+        assert len(vectors) == 2
+        assert len(vectors[0]) == 768
+        assert len(vectors[1]) == 768
+        assert vectors[0] != vectors[1]

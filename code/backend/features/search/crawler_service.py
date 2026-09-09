@@ -507,50 +507,12 @@ class CrawlerService:
         # 6. Embed candidate papers
         paper_embeddings: dict[str, list[float]] = {}
         if emb_provider:
-            if hasattr(self._neo4j, "batch_get_paper_embeddings"):
-                try:
-                    emb_res = await _maybe_await(self._neo4j.batch_get_paper_embeddings(all_candidate_dois))
-                    if isinstance(emb_res, dict):
-                        paper_embeddings.update(emb_res)
-                except Exception:
-                    pass
-
-            for doi in all_candidate_dois:
-                if doi not in paper_embeddings:
-                    already_has = False
-                    if hasattr(self._neo4j, "has_embedding"):
-                        try:
-                            has_res = await _maybe_await(self._neo4j.has_embedding(doi))
-                            already_has = bool(has_res)
-                        except Exception:
-                            already_has = False
-
-                    if already_has:
-                        paper_embeddings[doi] = [0.1] * 768
-                    else:
-                        p_meta = papers_by_doi.get(doi)
-                        if p_meta and p_meta.get("abstract"):
-                            try:
-                                if self._rate_limiter:
-                                    await self._rate_limiter.acquire()
-                                if hasattr(emb_provider, "embed_document"):
-                                    emb = await emb_provider.embed_document(
-                                        text=p_meta["abstract"],
-                                        title=p_meta.get("title"),
-                                        session_id=session_id,
-                                    )
-                                elif hasattr(emb_provider, "embed_paper"):
-                                    emb = await emb_provider.embed_paper(
-                                        p_meta["abstract"],
-                                        session_id=session_id,
-                                    )
-                                else:
-                                    emb = None
-                                if emb:
-                                    await self._neo4j.store_paper_embedding(doi, emb)
-                                    paper_embeddings[doi] = emb
-                            except Exception as emb_err:
-                                logger.warning("Failed to embed candidate %s: %s", doi, emb_err)
+            paper_embeddings = await self._resolve_candidate_embeddings(
+                all_candidate_dois,
+                papers_by_doi,
+                emb_provider,
+                session_id,
+            )
 
         # 7. Fetch active research questions & compute cosine similarities
         active_questions: list[dict[str, Any]] = []
@@ -748,6 +710,148 @@ class CrawlerService:
             traversal_summary=summary,
             errors=errors,
         )
+
+    # ── Batch Embedding Orchestration (SRP / sub-25 line limit) ──────
+
+    async def _resolve_candidate_embeddings(
+        self,
+        candidate_dois: list[str],
+        papers_by_doi: dict[str, dict[str, Any]],
+        emb_provider: Any,
+        session_id: str | None,
+    ) -> dict[str, list[float]]:
+        """Resolve embeddings for candidate DOIs via Neo4j cache and batch provider."""
+        paper_embeddings: dict[str, list[float]] = {}
+        if hasattr(self._neo4j, "batch_get_paper_embeddings"):
+            try:
+                emb_res = await _maybe_await(self._neo4j.batch_get_paper_embeddings(candidate_dois))
+                if isinstance(emb_res, dict):
+                    paper_embeddings.update(emb_res)
+            except Exception:
+                pass
+
+        missing_dois = [d for d in candidate_dois if d not in paper_embeddings]
+        if missing_dois:
+            await self._process_uncached_candidates(
+                missing_dois, papers_by_doi, paper_embeddings, emb_provider, session_id
+            )
+        return paper_embeddings
+
+    async def _process_uncached_candidates(
+        self,
+        missing_dois: list[str],
+        papers_by_doi: dict[str, dict[str, Any]],
+        paper_embeddings: dict[str, list[float]],
+        emb_provider: Any,
+        session_id: str | None,
+    ) -> None:
+        """Embed uncached candidate papers in batch or mark existing from Neo4j."""
+        to_embed: list[tuple[str, str, str | None]] = []
+        for doi in missing_dois:
+            if hasattr(self._neo4j, "has_embedding"):
+                try:
+                    if await _maybe_await(self._neo4j.has_embedding(doi)):
+                        paper_embeddings[doi] = [0.1] * 768
+                        continue
+                except Exception:
+                    pass
+            p_meta = papers_by_doi.get(doi)
+            if p_meta and p_meta.get("abstract"):
+                to_embed.append((doi, p_meta["abstract"], p_meta.get("title")))
+
+        if to_embed:
+            await self._dispatch_batch_embedding(to_embed, paper_embeddings, emb_provider, session_id)
+
+    async def _dispatch_batch_embedding(
+        self,
+        to_embed: list[tuple[str, str, str | None]],
+        paper_embeddings: dict[str, list[float]],
+        emb_provider: Any,
+        session_id: str | None,
+    ) -> None:
+        """Dispatch batch embedding to provider and persist results in Neo4j."""
+        if self._rate_limiter:
+            await self._rate_limiter.acquire()
+
+        dois = [d for d, _, _ in to_embed]
+        vectors = await self._generate_candidate_vectors(to_embed, emb_provider, session_id)
+
+        items_to_persist: list[dict[str, Any]] = []
+        for doi, vec in zip(dois, vectors, strict=False):
+            if vec:
+                paper_embeddings[doi] = vec
+                items_to_persist.append({"doi": doi, "embedding": vec})
+
+        if items_to_persist:
+            await self._persist_batch_embeddings(items_to_persist, emb_provider)
+
+    async def _generate_candidate_vectors(
+        self,
+        to_embed: list[tuple[str, str, str | None]],
+        emb_provider: Any,
+        session_id: str | None,
+    ) -> list[list[float] | None]:
+        """Generate vectors using batch_embed_documents or fallback to sequential embed."""
+        if len(to_embed) > 1 and hasattr(emb_provider, "batch_embed_documents"):
+            doc_tuples = [(abstract, title) for _, abstract, title in to_embed]
+            try:
+                res = await _maybe_await(emb_provider.batch_embed_documents(doc_tuples, session_id=session_id))
+                if isinstance(res, list) and len(res) == len(to_embed) and isinstance(res[0], list):
+                    return res
+            except Exception as err:
+                logger.warning("batch_embed_documents failed, falling back to sequential: %s", err)
+
+        results: list[list[float] | None] = []
+        for _, abstract, title in to_embed:
+            vec = await self._embed_single_candidate(abstract, title, emb_provider, session_id)
+            results.append(vec)
+        return results
+
+    async def _embed_single_candidate(
+        self,
+        abstract: str,
+        title: str | None,
+        emb_provider: Any,
+        session_id: str | None,
+    ) -> list[float] | None:
+        """Embed a single paper abstract using provider document or paper method."""
+        try:
+            if hasattr(emb_provider, "embed_document"):
+                return await _maybe_await(emb_provider.embed_document(
+                    text=abstract, title=title, session_id=session_id
+                ))
+            if hasattr(emb_provider, "embed_paper"):
+                return await _maybe_await(emb_provider.embed_paper(abstract, session_id=session_id))
+        except Exception as err:
+            logger.warning("Failed to embed single candidate: %s", err)
+        return None
+
+    async def _persist_batch_embeddings(
+        self,
+        items: list[dict[str, Any]],
+        emb_provider: Any,
+    ) -> None:
+        """Persist generated embeddings to Neo4j in batch with single-item fallback."""
+        if len(items) == 1:
+            try:
+                await _maybe_await(self._neo4j.store_paper_embedding(items[0]["doi"], items[0]["embedding"]))
+                return
+            except Exception as err:
+                logger.warning("Failed to store embedding for %s: %s", items[0]["doi"], err)
+                return
+
+        model_name = getattr(emb_provider, "model_name", "gemini-embedding-2")
+        if hasattr(self._neo4j, "batch_store_paper_embeddings"):
+            try:
+                await _maybe_await(self._neo4j.batch_store_paper_embeddings(items, model=model_name))
+                return
+            except Exception:
+                pass
+        for item in items:
+            try:
+                await _maybe_await(self._neo4j.store_paper_embedding(item["doi"], item["embedding"]))
+            except Exception as err:
+                logger.warning("Failed to store embedding for %s: %s", item["doi"], err)
 
 
 

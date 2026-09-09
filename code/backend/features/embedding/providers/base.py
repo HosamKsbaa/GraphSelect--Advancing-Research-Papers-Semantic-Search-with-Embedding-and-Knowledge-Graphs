@@ -65,3 +65,28 @@ class EmbeddingProvider(ABC):
             Embedding vector as a list of floats.
         """
         ...
+
+    async def batch_embed_documents(
+        self,
+        documents: list[tuple[str, str | None]],
+        *,
+        session_id: str | None = None,
+    ) -> list[list[float]]:
+        """Embed a batch of documents (paper abstracts with optional titles).
+
+        Subclasses should override this method to take advantage of native batch
+        embedding APIs (e.g. Gemini API multi-content embedding).
+        Default implementation falls back to sequential calls to :meth:`embed_document`.
+
+        Args:
+            documents: List of (text, title) tuples.
+            session_id: Optional session identifier for telemetry.
+
+        Returns:
+            List of embedding vectors aligned with input order.
+        """
+        results: list[list[float]] = []
+        for text, title in documents:
+            vec = await self.embed_document(text, title=title, session_id=session_id)
+            results.append(vec)
+        return results

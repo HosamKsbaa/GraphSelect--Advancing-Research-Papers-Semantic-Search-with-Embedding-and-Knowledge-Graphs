@@ -256,6 +256,31 @@ class Neo4jService:
             'model': model,
         })
 
+    async def batch_store_paper_embeddings(
+        self,
+        items: list[dict[str, Any]],
+        model: str = "gemini-embedding-2",
+    ) -> None:
+        """Batch store embedding vectors on Paper nodes using UNWIND.
+
+        Args:
+            items: List of dicts, each containing 'doi' (str) and 'embedding' (list[float]).
+            model: Embedding model name.
+        """
+        if not items:
+            return
+        query = """
+        UNWIND $items AS item
+        MATCH (p:Paper {doi: item.doi})
+        SET p.embedding       = item.embedding,
+            p.embedding_model = $model,
+            p.embedded_at     = datetime()
+        """
+        await self.execute_write(query, {
+            "items": items,
+            "model": model,
+        })
+
     async def has_embedding(self, doi: str) -> bool:
         """Check if a paper has an embedding stored."""
         query = """
