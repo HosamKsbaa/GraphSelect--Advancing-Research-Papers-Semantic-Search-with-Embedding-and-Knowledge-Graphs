@@ -473,7 +473,7 @@ class RetrievalService:
     # ==================================================================
 
     @staticmethod
-    def _map_record_to_paper(record: dict) -> PaperRead:
+    def _map_record_to_paper(record: dict[str, Any]) -> PaperRead:
         """Convert a raw Neo4j record dict into a PaperRead model.
 
         Handles nullable fields, empty author lists, and optional

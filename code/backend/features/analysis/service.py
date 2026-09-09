@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from agents.research.models import (
@@ -548,7 +549,7 @@ Return a valid JSON object matching the schema:
 
 
 async def generate_comparison_matrix(
-    findings: list[PaperFinding | dict[str, Any]],
+    findings: Sequence[PaperFinding | dict[str, Any]],
     research_questions: list[str] | None = None,
     project_id: str = "default-project",
     llm: LLMService | None = None,

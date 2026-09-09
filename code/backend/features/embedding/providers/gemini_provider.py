@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from google import genai
 from google.genai import types
@@ -61,6 +61,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self._log_service = log_service
         self._model_name = model_name
         self._client: genai.Client | None = None
+        self._project: str | None = None
+        self._location: str | None = None
 
         if self._use_vertex_ai:
             self._mode = "vertex"
@@ -178,6 +180,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         formatted = self._format_query(query, task="question answering")
         return await self._embed(formatted, purpose="query", session_id=session_id)
 
+    embed_question = embed_query
+
     # ── Prompt formatting (per Gemini Embeddings Reference) ──────────
 
     @staticmethod
@@ -250,7 +254,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
                     # Convert embeddings to dict for logging
                     resp_dict: dict[str, list[object]] = {"embeddings": []}
-                    if hasattr(result, "embeddings"):
+                    if hasattr(result, "embeddings") and result.embeddings is not None:
                         for emb in result.embeddings:
                             if hasattr(emb, "values"):
                                 resp_dict["embeddings"].append(emb.values)
@@ -305,10 +309,12 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         # Extract embedding values safely
         if hasattr(result, "embeddings") and result.embeddings:
             embedding = result.embeddings[0]
-            values: list[float] = list(getattr(embedding, "values", embedding))
+            raw_v = getattr(embedding, "values", embedding)
+            values: list[float] = [float(cast(Any, v)) for v in raw_v] if hasattr(raw_v, "__iter__") else []
         elif hasattr(result, "embedding") and result.embedding:
             embedding = result.embedding
-            values = list(getattr(embedding, "values", embedding))
+            raw_v = getattr(embedding, "values", embedding)
+            values = [float(cast(Any, v)) for v in raw_v] if hasattr(raw_v, "__iter__") else []
         else:
             import hashlib
             import math

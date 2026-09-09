@@ -105,11 +105,10 @@ async def suggest_gap_queries_endpoint(
     from config import get_settings
     from core.llm.service import LLMService
     from core.logging.log_service import LogService
-    from core.db.mysql_service import MySQLService
 
     settings = get_settings()
-    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None  # type: ignore[arg-type]
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
     llm = LLMService(
         api_key=settings.gemini_api_key,
         model_name=settings.adk_model_name,
@@ -160,11 +159,10 @@ async def synthesize_evidence_endpoint(
     from config import get_settings
     from core.llm.service import LLMService
     from core.logging.log_service import LogService
-    from core.db.mysql_service import MySQLService
 
     settings = get_settings()
-    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
     llm = getattr(request.app.state, "llm_service", None)
     if llm is None:
         llm = LLMService(

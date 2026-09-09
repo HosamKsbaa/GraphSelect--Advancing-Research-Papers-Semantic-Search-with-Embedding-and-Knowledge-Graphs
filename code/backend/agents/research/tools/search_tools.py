@@ -326,7 +326,7 @@ async def search_papers_by_venue(
         oa = ServiceRegistry.openalex
         if hasattr(oa, "search_works") and not hasattr(oa, "_request"):
             results = await oa.search_works(query=actual_venue, limit=min(limit, 25))
-            papers = [{"doi": getattr(p, "doi", ""), "title": getattr(p, "title", ""), "year": getattr(p, "year", None), "cited_by_count": getattr(p, "cited_by_count", 0), "authors": []} for p in results]
+            papers: list[dict[str, Any]] = [{"doi": getattr(p, "doi", ""), "title": getattr(p, "title", ""), "year": getattr(p, "year", None), "cited_by_count": getattr(p, "cited_by_count", 0), "authors": []} for p in results]
             return {"papers": papers, "total_returned": len(papers)}
         return await _search_by_venue(actual_venue, limit, oa)
     except Exception as exc:

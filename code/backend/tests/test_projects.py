@@ -52,8 +52,24 @@ def mock_mysql():
 @pytest.fixture
 def mock_neo4j():
     service = AsyncMock()
-    service.execute_read.return_value = []
-    service.execute_query.return_value = []
+    sample_record = {
+        "project_id": "project-123",
+        "name": "Test",
+        "description": "Test",
+        "topic": "Test",
+        "target_level": "master",
+        "similarity_threshold": 0.6,
+        "token_budget": 500000,
+        "status": "archived",
+        "created_at": "2026-06-03 00:00:00",
+        "updated_at": "2026-06-03 00:00:00",
+        "last_accessed_at": "2026-06-03 12:00:00",
+        "paper_count": 0,
+        "question_count": 0,
+    }
+    service.execute_read.return_value = [sample_record]
+    service.execute_write.return_value = [{"project_id": "project-123"}]
+    service.execute_query.return_value = [sample_record]
     return service
 
 def test_touch_project(mock_mysql, mock_neo4j):

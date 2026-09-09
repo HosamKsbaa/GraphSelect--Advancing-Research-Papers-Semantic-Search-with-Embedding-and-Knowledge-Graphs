@@ -26,6 +26,13 @@ logger = logging.getLogger(__name__)
 ProgressCallback = Callable[[ProgressEvent], Coroutine[Any, Any, None]] | None
 
 
+async def _maybe_await(val: Any) -> Any:
+    """Await value if it is awaitable, otherwise return it directly."""
+    if hasattr(val, "__await__"):
+        return await val
+    return val
+
+
 class CycleResult(BaseModel):
     """Result of a single BFS level expansion."""
 
@@ -364,10 +371,10 @@ class CrawlerService:
 
         citing_dois, referenced_dois = await asyncio.gather(citing_task, referenced_task, return_exceptions=True)
 
-        if isinstance(citing_dois, Exception):
+        if isinstance(citing_dois, BaseException):
             errors.append(f"Failed to fetch citing papers: {citing_dois}")
             citing_dois = []
-        if isinstance(referenced_dois, Exception):
+        if isinstance(referenced_dois, BaseException):
             errors.append(f"Failed to fetch references: {referenced_dois}")
             referenced_dois = []
 
@@ -432,8 +439,9 @@ class CrawlerService:
                         for a in getattr(p, "authors", []):
                             authors_list.append(a.name if hasattr(a, "name") else str(a))
                         v_name = None
-                        if getattr(p, "venue", None):
-                            v_name = p.venue.name if hasattr(p.venue, "name") else str(p.venue)
+                        v_obj = getattr(p, "venue", None)
+                        if v_obj is not None:
+                            v_name = v_obj.name if hasattr(v_obj, "name") else str(v_obj)
                         raw_papers.append({
                             "doi": p.doi,
                             "title": p.title,
@@ -451,9 +459,9 @@ class CrawlerService:
                 logger.warning("batch_get_papers_by_dois failed: %s", exc)
                 errors.append(f"batch_get_papers_by_dois error: {exc}")
 
-        for p in raw_papers:
-            if isinstance(p, dict) and p.get("doi"):
-                papers_by_doi[p["doi"]] = p
+        for rp in raw_papers:
+            if isinstance(rp, dict) and rp.get("doi"):
+                papers_by_doi[rp["doi"]] = rp
 
         # 5. Persist nodes and CITES relationships in Neo4j
         new_papers_count = 0
@@ -501,9 +509,7 @@ class CrawlerService:
         if emb_provider:
             if hasattr(self._neo4j, "batch_get_paper_embeddings"):
                 try:
-                    emb_res = self._neo4j.batch_get_paper_embeddings(all_candidate_dois)
-                    if hasattr(emb_res, "__await__"):
-                        emb_res = await emb_res
+                    emb_res = await _maybe_await(self._neo4j.batch_get_paper_embeddings(all_candidate_dois))
                     if isinstance(emb_res, dict):
                         paper_embeddings.update(emb_res)
                 except Exception:
@@ -514,9 +520,7 @@ class CrawlerService:
                     already_has = False
                     if hasattr(self._neo4j, "has_embedding"):
                         try:
-                            has_res = self._neo4j.has_embedding(doi)
-                            if hasattr(has_res, "__await__"):
-                                has_res = await has_res
+                            has_res = await _maybe_await(self._neo4j.has_embedding(doi))
                             already_has = bool(has_res)
                         except Exception:
                             already_has = False
@@ -553,18 +557,14 @@ class CrawlerService:
         if project_id:
             if hasattr(self._neo4j, "get_project_research_questions_with_embeddings"):
                 try:
-                    rq_res = self._neo4j.get_project_research_questions_with_embeddings(project_id)
-                    if hasattr(rq_res, "__await__"):
-                        rq_res = await rq_res
+                    rq_res = await _maybe_await(self._neo4j.get_project_research_questions_with_embeddings(project_id))
                     if isinstance(rq_res, list):
                         active_questions = rq_res
                 except Exception:
                     active_questions = []
             elif hasattr(self._neo4j, "get_research_questions"):
                 try:
-                    raw_qs = self._neo4j.get_research_questions(project_id)
-                    if hasattr(raw_qs, "__await__"):
-                        raw_qs = await raw_qs
+                    raw_qs = await _maybe_await(self._neo4j.get_research_questions(project_id))
                     if isinstance(raw_qs, list):
                         active_questions = [
                             {
@@ -620,9 +620,7 @@ class CrawlerService:
         precomputed_similarities: dict[str, list[dict[str, Any]]] = {}
         if hasattr(self._neo4j, "compute_similarities"):
             try:
-                sim_res = self._neo4j.compute_similarities(session_id=session_id or project_id or "", threshold=0.0)
-                if hasattr(sim_res, "__await__"):
-                    sim_res = await sim_res
+                sim_res = await _maybe_await(self._neo4j.compute_similarities(session_id=session_id or project_id or "", threshold=0.0))
                 if isinstance(sim_res, list):
                     for sr in sim_res:
                         if isinstance(sr, dict) and sr.get("doi"):
@@ -639,9 +637,7 @@ class CrawlerService:
         in_graph_degrees: dict[str, int] = {}
         if hasattr(self._neo4j, "batch_get_paper_degrees"):
             try:
-                deg_res = self._neo4j.batch_get_paper_degrees(all_candidate_dois)
-                if hasattr(deg_res, "__await__"):
-                    deg_res = await deg_res
+                deg_res = await _maybe_await(self._neo4j.batch_get_paper_degrees(all_candidate_dois))
                 if isinstance(deg_res, dict):
                     in_graph_degrees = deg_res
             except Exception:
@@ -650,9 +646,7 @@ class CrawlerService:
         library_dois: set[str] = set()
         if project_id and hasattr(self._neo4j, "batch_check_project_papers"):
             try:
-                chk_res = self._neo4j.batch_check_project_papers(project_id, all_candidate_dois)
-                if hasattr(chk_res, "__await__"):
-                    chk_res = await chk_res
+                chk_res = await _maybe_await(self._neo4j.batch_check_project_papers(project_id, all_candidate_dois))
                 if isinstance(chk_res, (set, list)):
                     library_dois = set(chk_res)
             except Exception:
@@ -660,9 +654,7 @@ class CrawlerService:
 
         if not library_dois and hasattr(self._neo4j, "get_project_papers") and project_id:
             try:
-                proj_papers = self._neo4j.get_project_papers(project_id=project_id, limit=100)
-                if hasattr(proj_papers, "__await__"):
-                    proj_papers = await proj_papers
+                proj_papers = await _maybe_await(self._neo4j.get_project_papers(project_id=project_id, limit=100))
                 if isinstance(proj_papers, list):
                     library_dois = {p["doi"] for p in proj_papers if isinstance(p, dict) and p.get("doi")}
             except Exception:
@@ -671,9 +663,7 @@ class CrawlerService:
         pagerank_scores: dict[str, float] = {}
         if hasattr(self._neo4j, "compute_pagerank"):
             try:
-                pr_res = self._neo4j.compute_pagerank(session_id=session_id or project_id or "")
-                if hasattr(pr_res, "__await__"):
-                    pr_res = await pr_res
+                pr_res = await _maybe_await(self._neo4j.compute_pagerank(session_id=session_id or project_id or ""))
                 if isinstance(pr_res, dict):
                     pagerank_scores = pr_res
             except Exception:

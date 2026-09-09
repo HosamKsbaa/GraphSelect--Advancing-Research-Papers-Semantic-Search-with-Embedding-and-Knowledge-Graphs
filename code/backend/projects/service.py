@@ -1,73 +1,89 @@
-"""Project lifecycle service for ALRS v2.
+"""Project lifecycle service for ALRS v2 (Pure Neo4j Persistence).
 
-Manages project CRUD across both MySQL (relational metadata) and Neo4j
-(graph node). All mutations are dual-write: MySQL holds the authoritative
-record, Neo4j holds the graph representation for relationship queries.
+Manages project CRUD exclusively via Neo4j graph nodes (:Project and :ResearchCampaign).
+Complies with Constitution C8 (Zero MySQL) and Sub-25 line functions (C1, C9).
 """
 from __future__ import annotations
 
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from core.db.neo4j_service import Neo4jService
 from projects.models import ProjectCreate, ProjectResponse, ProjectUpdate
-
-if TYPE_CHECKING:
-    from core.db.mysql_service import MySQLService
-    from core.db.neo4j_service import Neo4jService
 
 logger = logging.getLogger(__name__)
 
 
+def _parse_dt(val: Any) -> datetime | None:
+    if isinstance(val, datetime):
+        return val
+    if isinstance(val, str) and val.strip():
+        try:
+            return datetime.fromisoformat(val)
+        except Exception:
+            return None
+    return None
+
+
+def _record_to_response(rec: dict[str, Any]) -> ProjectResponse:
+    """Map a Neo4j record dict to a ProjectResponse model."""
+    c_at = rec.get("created_at")
+    u_at = rec.get("updated_at")
+    l_at = rec.get("last_accessed_at")
+    return ProjectResponse(
+        id=str(rec.get("project_id", "")),
+        name=str(rec.get("name", "")),
+        description=rec.get("description"),
+        topic=rec.get("topic"),
+        target_level=str(rec.get("target_level", "master")),
+        similarity_threshold=float(rec.get("similarity_threshold", 0.6)),
+        token_budget=int(rec.get("token_budget", 500000)),
+        status=str(rec.get("status", "active")),
+        created_at=_parse_dt(c_at),
+        updated_at=_parse_dt(u_at),
+        last_accessed_at=_parse_dt(l_at),
+        paper_count=int(rec.get("paper_count", 0)),
+        question_count=int(rec.get("question_count", 0)),
+    )
+
+
 async def create_project(
     data: ProjectCreate,
-    mysql: MySQLService,
     neo4j: Neo4jService,
 ) -> ProjectResponse:
-    """Create a new project in both MySQL and Neo4j.
-
-    Generates a UUID, inserts into MySQL (authoritative), then creates
-    a matching Project node in Neo4j for graph queries.
-
-    Args:
-        data: Validated project creation payload.
-        mysql: MySQL service instance.
-        neo4j: Neo4j service instance.
-
-    Returns:
-        The created project as a ProjectResponse.
-    """
+    """Create a new project node in Neo4j."""
     project_id = str(uuid.uuid4())
     now = datetime.now(tz=timezone.utc)
-
-    # MySQL insert (authoritative store)
-    await mysql.execute(
-        '''INSERT INTO projects (id, name, description, topic, target_level,
-           similarity_threshold, token_budget, status, created_at, updated_at)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-        (
-            project_id,
-            data.name,
-            data.description,
-            data.topic,
-            data.target_level,
-            data.similarity_threshold,
-            data.token_budget,
-            'active',
-            now,
-            now,
-        ),
-    )
-
-    # Neo4j node (graph representation)
-    await neo4j.create_project_node(
-        project_id=project_id,
-        name=data.name,
-        status='active',
-    )
-
-    logger.info('Project created: %s (%s)', project_id, data.name)
+    query = """
+    MERGE (pr:Project {project_id: $id})
+    ON CREATE SET pr.created_at = datetime()
+    SET pr.name = $name,
+        pr.description = $description,
+        pr.topic = $topic,
+        pr.target_level = $target_level,
+        pr.similarity_threshold = $similarity_threshold,
+        pr.token_budget = $token_budget,
+        pr.status = 'active',
+        pr.updated_at = datetime(),
+        pr.last_accessed_at = datetime()
+    RETURN pr.project_id AS project_id, pr.name AS name,
+           pr.description AS description, pr.topic AS topic,
+           pr.target_level AS target_level, pr.similarity_threshold AS similarity_threshold,
+           pr.token_budget AS token_budget, pr.status AS status
+    """
+    params = {
+        "id": project_id,
+        "name": data.name,
+        "description": data.description,
+        "topic": data.topic,
+        "target_level": data.target_level,
+        "similarity_threshold": data.similarity_threshold,
+        "token_budget": data.token_budget,
+    }
+    await neo4j.execute_write(query, params)
+    logger.info("Project created in Neo4j: %s (%s)", project_id, data.name)
     return ProjectResponse(
         id=project_id,
         name=data.name,
@@ -76,217 +92,108 @@ async def create_project(
         target_level=data.target_level,
         similarity_threshold=data.similarity_threshold,
         token_budget=data.token_budget,
-        status='active',
+        status="active",
         created_at=now,
         updated_at=now,
+        last_accessed_at=now,
     )
 
 
 async def get_project(
     project_id: str,
-    mysql: MySQLService,
+    neo4j: Neo4jService,
 ) -> ProjectResponse | None:
-    """Fetch a single project by ID from MySQL.
-
-    Args:
-        project_id: UUID of the project.
-        mysql: MySQL service instance.
-
-    Returns:
-        ProjectResponse or None if not found.
+    """Fetch a single project by ID from Neo4j."""
+    query = """
+    MATCH (pr:Project {project_id: $project_id})
+    OPTIONAL MATCH (pr)-[:HAS_PAPER]->(p:Paper)
+    OPTIONAL MATCH (q:ResearchQuestion {project_id: pr.project_id})
+    RETURN pr.project_id AS project_id, pr.name AS name,
+           pr.description AS description, pr.topic AS topic,
+           pr.target_level AS target_level, pr.similarity_threshold AS similarity_threshold,
+           pr.token_budget AS token_budget, pr.status AS status,
+           count(DISTINCT p) AS paper_count, count(DISTINCT q) AS question_count
     """
-    row = await mysql.fetch_one(
-        'SELECT * FROM projects WHERE id = %s',
-        (project_id,),
-    )
-    if row is None:
+    records = await neo4j.execute_read(query, {"project_id": project_id})
+    if not records or not records[0].get("project_id"):
         return None
-    return _row_to_response(row)
+    return _record_to_response(records[0])
 
 
 async def get_projects(
-    mysql: MySQLService,
-    neo4j: Neo4jService | None = None,
+    neo4j: Neo4jService,
     include_archived: bool = False,
 ) -> list[ProjectResponse]:
-    """List all projects, optionally including archived ones.
-
-    Args:
-        mysql: MySQL service instance.
-        neo4j: Optional Neo4j service instance to fetch paper/question counts.
-        include_archived: If True, include archived projects.
-
-    Returns:
-        List of ProjectResponse instances.
-    """
-    if include_archived:
-        rows = await mysql.fetch_all(
-            'SELECT * FROM projects ORDER BY created_at DESC',
-        )
-    else:
-        rows = await mysql.fetch_all(
-            "SELECT * FROM projects WHERE status != 'archived' ORDER BY created_at DESC",
-        )
-    
-    responses = [_row_to_response(row) for row in rows]
-    
-    if not responses or not neo4j:
-        return responses
-        
-    # Batch query Neo4j for counts
-    project_ids = [r.id for r in responses]
-    stats_query = """
+    """List all projects from Neo4j, optionally including archived ones."""
+    filter_clause = "" if include_archived else "WHERE pr.status <> 'archived'"
+    query = f"""
     MATCH (pr:Project)
-    WHERE pr.project_id IN $project_ids
+    {filter_clause}
     OPTIONAL MATCH (pr)-[:HAS_PAPER]->(p:Paper)
-    OPTIONAL MATCH (q:ResearchQuestion {project_id: pr.project_id})
-    RETURN pr.project_id AS project_id,
-           count(DISTINCT p) AS paper_count,
-           count(DISTINCT q) AS question_count
+    OPTIONAL MATCH (q:ResearchQuestion {{project_id: pr.project_id}})
+    RETURN pr.project_id AS project_id, pr.name AS name,
+           pr.description AS description, pr.topic AS topic,
+           pr.target_level AS target_level, pr.similarity_threshold AS similarity_threshold,
+           pr.token_budget AS token_budget, pr.status AS status,
+           count(DISTINCT p) AS paper_count, count(DISTINCT q) AS question_count
+    ORDER BY pr.project_id DESC
     """
-    try:
-        stats_results = await neo4j.execute_read(stats_query, {"project_ids": project_ids})
-        stats_map = {
-            record["project_id"]: {
-                "paper_count": record["paper_count"],
-                "question_count": record["question_count"]
-            }
-            for record in stats_results
-        }
-        for resp in responses:
-            if resp.id in stats_map:
-                resp.paper_count = stats_map[resp.id]["paper_count"]
-                resp.question_count = stats_map[resp.id]["question_count"]
-    except Exception as e:
-        logger.warning('Failed to fetch project stats from Neo4j: %s', e)
-        
-    return responses
+    records = await neo4j.execute_read(query)
+    return [_record_to_response(r) for r in records if r.get("project_id")]
 
 
 async def update_project(
     project_id: str,
     data: ProjectUpdate,
-    mysql: MySQLService,
     neo4j: Neo4jService,
 ) -> ProjectResponse | None:
-    """Update a project's fields in MySQL and sync name to Neo4j.
-
-    Args:
-        project_id: UUID of the project.
-        data: Validated update payload (only set fields are applied).
-        mysql: MySQL service instance.
-        neo4j: Neo4j service instance.
-
-    Returns:
-        Updated ProjectResponse or None if project not found.
-    """
-    # Build dynamic SET clause from non-None fields
-    updates: list[str] = []
-    params: list[object] = []
-
+    """Update a project's fields in Neo4j."""
     update_dict = data.model_dump(exclude_unset=True)
     if not update_dict:
-        # Nothing to update, just return current state
-        return await get_project(project_id, mysql)
-
-    for field, value in update_dict.items():
-        updates.append(f'{field} = %s')
-        params.append(value)
-
-    params.append(project_id)
-    sql = f"UPDATE projects SET {', '.join(updates)} WHERE id = %s"
-    affected = await mysql.execute(sql, tuple(params))
-
-    if affected == 0:
+        return await get_project(project_id, neo4j)
+    set_clauses = ["pr.updated_at = datetime()"]
+    for k in update_dict:
+        set_clauses.append(f"pr.{k} = ${k}")
+    query = f"""
+    MATCH (pr:Project {project_id: $project_id})
+    SET {', '.join(set_clauses)}
+    RETURN pr.project_id AS project_id
+    """
+    params = dict(update_dict)
+    params["project_id"] = project_id
+    records = await neo4j.execute_write(query, params)
+    if not records:
         return None
-
-    # Sync name to Neo4j if it was updated
-    if 'name' in update_dict:
-        try:
-            await neo4j.execute_write(
-                """MATCH (pr:Project {project_id: $project_id})
-                   SET pr.name = $name, pr.updated_at = datetime()""",
-                {'project_id': project_id, 'name': update_dict['name']},
-            )
-        except Exception as e:
-            logger.warning('Failed to sync project name to Neo4j: %s', e)
-
-    return await get_project(project_id, mysql)
+    return await get_project(project_id, neo4j)
 
 
 async def archive_project(
     project_id: str,
-    mysql: MySQLService,
     neo4j: Neo4jService,
 ) -> ProjectResponse | None:
-    """Soft-delete a project by setting status to 'archived'.
-
-    Updates both MySQL (authoritative) and Neo4j (graph).
-
-    Args:
-        project_id: UUID of the project.
-        mysql: MySQL service instance.
-        neo4j: Neo4j service instance.
-
-    Returns:
-        Updated ProjectResponse or None if project not found.
+    """Soft-delete a project by setting status to 'archived'."""
+    query = """
+    MATCH (pr:Project {project_id: $project_id})
+    SET pr.status = 'archived', pr.updated_at = datetime()
+    RETURN pr.project_id AS project_id
     """
-    affected = await mysql.execute(
-        "UPDATE projects SET status = 'archived' WHERE id = %s",
-        (project_id,),
-    )
-    if affected == 0:
+    records = await neo4j.execute_write(query, {"project_id": project_id})
+    if not records:
         return None
-
-    try:
-        await neo4j.archive_project(project_id)
-    except Exception as e:
-        logger.warning('Failed to archive project in Neo4j: %s', e)
-
-    logger.info('Project archived: %s', project_id)
-    return await get_project(project_id, mysql)
+    return await get_project(project_id, neo4j)
 
 
 async def touch_project(
     project_id: str,
-    mysql: MySQLService,
+    neo4j: Neo4jService,
 ) -> ProjectResponse | None:
-    """Update the last_accessed_at timestamp of a project.
-
-    Args:
-        project_id: UUID of the project.
-        mysql: MySQL service instance.
-
-    Returns:
-        Updated ProjectResponse or None if not found.
+    """Update last_accessed_at timestamp in Neo4j."""
+    query = """
+    MATCH (pr:Project {project_id: $project_id})
+    SET pr.last_accessed_at = datetime()
+    RETURN pr.project_id AS project_id
     """
-    now = datetime.now(tz=timezone.utc)
-    affected = await mysql.execute(
-        "UPDATE projects SET last_accessed_at = %s WHERE id = %s",
-        (now, project_id),
-    )
-    return await get_project(project_id, mysql)
-
-
-def _row_to_response(row: dict[str, Any]) -> ProjectResponse:
-    """Map a MySQL row dict to a ProjectResponse model.
-
-    Args:
-        row: Dict from MySQL fetch with column names as keys.
-
-    Returns:
-        ProjectResponse instance.
-    """
-    return ProjectResponse(
-        id=str(row['id']),
-        name=str(row['name']),
-        description=row.get('description'),  # type: ignore[arg-type]
-        topic=row.get('topic'),  # type: ignore[arg-type]
-        target_level=str(row.get('target_level', 'master')),
-        similarity_threshold=float(row.get('similarity_threshold', 0.6)),
-        token_budget=int(row.get('token_budget', 500000)),
-        status=str(row.get('status', 'active')),
-        created_at=row.get('created_at'),  # type: ignore[arg-type]
-        updated_at=row.get('updated_at'),  # type: ignore[arg-type]
-        last_accessed_at=row.get('last_accessed_at'),  # type: ignore[arg-type]
-    )
+    records = await neo4j.execute_write(query, {"project_id": project_id})
+    if not records:
+        return None
+    return await get_project(project_id, neo4j)

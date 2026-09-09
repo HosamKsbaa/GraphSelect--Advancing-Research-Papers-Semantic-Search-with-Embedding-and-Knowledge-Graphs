@@ -332,15 +332,8 @@ async def test_connection_endpoint(body: TestConnectionRequest) -> TestConnectio
     else:
         target_mode = "vertex" if settings.use_vertex_ai else "studio"
 
-    if body.gemini_api_key is not None:
-        api_key = body.gemini_api_key.strip()
-    else:
-        api_key = _get_env_value("GEMINI_API_KEY") or settings.gemini_api_key
-
-    if body.vertex_project is not None:
-        project = body.vertex_project.strip()
-    else:
-        project = _get_env_value("VERTEX_PROJECT") or settings.vertex_project
+    api_key: str | None = body.gemini_api_key.strip() if body.gemini_api_key is not None else (_get_env_value("GEMINI_API_KEY") or settings.gemini_api_key)
+    project: str | None = body.vertex_project.strip() if body.vertex_project is not None else (_get_env_value("VERTEX_PROJECT") or settings.vertex_project)
 
     if body.vertex_location is not None and body.vertex_location.strip():
         location = body.vertex_location.strip()
@@ -468,7 +461,7 @@ async def list_available_models_endpoint(
         try:
             async with httpx.AsyncClient(timeout=8.0) as http_client:
                 url = "https://generativelanguage.googleapis.com/v1beta/models"
-                res = await http_client.get(url, params={"key": gemini_key.strip()})
+                res = await http_client.get(url, params={"key": (gemini_key or "").strip()})
                 if res.status_code == 200:
                     data = res.json()
                     models = []
@@ -511,7 +504,7 @@ async def list_available_models_endpoint(
         if is_vertex and _is_real_project(v_project):
             client = genai.Client(vertexai=True, project=v_project, location=v_location)
         elif _is_real_key(gemini_key):
-            client = genai.Client(api_key=gemini_key.strip(), vertexai=False)
+            client = genai.Client(api_key=(gemini_key or "").strip(), vertexai=False)
         else:
             return AvailableModelsResponse(
                 models=fallback_models,

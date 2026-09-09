@@ -1236,3 +1236,140 @@ class TestDiscoveredVulnerabilitiesAndFindings:
         assert dump_ms < 100.0, f"model_dump_json took {dump_ms:.2f}ms (expected < 100ms)"
         assert load_ms < 100.0, f"model_validate_json took {load_ms:.2f}ms (expected < 100ms)"
 
+
+class TestCritiqueVectorContract:
+    """Validate CritiqueVectorModel serialization, weighted rubric, and hard constraints."""
+
+    @staticmethod
+    def _load_schema() -> dict[str, Any]:
+        """Load critique_vector_schema.json specification."""
+        from pathlib import Path
+        schema_path = (
+            Path(__file__).resolve().parents[4]
+            / "specs"
+            / "006-alrs-v2-platform"
+            / "contracts"
+            / "critique_vector_schema.json"
+        )
+        return json.loads(schema_path.read_text())
+
+    def test_critique_vector_conforms_to_json_schema(self) -> None:
+        """Verify dumped CritiqueVector conforms strictly to critique_vector_schema.json."""
+        import jsonschema
+        from features.workflow.state_models import CritiqueVectorModel
+
+        schema = self._load_schema()
+        cv = CritiqueVectorModel(
+            stage_index=1,
+            critic_agent="ScopeBoundariesCritic",
+            dimension="finer_compliance",
+            measured_score=0.92,
+            target_threshold=0.85,
+            has_passed=True,
+            violations=[],
+            actionable_directive="Ensure RQ3 specifies non-inferiority margin.",
+        )
+        payload = cv.model_dump(mode="json")
+        jsonschema.validate(instance=payload, schema=schema)
+        assert payload["stage_index"] == 1
+        assert payload["has_passed"] is True
+
+    def test_critique_vector_validation_boundaries(self) -> None:
+        """Verify boundary checks on scores, stage indices, and required fields."""
+        from features.workflow.state_models import CritiqueVectorModel
+
+        with pytest.raises(ValidationError):
+            CritiqueVectorModel(
+                stage_index=6,  # > 5
+                critic_agent="Critic",
+                dimension="dim",
+                measured_score=0.5,
+                target_threshold=0.8,
+                has_passed=False,
+                actionable_directive="Fix",
+            )
+        with pytest.raises(ValidationError):
+            CritiqueVectorModel(
+                stage_index=0,
+                critic_agent="Critic",
+                dimension="dim",
+                measured_score=1.5,  # > 1.0
+                target_threshold=0.8,
+                has_passed=True,
+                actionable_directive="Fix",
+            )
+
+    def test_compute_weighted_rubric_score_success(self) -> None:
+        """Verify composite score calculation and hard constraint compliance."""
+        from features.workflow.state_models import (
+            CritiqueVectorModel,
+            compute_weighted_rubric_score,
+        )
+
+        cv1 = CritiqueVectorModel(
+            stage_index=1,
+            critic_agent="Critic1",
+            dimension="finer_compliance",
+            measured_score=0.9,
+            target_threshold=0.8,
+            has_passed=True,
+            actionable_directive="Pass",
+        )
+        cv2 = CritiqueVectorModel(
+            stage_index=1,
+            critic_agent="Critic2",
+            dimension="novelty",
+            measured_score=0.8,
+            target_threshold=0.75,
+            has_passed=True,
+            actionable_directive="Pass",
+        )
+        weights = {"finer_compliance": 0.6, "novelty": 0.4}
+        score, passed = compute_weighted_rubric_score(
+            [cv1, cv2], weights, hard_constraints={"finer_compliance"}
+        )
+        assert round(score, 4) == 0.86
+        assert passed is True
+
+    def test_compute_weighted_rubric_score_hard_constraint_failure(self) -> None:
+        """Verify failure when hard constraint fails despite high composite score."""
+        from features.workflow.state_models import (
+            CritiqueVectorModel,
+            compute_weighted_rubric_score,
+        )
+
+        cv1 = CritiqueVectorModel(
+            stage_index=1,
+            critic_agent="Critic1",
+            dimension="finer_compliance",
+            measured_score=0.7,
+            target_threshold=0.8,
+            has_passed=False,
+            violations=["Feasibility not met"],
+            actionable_directive="Revise",
+        )
+        cv2 = CritiqueVectorModel(
+            stage_index=1,
+            critic_agent="Critic2",
+            dimension="novelty",
+            measured_score=1.0,
+            target_threshold=0.75,
+            has_passed=True,
+            actionable_directive="Pass",
+        )
+        weights = {"finer_compliance": 0.2, "novelty": 0.8}
+        score, passed = compute_weighted_rubric_score(
+            [cv1, cv2], weights, hard_constraints={"finer_compliance"}, overall_threshold=0.80
+        )
+        assert score >= 0.80
+        assert passed is False
+
+    def test_compute_weighted_rubric_empty_input(self) -> None:
+        """Verify empty input handling in compute_weighted_rubric_score."""
+        from features.workflow.state_models import compute_weighted_rubric_score
+
+        score, passed = compute_weighted_rubric_score([], {})
+        assert score == 0.0
+        assert passed is False
+
+

@@ -39,7 +39,7 @@ def _safe_agent_eq(self: BaseAgent, other: Any) -> bool:
     return self.name == other.name and type(self) is type(other)
 
 
-BaseAgent.__eq__ = _safe_agent_eq
+setattr(BaseAgent, "__eq__", _safe_agent_eq)
 
 
 WRITER_INSTRUCTION = """\

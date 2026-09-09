@@ -33,8 +33,8 @@ class PlanningService:
 
     def __init__(
         self,
-        neo4j: Neo4jService,
-        llm: LLMService,
+        neo4j: Neo4jService | None = None,
+        llm: LLMService | None = None,
         projects_dir: str = "projects",
     ) -> None:
         self._neo4j = neo4j
@@ -62,6 +62,16 @@ class PlanningService:
             gap_count, has_outline, has_drafts, questions.
         """
         neo4j = self._neo4j
+        if neo4j is None:
+            return {
+                "project_id": project_id,
+                "paper_count": 0,
+                "question_count": 0,
+                "gap_count": 0,
+                "has_outline": False,
+                "has_drafts": False,
+                "questions": [],
+            }
 
         # Count papers linked to the project
         papers = await neo4j.get_project_papers(project_id, limit=9999)
@@ -139,13 +149,15 @@ class PlanningService:
 
         neo4j = self._neo4j
         llm = self._llm
+        if llm is None:
+            raise RuntimeError("LLM service not configured.")
 
         # Gather inputs
-        questions = await neo4j.get_research_questions(project_id)
+        questions = await neo4j.get_research_questions(project_id) if neo4j is not None else []
         question_texts = [q.get("text", "") for q in questions]
 
         # Get papers for the LLM prompt
-        papers = await neo4j.get_project_papers(project_id, limit=100)
+        papers = await neo4j.get_project_papers(project_id, limit=100) if neo4j is not None else []
         paper_summaries: list[str] = []
         for p in papers:
             abstract_preview = (p.get("abstract") or "No abstract")[:300]

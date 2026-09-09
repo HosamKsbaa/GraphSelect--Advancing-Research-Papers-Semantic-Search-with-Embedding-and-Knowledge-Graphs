@@ -143,8 +143,8 @@ def verify_citation_grounding(
 
     total = len(cited)
     hallucination_rate = len(hallucinated) / total if total > 0 else 0.0
-    total_assigned = len(assigned_dois) if assigned_dois else len(verified)
-    coverage_rate = (len(assigned_dois) - len(missing)) / total_assigned if total_assigned > 0 else 1.0
+    assigned_count = len(assigned_dois) if assigned_dois is not None else len(verified)
+    coverage_rate = (assigned_count - len(missing)) / assigned_count if assigned_count > 0 else 1.0
     is_grounded = len(hallucinated) == 0
     passed = is_grounded and len(missing) == 0
 

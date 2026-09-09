@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
 from core.db.neo4j_service import Neo4jService
 from core.db.neo4j_schema import initialize_schema
-from core.db.mysql_service import MySQLService
+from core.logging.telemetry_service import TelemetryService
 
 logger = logging.getLogger(__name__)
 
@@ -64,31 +64,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await initialize_schema(neo4j_service, settings.embedding_dimensions)
     app.state.neo4j_service = neo4j_service
 
-    # MySQL (with retry)
-    mysql_service = MySQLService(
-        host=settings.mysql_host,
-        port=settings.mysql_port,
-        user=settings.mysql_user,
-        password=settings.mysql_password,
-        database=settings.mysql_database,
-    )
-    backoff = INITIAL_BACKOFF_SECONDS
-    for attempt in range(1, MAX_CONNECT_RETRIES + 1):
-        try:
-            await mysql_service.connect()
-            logger.info("MySQL connected on attempt %d", attempt)
-            break
-        except Exception as exc:
-            if attempt == MAX_CONNECT_RETRIES:
-                logger.error("MySQL connection failed after %d attempts, giving up", MAX_CONNECT_RETRIES)
-                raise
-            logger.warning("MySQL not ready (attempt %d/%d): %s — retrying in %.1fs",
-                           attempt, MAX_CONNECT_RETRIES, exc, backoff)
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
-
-    await mysql_service.initialize_schema()
-    app.state.mysql_service = mysql_service
+    # SQLite Telemetry Service
+    app.state.telemetry_service = TelemetryService(settings.sqlite_telemetry_path)
 
     from core.logging.progress_service import ProgressService
     app.state.progress_service = ProgressService()
@@ -109,8 +86,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Shutting down ALRS v2 backend...")
     if hasattr(app.state, "neo4j_service") and app.state.neo4j_service is not None:
         await app.state.neo4j_service.close()
-    if hasattr(app.state, "mysql_service") and app.state.mysql_service is not None:
-        await app.state.mysql_service.close()
     logger.info("ALRS v2 backend shut down")
 
 
@@ -122,7 +97,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# --- CORS middleware ---
+# --- CORS Middleware ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -140,19 +115,15 @@ app.add_middleware(
 # --- Health and version endpoints ---
 @app.get("/api/health")
 async def health_check(request: Request) -> dict[str, object]:
-    """Health check endpoint verifying Neo4j + MySQL connectivity."""
+    """Health check endpoint verifying pure Neo4j connectivity."""
     neo4j_ok = False
-    mysql_ok = False
     if hasattr(request.app.state, "neo4j_service") and request.app.state.neo4j_service is not None:
         neo4j_ok = await request.app.state.neo4j_service.health_check()
-    if hasattr(request.app.state, "mysql_service") and request.app.state.mysql_service is not None:
-        mysql_ok = await request.app.state.mysql_service.health_check()
 
-    status = "healthy" if (neo4j_ok and mysql_ok) else "degraded"
+    status_val = "healthy" if neo4j_ok else "degraded"
     return {
-        "status": status,
+        "status": status_val,
         "neo4j": "connected" if neo4j_ok else "disconnected",
-        "mysql": "connected" if mysql_ok else "disconnected",
     }
 
 
@@ -177,6 +148,7 @@ from features.export.router import router as export_router
 from features.chat.router import router as chat_router
 from features.agents.router import router as agents_router
 from projects.router import router as projects_router
+from features.workflow.router import router as workflow_router
 
 app.include_router(search_router)
 app.include_router(sessions_router)
@@ -192,6 +164,7 @@ app.include_router(writing_router)
 app.include_router(export_router)
 app.include_router(chat_router)
 app.include_router(projects_router)
+app.include_router(workflow_router, prefix="/api")
 
 
 # --- Configure logging ---

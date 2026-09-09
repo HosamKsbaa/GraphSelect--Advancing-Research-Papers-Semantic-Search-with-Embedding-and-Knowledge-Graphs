@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -57,8 +57,8 @@ async def export_bibtex(
             detail="Neo4j service not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = ExportService(
@@ -87,8 +87,8 @@ async def export_latex(
             detail="Neo4j service not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = ExportService(
@@ -124,8 +124,8 @@ async def export_citation_graph(
             detail="Neo4j service not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = ExportService(
@@ -144,12 +144,12 @@ async def export_citation_graph(
     return result
 
 
-@router.post("/{project_id}/pdf")
+@router.post("/{project_id}/pdf", response_model=None)
 async def export_pdf(
     project_id: str,
     request: Request,
     body: PdfExportRequest | None = None,
-):
+) -> Response | dict[str, Any]:
     """Compile project drafts to a PDF document and return download response or path metadata."""
     from features.export.service import ExportService
     from config import get_settings
@@ -165,8 +165,8 @@ async def export_pdf(
             detail="Neo4j service not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = ExportService(

@@ -1,161 +1,123 @@
-"""Session management API endpoints for ALRS v2.
-
-This router provides CRUD operations for literature-review search
-sessions.  It is deliberately *thin* — all data comes from the MySQL
-``sessions`` table via :class:`~core.db.mysql_service.MySQLService`, and no
-business logic beyond simple row-to-model mapping happens here.
-
-Implementation note — manual ``SessionRead`` construction:
-    MySQL returns ``research_questions`` as a JSON-encoded string
-    (``TEXT`` column), so every endpoint must deserialise it with
-    :func:`json.loads` before handing it to the Pydantic model.
-    The remaining columns are also explicitly cast to their Python
-    types to guard against driver-level type ambiguities (e.g.
-    ``Decimal`` vs ``float`` for thresholds).
-
-Endpoints:
-    GET    /api/sessions              → list all sessions, newest first
-    GET    /api/sessions/{session_id} → single session by UUID
-    DELETE /api/sessions/{session_id} → remove session and cascade data
-"""
+"""Session management API endpoints for ALRS v2 backed by pure Neo4j epistemic graph."""
 from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from features.sessions.models import SessionRead, SessionList, SessionStatus, SearchMode
-from core.db.mysql_service import MySQLService
-from core.dependencies import get_mysql_service
+from core.db.neo4j_service import Neo4jService
+from core.dependencies import get_neo4j_service
+from features.sessions.models import SearchMode, SessionList, SessionRead, SessionStatus
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
-# ── Endpoints ────────────────────────────────────────────────────────
+def _parse_session_node(data: dict[str, Any]) -> SessionRead:
+    """Map Neo4j node attributes to SessionRead model under 25 lines."""
+    raw_q = data.get("research_questions", [])
+    if isinstance(raw_q, str):
+        try:
+            questions = json.loads(raw_q)
+        except Exception:
+            questions = [raw_q] if raw_q else []
+    else:
+        questions = list(raw_q) if raw_q else []
+
+    created = data.get("created_at") or datetime.now(timezone.utc)
+    if isinstance(created, str):
+        created = datetime.fromisoformat(created.replace("Z", "+00:00"))
+
+    updated = data.get("updated_at")
+    if isinstance(updated, str):
+        updated = datetime.fromisoformat(updated.replace("Z", "+00:00"))
+
+    mode_val = str(data.get("mode", "interactive")).lower()
+    mode = SearchMode.AUTOMATED if mode_val == "automated" else SearchMode.INTERACTIVE
+
+    status_val = str(data.get("status", "created")).lower()
+    stat_enum = getattr(SessionStatus, status_val.upper(), SessionStatus.CREATED)
+
+    return SessionRead(
+        session_id=str(data.get("campaign_id") or data.get("session_id", "")),
+        seed_doi=str(data.get("seed_doi", "")),
+        research_questions=questions,
+        similarity_threshold=float(data.get("similarity_threshold", 0.5)),
+        max_depth=int(data.get("max_depth", 2)),
+        mode=mode,
+        status=stat_enum,
+        papers_discovered=int(data.get("papers_discovered", 0)),
+        papers_relevant=int(data.get("papers_relevant", 0)),
+        current_depth=int(data.get("current_depth", 0)),
+        created_at=created,
+        updated_at=updated,
+    )
 
 
 @router.get("", response_model=SessionList)
 async def list_sessions(
-    mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> SessionList:
-    """Return every search session stored in MySQL, newest first.
-
-    Each row's ``research_questions`` column is a JSON-encoded string
-    that must be parsed before it can populate the Pydantic list field.
-
-    Args:
-        mysql: Injected MySQL service (via FastAPI DI).
-
-    Returns:
-        A ``SessionList`` envelope containing all sessions and their
-        total count.
-    """
-    rows = await mysql.fetch_all(
-        "SELECT * FROM sessions ORDER BY created_at DESC"
+    """Return every active research campaign session stored in Neo4j."""
+    query = (
+        "MATCH (c:ResearchCampaign) "
+        "RETURN c "
+        "ORDER BY c.created_at DESC"
     )
+    records = await neo4j.execute_read(query)
     sessions: list[SessionRead] = []
-    for row in rows:
-        # research_questions is stored as a JSON TEXT column in MySQL;
-        # parse it into a Python list so Pydantic can validate it.
-        questions_raw = row.get("research_questions", "[]")
-        questions = json.loads(questions_raw) if isinstance(questions_raw, str) else questions_raw
-
-        # Construct the response model manually, casting each column to
-        # its expected Python type to handle driver-level ambiguities
-        # (e.g. Decimal → float, bytes → str).
-        sessions.append(
-            SessionRead(
-                session_id=str(row["session_id"]),
-                seed_doi=str(row["seed_doi"]),
-                research_questions=questions,
-                similarity_threshold=float(row["similarity_threshold"]),
-                max_depth=int(row["max_depth"]),
-                mode=SearchMode(str(row["mode"])),
-                status=SessionStatus(str(row["status"])),
-                papers_discovered=int(row.get("papers_discovered", 0)),
-                papers_relevant=int(row.get("papers_relevant", 0)),
-                current_depth=int(row.get("current_depth", 0)),
-                created_at=row["created_at"],
-                updated_at=row.get("updated_at"),
-            )
-        )
+    for r in records:
+        node = r.get("c", {})
+        if hasattr(node, "items"):
+            props = dict(node)
+        elif isinstance(node, dict):
+            props = node
+        else:
+            props = {}
+        sessions.append(_parse_session_node(props))
     return SessionList(sessions=sessions, total=len(sessions))
 
 
 @router.get("/{session_id}", response_model=SessionRead)
 async def get_session(
     session_id: str,
-    mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> SessionRead:
-    """Fetch a single search session by its UUID.
-
-    Args:
-        session_id: The UUID of the session to retrieve.
-        mysql: Injected MySQL service (via FastAPI DI).
-
-    Returns:
-        The fully populated ``SessionRead`` model for this session.
-
-    Raises:
-        HTTPException 404: If no row exists for the given *session_id*.
-    """
-    row = await mysql.fetch_one(
-        "SELECT * FROM sessions WHERE session_id = %s", (session_id,)
+    """Fetch a single campaign session by its UUID from Neo4j."""
+    query = (
+        "MATCH (c:ResearchCampaign) "
+        "WHERE c.campaign_id = $session_id OR c.session_id = $session_id "
+        "RETURN c LIMIT 1"
     )
-    if row is None:
+    records = await neo4j.execute_read(query, {"session_id": session_id})
+    if not records:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
-
-    # Deserialise the JSON-encoded research_questions column.
-    questions_raw = row.get("research_questions", "[]")
-    questions = json.loads(questions_raw) if isinstance(questions_raw, str) else questions_raw
-
-    return SessionRead(
-        session_id=str(row["session_id"]),
-        seed_doi=str(row["seed_doi"]),
-        research_questions=questions,
-        similarity_threshold=float(row["similarity_threshold"]),
-        max_depth=int(row["max_depth"]),
-        mode=SearchMode(str(row["mode"])),
-        status=SessionStatus(str(row["status"])),
-        papers_discovered=int(row.get("papers_discovered", 0)),
-        papers_relevant=int(row.get("papers_relevant", 0)),
-        current_depth=int(row.get("current_depth", 0)),
-        created_at=row["created_at"],
-        updated_at=row.get("updated_at"),
-    )
+    node = records[0].get("c", {})
+    props = dict(node) if hasattr(node, "items") else dict(node)
+    return _parse_session_node(props)
 
 
 @router.delete("/{session_id}")
 async def delete_session(
     session_id: str,
-    mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> dict[str, str]:
-    """Delete a session and its associated data by UUID.
-
-    Uses the row-count returned by ``MySQLService.execute()`` to detect
-    whether the session actually existed before attempting deletion.
-
-    Args:
-        session_id: The UUID of the session to delete.
-        mysql: Injected MySQL service (via FastAPI DI).
-
-    Returns:
-        A confirmation dict ``{"message": "Session <id> deleted"}``.
-
-    Raises:
-        HTTPException 404: If no row was affected (session not found).
-    """
-    deleted = await mysql.execute(
-        "DELETE FROM sessions WHERE session_id = %s", (session_id,)
+    """Delete a research campaign session and cascade associated substates."""
+    query = (
+        "MATCH (c:ResearchCampaign) "
+        "WHERE c.campaign_id = $session_id OR c.session_id = $session_id "
+        "DETACH DELETE c "
+        "RETURN count(c) AS deleted_count"
     )
-    # execute() returns the affected row count; zero means no match.
+    records = await neo4j.execute_write(query, {"session_id": session_id})
+    deleted = records[0].get("deleted_count", 0) if records else 0
     if deleted == 0:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

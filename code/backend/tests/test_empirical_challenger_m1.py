@@ -19,7 +19,6 @@ from fastapi.testclient import TestClient
 from main import app
 from config import get_settings
 from core.dependencies import get_chat_service
-from core.db.mysql_service import MySQLService
 from agents.writing.citation_verifier import (
     CitationVerificationResult,
     CitationVerifier,
@@ -268,129 +267,60 @@ async def test_session_isolation_across_multiple_projects():
 
 
 # ============================================================================
-# 4. Empirical Tests: Cascading Deletes & Relational Integrity in MySQL
+# 4. Empirical Tests: Cascading Deletes & Relational Integrity (SQLite WAL)
 # ============================================================================
 
 @pytest.mark.asyncio
-async def test_mysql_cascading_deletes_live_or_emulated():
+async def test_relational_cascading_deletes_emulated():
     """Empirically verify that deleting a project cascades to chat_sessions and chat_messages."""
-    settings = get_settings()
-    mysql = MySQLService(
-        host=settings.mysql_host,
-        port=settings.mysql_port,
-        user=settings.mysql_user,
-        password=settings.mysql_password,
-        database=settings.mysql_database,
-    )
+    import aiosqlite
+    async with aiosqlite.connect(":memory:") as db:
+        await db.execute("PRAGMA foreign_keys = ON;")
+        await db.execute("""
+            CREATE TABLE projects (
+                id VARCHAR(36) PRIMARY KEY,
+                name VARCHAR(200) NOT NULL
+            );
+        """)
+        await db.execute("""
+            CREATE TABLE chat_sessions (
+                id VARCHAR(36) PRIMARY KEY,
+                project_id VARCHAR(36) NOT NULL,
+                title VARCHAR(255) NOT NULL,
+                CONSTRAINT fk_cs_proj FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+        """)
+        await db.execute("""
+            CREATE TABLE chat_messages (
+                id VARCHAR(36) PRIMARY KEY,
+                chat_id VARCHAR(36) NOT NULL,
+                project_id VARCHAR(36) NOT NULL,
+                content TEXT NOT NULL,
+                CONSTRAINT fk_cm_chat FOREIGN KEY (chat_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+                CONSTRAINT fk_cm_proj FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+        """)
+        pid = str(uuid.uuid4())
+        cid = str(uuid.uuid4())
+        mid1, mid2 = str(uuid.uuid4()), str(uuid.uuid4())
+        await db.execute("INSERT INTO projects (id, name) VALUES (?, ?)", (pid, "Test Project"))
+        await db.execute("INSERT INTO chat_sessions (id, project_id, title) VALUES (?, ?, ?)", (cid, pid, "Chat 1"))
+        await db.execute("INSERT INTO chat_messages (id, chat_id, project_id, content) VALUES (?, ?, ?, ?)", (mid1, cid, pid, "Hello"))
+        await db.execute("INSERT INTO chat_messages (id, chat_id, project_id, content) VALUES (?, ?, ?, ?)", (mid2, cid, pid, "World"))
+        await db.commit()
 
-    try:
-        await mysql.connect()
-        is_healthy = await mysql.health_check()
-    except Exception:
-        is_healthy = False
+        # Delete project
+        await db.execute("DELETE FROM projects WHERE id = ?", (pid,))
+        await db.commit()
 
-    if not is_healthy:
-        # If MySQL is not reachable, test with an in-memory SQLite instance with FOREIGN KEY ON DELETE CASCADE
-        import aiosqlite
-        async with aiosqlite.connect(":memory:") as db:
-            await db.execute("PRAGMA foreign_keys = ON;")
-            await db.execute("""
-                CREATE TABLE projects (
-                    id VARCHAR(36) PRIMARY KEY,
-                    name VARCHAR(200) NOT NULL
-                );
-            """)
-            await db.execute("""
-                CREATE TABLE chat_sessions (
-                    id VARCHAR(36) PRIMARY KEY,
-                    project_id VARCHAR(36) NOT NULL,
-                    title VARCHAR(255) NOT NULL,
-                    CONSTRAINT fk_cs_proj FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-                );
-            """)
-            await db.execute("""
-                CREATE TABLE chat_messages (
-                    id VARCHAR(36) PRIMARY KEY,
-                    chat_id VARCHAR(36) NOT NULL,
-                    project_id VARCHAR(36) NOT NULL,
-                    content TEXT NOT NULL,
-                    CONSTRAINT fk_cm_chat FOREIGN KEY (chat_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
-                    CONSTRAINT fk_cm_proj FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-                );
-            """)
-            # Insert project, session, messages
-            pid = str(uuid.uuid4())
-            cid = str(uuid.uuid4())
-            mid1, mid2 = str(uuid.uuid4()), str(uuid.uuid4())
-            await db.execute("INSERT INTO projects (id, name) VALUES (?, ?)", (pid, "Test Project"))
-            await db.execute("INSERT INTO chat_sessions (id, project_id, title) VALUES (?, ?, ?)", (cid, pid, "Chat 1"))
-            await db.execute("INSERT INTO chat_messages (id, chat_id, project_id, content) VALUES (?, ?, ?, ?)", (mid1, cid, pid, "Hello"))
-            await db.execute("INSERT INTO chat_messages (id, chat_id, project_id, content) VALUES (?, ?, ?, ?)", (mid2, cid, pid, "World"))
-            await db.commit()
+        # Assert cascade
+        async with db.execute("SELECT COUNT(*) FROM chat_sessions WHERE project_id = ?", (pid,)) as cur:
+            count_sessions = (await cur.fetchone())[0]
+        async with db.execute("SELECT COUNT(*) FROM chat_messages WHERE project_id = ?", (pid,)) as cur:
+            count_messages = (await cur.fetchone())[0]
 
-            # Delete project
-            await db.execute("DELETE FROM projects WHERE id = ?", (pid,))
-            await db.commit()
-
-            # Assert cascade
-            async with db.execute("SELECT COUNT(*) FROM chat_sessions WHERE project_id = ?", (pid,)) as cur:
-                count_sessions = (await cur.fetchone())[0]
-            async with db.execute("SELECT COUNT(*) FROM chat_messages WHERE project_id = ?", (pid,)) as cur:
-                count_messages = (await cur.fetchone())[0]
-
-            assert count_sessions == 0
-            assert count_messages == 0
-        return
-
-    # Live MySQL execution (36-character UUID primary keys)
-    test_proj_id = str(uuid.uuid4())
-    test_chat_id = str(uuid.uuid4())
-    test_msg_id = str(uuid.uuid4())
-
-    try:
-        # Initialize schema
-        await mysql.initialize_schema()
-
-        # 1. Insert test project
-        await mysql.execute(
-            "INSERT INTO projects (id, name, description, status) VALUES (%s, %s, %s, %s)",
-            (test_proj_id, "Cascade Test Project", "Testing cascading delete", "active"),
-        )
-
-        # 2. Insert chat session
-        await mysql.execute(
-            "INSERT INTO chat_sessions (id, project_id, title, message_count) VALUES (%s, %s, %s, %s)",
-            (test_chat_id, test_proj_id, "Cascade Chat Session", 1),
-        )
-
-        # 3. Insert chat message
-        await mysql.execute(
-            "INSERT INTO chat_messages (id, chat_id, project_id, sender, content, tool_traces, citations) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (test_msg_id, test_chat_id, test_proj_id, "user", "Cascade test content", "[]", "[]"),
-        )
-
-        # 4. Verify presence
-        row_s = await mysql.fetch_one("SELECT id FROM chat_sessions WHERE id = %s", (test_chat_id,))
-        row_m = await mysql.fetch_one("SELECT id FROM chat_messages WHERE id = %s", (test_msg_id,))
-        assert row_s is not None
-        assert row_m is not None
-
-        # 5. Delete project -> triggers ON DELETE CASCADE on chat_sessions and chat_messages
-        await mysql.execute("DELETE FROM projects WHERE id = %s", (test_proj_id,))
-
-        # 6. Verify cascading cleanup
-        row_s_after = await mysql.fetch_one("SELECT id FROM chat_sessions WHERE id = %s", (test_chat_id,))
-        row_m_after = await mysql.fetch_one("SELECT id FROM chat_messages WHERE id = %s", (test_msg_id,))
-        assert row_s_after is None, "chat_sessions row was not cascade-deleted when project was deleted!"
-        assert row_m_after is None, "chat_messages row was not cascade-deleted when project was deleted!"
-
-    finally:
-        # Cleanup if anything failed
-        try:
-            await mysql.execute("DELETE FROM projects WHERE id = %s", (test_proj_id,))
-        except Exception:
-            pass
-        await mysql.close()
+        assert count_sessions == 0
+        assert count_messages == 0
 
 
 # ============================================================================

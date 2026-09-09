@@ -162,9 +162,10 @@ class OpenAlexService:
                 elapsed_ms = int(time.monotonic() * 1000) - start_ms
                 status_code = getattr(getattr(exc, "response", None), "status_code", 500)
                 if self._log_service is not None:
-                    resp_text = getattr(getattr(exc, "response", None), "text", None)
-                    if resp_text and len(resp_text) > 50000:
-                        resp_text = resp_text[:50000] + "...[TRUNCATED]"
+                    raw_text = getattr(getattr(exc, "response", None), "text", None)
+                    err_resp_text: str | None = str(raw_text) if raw_text is not None else None
+                    if err_resp_text and len(err_resp_text) > 50000:
+                        err_resp_text = err_resp_text[:50000] + "...[TRUNCATED]"
                         
                     await self._log_service.log_api_request(
                         service="OpenAlex",
@@ -174,7 +175,7 @@ class OpenAlexService:
                         response_time_ms=elapsed_ms,
                         payload_summary=f"FAILED: {str(exc)}",
                         request_body=None,
-                        response_body=resp_text,
+                        response_body=err_resp_text,
                         session_id=session_id,
                     )
                 raise exc
@@ -398,7 +399,7 @@ class OpenAlexService:
                     doi=doi_str,
                     title=str(work.get("title", "")),
                     year=work.get("publication_year"),  # type: ignore[arg-type]
-                    cited_by_count=int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
+                    cited_by_count=int(str(work.get("cited_by_count") or 0)),
                     authors=author_names[:5],
                 )
             )
@@ -449,7 +450,7 @@ class OpenAlexService:
                     doi=doi_str,
                     title=str(work.get("title", "")),
                     year=work.get("publication_year"),  # type: ignore[arg-type]
-                    cited_by_count=int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
+                    cited_by_count=int(str(work.get("cited_by_count") or 0)),
                     authors=author_names[:5],
                 )
             )
@@ -501,7 +502,7 @@ class OpenAlexService:
                     doi=doi_str,
                     title=str(work.get("title", "")),
                     year=work.get("publication_year"),  # type: ignore[arg-type]
-                    cited_by_count=int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
+                    cited_by_count=int(str(work.get("cited_by_count") or 0)),
                     authors=author_names[:5],
                 )
             )
@@ -681,11 +682,13 @@ class OpenAlexService:
             source = primary_loc["source"]  # type: ignore[assignment]
         elif isinstance(data.get("host_venue"), dict):
             source = data["host_venue"]  # type: ignore[assignment]
-        elif isinstance(data.get("locations"), list):
-            for loc in data["locations"]:
-                if isinstance(loc, dict) and isinstance(loc.get("source"), dict) and loc["source"].get("display_name"):
-                    source = loc["source"]  # type: ignore[assignment]
-                    break
+        else:
+            locs = data.get("locations")
+            if isinstance(locs, list):
+                for loc in locs:
+                    if isinstance(loc, dict) and isinstance(loc.get("source"), dict) and loc["source"].get("display_name"):
+                        source = loc["source"]  # type: ignore[assignment]
+                        break
 
         if source and source.get("display_name"):
             v_name = str(source["display_name"]).strip()
@@ -719,7 +722,7 @@ class OpenAlexService:
             title=str(data.get("title", "")).strip(),
             abstract=abstract,
             year=data.get("publication_year"),  # type: ignore[arg-type]
-            cited_by_count=int(data.get("cited_by_count") or 0),  # type: ignore[arg-type]
+            cited_by_count=int(str(data.get("cited_by_count") or 0)),
             openalex_id=str(data.get("id", "")) if data.get("id") else None,
             publication_date=str(data.get("publication_date", ""))
             if data.get("publication_date")

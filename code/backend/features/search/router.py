@@ -1,47 +1,25 @@
-"""Search and streaming API endpoints for ALRS v2.
-
-This router is deliberately *thin* — it validates HTTP input, delegates
-to the appropriate service, and translates service exceptions into HTTP
-error responses.  All business logic lives in:
-
-    - :class:`~features.search.session_service.SearchSessionService`
-      (session CRUD + SSE stream factory)
-    - :class:`~features.search.graph_search_service.GraphSearchService`
-      (BFS orchestration + ranking)
-
-Endpoints:
-    POST /api/search/resolve-title   → candidate paper list from OpenAlex
-    POST /api/search/start           → create session + persist seed paper
-    GET  /api/search/{id}/stream     → SSE stream of BFS progress events
-    POST /api/search/{id}/enqueue    → accept DOIs for next BFS cycle
-    GET  /api/search/{id}/results    → ranked & grouped results
-    POST /api/search/{id}/rerank     → adjust weights and re-rank
-"""
+"""Search and streaming API endpoints for ALRS v2 backed by Neo4j."""
 from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, status, Depends, Request
-from sse_starlette.sse import EventSourceResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sse_starlette.sse import EventSourceResponse
 
-from features.retrieval.models import PaperSummary
-from features.sessions.models import SearchRequest, SearchResponse
-from features.ranking.models import GroupedResults
-
-from core.db.neo4j_service import Neo4jService
-from core.db.mysql_service import MySQLService
 from core.clients.openalex_client import OpenAlexService
-from features.search.graph_search_service import GraphSearchService
-from features.search.session_service import SearchSessionService
-
+from core.db.neo4j_service import Neo4jService
 from core.dependencies import (
-    get_neo4j_service,
-    get_mysql_service,
-    get_openalex_service,
     get_graph_search_service,
+    get_neo4j_service,
+    get_openalex_service,
     get_search_session_service,
 )
+from features.ranking.models import GroupedResults
+from features.retrieval.models import PaperSummary
+from features.search.graph_search_service import GraphSearchService
+from features.search.session_service import SearchSessionService
+from features.sessions.models import SearchRequest, SearchResponse
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +45,7 @@ async def resolve_title(
     max_results: int = 10,
     openalex: OpenAlexService = Depends(get_openalex_service),
 ) -> list[PaperSummary]:
-    """Search for papers by title, returning a candidate list.
-
-    The frontend calls this so the user can pick the correct seed
-    paper before starting a session.
-    """
+    """Search for papers by title, returning a candidate list."""
     try:
         return await openalex.search_by_title(title, max_results)
     except Exception as exc:
@@ -87,11 +61,7 @@ async def start_search(
     request: SearchRequest,
     session_svc: SearchSessionService = Depends(get_search_session_service),
 ) -> SearchResponse:
-    """Create a new literature-review search session.
-
-    Delegates entirely to ``SearchSessionService.create_session()``
-    which handles MySQL INSERT, OpenAlex fetch, and Neo4j MERGE.
-    """
+    """Create a new literature-review search session in Neo4j."""
     try:
         return await session_svc.create_session(request)
     except ValueError as exc:
@@ -106,7 +76,7 @@ async def start_search(
         )
     except RuntimeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(exc),
         )
 
@@ -116,48 +86,33 @@ async def stream_search(
     session_id: str,
     request: Request,
 ) -> EventSourceResponse:
-    """Stream SSE events during the BFS crawl for a given session.
-
-    This endpoint cannot use standard DI for the stream because the
-    SSE generator must outlive the request scope.  Instead, it reads
-    the service singletons from ``app.state`` and passes them to
-    ``SearchSessionService.build_search_stream()``.
-    """
-    # Retrieve singletons from app state (not DI — stream outlives request)
+    """Stream BFS progress events as Server-Sent Events (SSE)."""
     neo4j_service: Neo4jService | None = getattr(
         request.app.state, "neo4j_service", None
     )
-    mysql_service: MySQLService | None = getattr(
-        request.app.state, "mysql_service", None
-    )
 
-    if neo4j_service is None or mysql_service is None:
+    if neo4j_service is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Database services not initialized",
+            detail="Neo4j service not initialized",
         )
 
-    # Validate session exists
-    session_data = await mysql_service.get_session(session_id)
+    stream_svc = SearchSessionService(
+        neo4j=neo4j_service,
+        openalex=OpenAlexService.__new__(OpenAlexService),
+    )
+    session_data = await stream_svc.get_session(session_id)
     if session_data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session not found: {session_id}",
         )
 
-    # Delegate stream construction to the service layer
-    stream_svc = SearchSessionService(
-        neo4j=neo4j_service,
-        mysql=mysql_service,
-        openalex=OpenAlexService.__new__(OpenAlexService),  # placeholder — stream builds its own
-    )
-
     return EventSourceResponse(
         stream_svc.build_search_stream(
             session_id=session_id,
             session_data=session_data,
             neo4j_service=neo4j_service,
-            mysql_service=mysql_service,
         )
     )
 
@@ -168,11 +123,7 @@ async def enqueue_papers(
     dois: list[str],
     session_svc: SearchSessionService = Depends(get_search_session_service),
 ) -> dict[str, object]:
-    """Accept researcher's DOI selections for the next BFS cycle.
-
-    Validates input, then delegates to
-    ``SearchSessionService.enqueue_papers()``.
-    """
+    """Accept researcher's DOI selections for the next BFS cycle."""
     if not dois:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -195,11 +146,7 @@ async def get_results(
     pagerank_weight: float = 0.3,
     bfs: GraphSearchService = Depends(get_graph_search_service),
 ) -> GroupedResults:
-    """Get ranked and grouped results for a completed session.
-
-    Delegates to ``GraphSearchService.rank_papers()`` which computes
-    the composite score (semantic similarity × weight + PageRank × weight).
-    """
+    """Get ranked and grouped results for a completed session."""
     try:
         return await bfs.rank_papers(
             session_id=session_id,
@@ -217,20 +164,15 @@ async def get_results(
 async def rerank_results(
     session_id: str,
     request: RerankRequest,
-    mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
     bfs: GraphSearchService = Depends(get_graph_search_service),
 ) -> GroupedResults:
-    """Adjust similarity threshold and weight split, then re-rank.
-
-    Persists the new threshold to MySQL so it survives page refreshes,
-    then delegates ranking to ``GraphSearchService.rank_papers()``.
-    """
-    # Persist the new threshold
-    await mysql.execute(
-        """UPDATE sessions
-           SET similarity_threshold = %s
-           WHERE session_id = %s""",
-        (request.similarity_threshold, session_id),
+    """Adjust similarity threshold and weight split, then re-rank."""
+    await neo4j.execute_write(
+        """MATCH (c:ResearchCampaign)
+           WHERE c.campaign_id = $session_id OR c.session_id = $session_id
+           SET c.similarity_threshold = $threshold, c.updated_at = datetime()""",
+        {"session_id": session_id, "threshold": request.similarity_threshold},
     )
 
     try:

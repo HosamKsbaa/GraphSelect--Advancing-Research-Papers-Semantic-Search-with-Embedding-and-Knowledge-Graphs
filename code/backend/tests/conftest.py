@@ -4,9 +4,10 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("OPENALEX_API_KEY", "test-openalex-key")
+os.environ.setdefault("OPENALEX_MAILTO", "researcher@university.edu")
 os.environ.setdefault("NEO4J_PASSWORD", "test-neo4j-password")
-os.environ.setdefault("MYSQL_PASSWORD", "test-mysql-password")
 os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+os.environ.setdefault("SQLITE_TELEMETRY_PATH", "data/telemetry.sqlite")
 
 from datetime import datetime
 from typing import Any, AsyncIterator
@@ -87,6 +88,53 @@ def sample_embedding() -> list[float]:
     return [x / norm for x in raw]
 
 
+# --- Deterministic Offline API Mock Fixtures (Constitution A59) ---
+
+
+@pytest.fixture
+def mock_openalex() -> AsyncMock:
+    """Deterministic offline mock for OpenAlex polite pool client."""
+    client = AsyncMock()
+    client.get_work_by_doi = AsyncMock(
+        return_value={
+            "id": "https://openalex.org/W123456789",
+            "doi": "https://doi.org/10.1145/3292500.3330919",
+            "title": "Graph Neural Networks: A Review of Methods and Applications",
+            "publication_year": 2019,
+            "cited_by_count": 5000,
+            "referenced_works": ["https://openalex.org/W987654321"],
+            "abstract_inverted_index": {
+                "Graph": [0],
+                "neural": [1],
+                "networks": [2],
+                "review": [3],
+            },
+        }
+    )
+    client.search_works = AsyncMock(return_value=[])
+    client.get_references = AsyncMock(return_value=[])
+    return client
+
+
+@pytest.fixture
+def mock_gemini_embedding(sample_embedding: list[float]) -> AsyncMock:
+    """Deterministic offline mock for Gemini 768-dim embeddings."""
+    svc = AsyncMock()
+    svc.generate_embedding = AsyncMock(return_value=sample_embedding)
+    svc.embed_text = AsyncMock(return_value=sample_embedding)
+    return svc
+
+
+@pytest.fixture
+def mock_gemini_flash() -> AsyncMock:
+    """Deterministic offline mock for Gemini 2.5 Flash responses."""
+    svc = AsyncMock()
+    response_mock = MagicMock()
+    response_mock.text = "Deterministic mocked synthesis response."
+    svc.generate_content = AsyncMock(return_value=response_mock)
+    return svc
+
+
 # --- Mock Service Fixtures ---
 
 
@@ -105,7 +153,7 @@ def mock_neo4j_service() -> AsyncMock:
 
 @pytest.fixture
 def mock_mysql_service() -> AsyncMock:
-    """Mock MySQL service with common method stubs."""
+    """Legacy stub for test migration only."""
     service = AsyncMock()
     service.connect = AsyncMock()
     service.close = AsyncMock()
@@ -123,14 +171,17 @@ def mock_settings() -> MagicMock:
     settings = MagicMock()
     settings.gemini_api_key = "test-gemini-key"
     settings.openalex_api_key = "test-openalex-key"
+    settings.openalex_mailto = "researcher@university.edu"
+    settings.openalex_email = "researcher@university.edu"
     settings.neo4j_uri = "bolt://localhost:7687"
     settings.neo4j_user = "neo4j"
     settings.neo4j_password = "test-password"
-    settings.mysql_host = "localhost"
-    settings.mysql_port = 3306
-    settings.mysql_user = "alrs"
-    settings.mysql_password = "test-password"
-    settings.mysql_database = "alrs"
+    settings.neo4j_database = "neo4j"
+    settings.sqlite_telemetry_path = "data/telemetry.sqlite"
+    settings.data_dir = "data"
+    settings.campaigns_dir = "data/campaigns"
+    settings.provenance_crops_dir = "data/provenance/crops"
+    settings.telemetry_dir = "data/telemetry"
     settings.log_retention_hours = 24
     settings.embedding_dimensions = 768
     settings.openalex_rate_limit = 9.0
@@ -148,4 +199,3 @@ def clean_dependency_overrides() -> AsyncIterator[None]:
         yield
     finally:
         app.dependency_overrides.clear()
-

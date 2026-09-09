@@ -652,6 +652,62 @@ async def test_adversarial_rate_limiter_burst_and_backoff():
     print(">>> Adaptive Rate Limiter: Stress, backoff, and concurrency tests passed successfully.")
 
 
+# ==============================================================================
+# SECTION 9: EMPIRICAL TELEMETRY BENCHMARK & SYNLIT-BENCH (T069, T072)
+# ==============================================================================
+
+def test_empirical_telemetry_runner_teq_and_vts():
+    """Verify Equivalent Token Time (T_eq) and VTS ratio >= 1.2 per Constitution A50."""
+    from core.logging.telemetry_service import TelemetryService
+    svc = TelemetryService(":memory:")
+    c_id = "test-camp-001"
+    svc.record_turn_event({
+        "campaign_id": c_id, "agent_role": "builder", "prompt_tokens": 200,
+        "completion_tokens": 300, "latency_ms": 1500.0, "cost_usd": 0.05,
+    })
+    svc.record_turn_event({
+        "campaign_id": c_id, "agent_role": "critic", "prompt_tokens": 350,
+        "completion_tokens": 400, "latency_ms": 2000.0, "cost_usd": 0.07,
+    })
+    vts = svc.compute_verification_to_synthesis_ratio(c_id)
+    teq = svc.compute_equivalent_token_time(c_id)
+    assert vts >= 1.2, f"Expected VTS >= 1.2, got {vts}"
+    assert teq > 0.0, f"Expected positive T_eq, got {teq}"
+
+
+def test_empirical_telemetry_cost_ceiling():
+    """Verify total campaign monetary cost computation strictly within $1.50 ceiling."""
+    from core.logging.telemetry_service import TelemetryService
+    svc = TelemetryService(":memory:")
+    c_id = "test-camp-cost"
+    for _ in range(5):
+        svc.record_turn_event({
+            "campaign_id": c_id, "agent_role": "builder", "prompt_tokens": 100,
+            "completion_tokens": 100, "latency_ms": 500.0, "cost_usd": 0.08,
+        })
+    total_cost = svc.compute_total_cost_usd(c_id)
+    assert 0.0 < total_cost <= 1.50, f"Cost {total_cost} exceeded $1.50 ceiling"
+
+
+def test_synlit_bench_adversarial_generator():
+    """SynLit-Bench: verify 100% recall on injected ungrounded DOIs (zero hallucination)."""
+    from agents.writing.citation_verifier import verify_citation_grounding
+    known_dois = ["10.1145/3308558.3313508", "10.48550/arxiv.1706.03762"]
+    injected_synthetic = ["10.9999/hallucinated.doi.001", "10.9999/fabricated.graph.002"]
+    manuscript = (
+        f"Prior foundations [10.1145/3308558.3313508] established node embeddings. "
+        f"Recent claims [{injected_synthetic[0]}] suggest linear scaling. "
+        f"However, synthesis [{injected_synthetic[1]}] contradicts empirical bounds."
+    )
+    result = verify_citation_grounding(text=manuscript, known_dois=known_dois)
+    assert not result.is_grounded, "Expected ungrounded flag for injected synthetic DOIs"
+    assert len(result.hallucinated_dois) == 2, f"Expected 2 detected flaws, got {result.hallucinated_dois}"
+    for syn_doi in injected_synthetic:
+        assert syn_doi in result.hallucinated_dois, f"Failed to detect injected flaw: {syn_doi}"
+    assert result.hallucination_rate == 2 / 3
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-s"])
+
 

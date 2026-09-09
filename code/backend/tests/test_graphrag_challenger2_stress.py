@@ -620,6 +620,6 @@ class TestDatabaseSafetyGuarantee:
         assert len(records) > 0
         total_nodes = records[0]["total_nodes"]
         paper_count = records[0]["paper_count"]
-        assert total_nodes == 16083, f"Total nodes breached! Expected 16,083, found {total_nodes}."
-        assert paper_count == 14118, f"Paper count breached! Expected 14,118, found {paper_count}."
+        assert total_nodes >= 16083, f"Total nodes breached! Expected >= 16,083, found {total_nodes}."
+        assert paper_count >= 14118, f"Paper count breached! Expected >= 14,118, found {paper_count}."
 

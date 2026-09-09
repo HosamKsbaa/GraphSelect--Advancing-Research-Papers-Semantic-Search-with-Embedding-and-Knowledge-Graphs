@@ -17,6 +17,7 @@ import socket
 import time
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -698,3 +699,107 @@ class TestOfflineDeterministicPerformance:
         final = await run_pipeline("proj-convenience", persistence=isolated_persistence)
         assert final.status == "completed"
         assert final.stage_5_export.meta.status == "completed"
+
+
+class TestDynamicDAGRoutingModes:
+    """Validate dynamic DAG execution modes: Exploration, Refinement, Targeted."""
+
+    @pytest.mark.asyncio
+    async def test_exploration_mode_starts_at_stage0_and_pauses(self, tmp_path: Path) -> None:
+        """Exploration Mode starts at Stage 0 and pauses in awaiting_input for human steering."""
+        from features.workflow.execution_pipeline import execute_campaign
+        from features.workflow.state_models import ResearchCampaignModel
+
+        campaign = ResearchCampaignModel(
+            campaign_id="camp-explore-1",
+            topic="Topological Deep Learning",
+            entry_mode="exploration",
+        )
+        paused = await execute_campaign(campaign, base_dir=tmp_path)
+        assert paused.status == "awaiting_input"
+        assert paused.current_stage == 1
+        assert 0 in paused.substates
+        assert paused.substates[0].meta.status == "completed"
+
+        # Resume after steering
+        paused.status = "active"
+        completed = await execute_campaign(paused, base_dir=tmp_path)
+        assert completed.status == "completed"
+        assert 5 in completed.substates
+        assert completed.substates[5].meta.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_refinement_mode_starts_at_stage1(self, tmp_path: Path) -> None:
+        """Refinement Mode starts at Stage 1, bypassing Stage 0."""
+        from features.workflow.execution_pipeline import execute_campaign
+        from features.workflow.state_models import ResearchCampaignModel
+
+        campaign = ResearchCampaignModel(
+            campaign_id="camp-refine-1",
+            topic="Quantum Machine Learning",
+            entry_mode="refinement",
+        )
+        completed = await execute_campaign(campaign, base_dir=tmp_path)
+        assert completed.status == "completed"
+        assert 0 not in completed.substates
+        assert 1 in completed.substates
+        assert completed.substates[1].meta.status == "completed"
+        assert completed.substates[5].meta.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_targeted_mode_bypasses_stages_0_and_1(self, tmp_path: Path) -> None:
+        """Targeted Mode starts at Stage 2 with pre-formulated DOIs and RQs."""
+        from features.workflow.execution_pipeline import execute_campaign
+        from features.workflow.state_models import ResearchCampaignModel
+
+        campaign = ResearchCampaignModel(
+            campaign_id="camp-target-1",
+            topic="Graph Transformers",
+            entry_mode="targeted",
+            seed_dois=["10.1145/3292500.3330964"],
+            research_questions=["What is the scalability bottleneck of Graph Transformers?"],
+        )
+        completed = await execute_campaign(campaign, base_dir=tmp_path)
+        assert completed.status == "completed"
+        assert 0 not in completed.substates
+        assert 1 not in completed.substates
+        assert 2 in completed.substates
+        assert completed.substates[2].meta.status == "completed"
+        assert completed.substates[5].meta.status == "completed"
+
+
+def test_epistemic_entropy_and_contradiction_ratio() -> None:
+    """Verify epistemic entropy H(G) and contradiction resolution ratio CRR per Constitution A53."""
+    from features.workflow.execution_pipeline import (
+        compute_epistemic_entropy,
+        compute_contradiction_resolution_ratio,
+    )
+    # 2 equal claims: p1 = 0.5, p2 = 0.5 -> H = -2*(0.5 * log2(0.5)) = -2*(-0.5) = 1.0
+    entropy = compute_epistemic_entropy([0.5, 0.5])
+    assert entropy == pytest.approx(1.0, rel=1e-3)
+
+    # Empty confidences
+    assert compute_epistemic_entropy([]) == 0.0
+
+    # Contradiction Resolution Ratio
+    crr = compute_contradiction_resolution_ratio(resolved_edges=4, total_contradictions=5)
+    assert crr == pytest.approx(0.80, rel=1e-3)
+
+    # Edge cases
+    assert compute_contradiction_resolution_ratio(0, 0) == 1.0
+    assert compute_contradiction_resolution_ratio(10, 5) == 1.0
+
+
+@pytest.mark.asyncio
+async def test_campaign_pipeline_rollback() -> None:
+    """Verify CampaignExecutionPipeline.rollback delegates to Neo4j rollback within < 5s."""
+    from features.workflow.execution_pipeline import CampaignExecutionPipeline
+    mock_neo4j = AsyncMock()
+    mock_neo4j.rollback_stage_transaction.return_value = 7
+
+    pipeline = CampaignExecutionPipeline()
+    deleted = await pipeline.rollback(mock_neo4j, "camp-123", stage=2)
+    assert deleted == 7
+    mock_neo4j.rollback_stage_transaction.assert_called_once_with("camp-123", 2)
+
+

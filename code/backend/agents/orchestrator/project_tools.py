@@ -41,8 +41,6 @@ async def create_new_project(
 
         # Access services from registry
         neo4j = ServiceRegistry.neo4j
-        log_service = ServiceRegistry.log_service
-        mysql = log_service._mysql
 
         data = ProjectCreate(
             name=name,
@@ -50,7 +48,7 @@ async def create_new_project(
             description=description or f"Literature review on {topic}",
         )
 
-        project = await create_project(data, mysql, neo4j)
+        project = await create_project(data, neo4j)
 
         # Initialize and persist authoritative ProjectState
         from features.workflow.state_models import ProjectState
@@ -118,7 +116,10 @@ async def select_project(
         from features.workflow.persistence_service import ProjectPersistenceService
 
         persistence = ProjectPersistenceService.get_instance()
-        p_state = await persistence.load_state(project.id, tool_context)
+        try:
+            p_state = await persistence.load_state(project.id, tool_context)
+        except Exception:
+            p_state = None
         if p_state is None:
             p_state = ProjectState(
                 project_id=project.id,
@@ -166,11 +167,9 @@ async def list_projects(
     try:
         from projects.service import get_projects
 
-        log_service = ServiceRegistry.log_service
-        mysql = log_service._mysql
         neo4j = ServiceRegistry.neo4j
 
-        projects_list = await get_projects(mysql, neo4j=neo4j, include_archived=False)
+        projects_list = await get_projects(neo4j=neo4j, include_archived=False)
         return {
             "projects": [
                 {
@@ -210,11 +209,9 @@ async def archive_project(
     try:
         from projects.service import archive_project as svc_archive_project
 
-        log_service = ServiceRegistry.log_service
-        mysql = log_service._mysql
         neo4j = ServiceRegistry.neo4j
 
-        project = await svc_archive_project(project_id, mysql, neo4j)
+        project = await svc_archive_project(project_id, neo4j)
         if project is None:
             return {"error": f"Project with ID '{project_id}' not found."}
 

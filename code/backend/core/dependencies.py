@@ -1,39 +1,22 @@
-"""FastAPI Dependency Injection providers for ALRS v2.
+"""FastAPI dependency injection providers for ALRS v2 backend.
 
-This module is the single source of truth for how services are wired
-together. Every provider follows the same pattern:
-
-    1. Receive upstream dependencies via ``Depends()``.
-    2. Construct and return the service instance.
-
-Dependency graph (simplified)::
-
-    Request.app.state
-        ├── Neo4jService        (core.db)
-        └── MySQLService        (core.db)
-                └── LogService  (core.logging)
-                        ├── OpenAlexService      (core.clients)
-                        ├── AdaptiveRateLimiter   (core.clients)
-                        └── …
-                            ├── RetrievalService          (features.retrieval)
-                            ├── GeminiEmbeddingProvider    (features.embedding.providers)
-                            ├── PaperEmbeddingService      (features.embedding)
-                            ├── CrawlerService             (features.search)
-                            ├── RankingService             (features.ranking)
-                            ├── GraphSearchService         (features.search)
-                            └── SearchSessionService       (features.search)
+Provides singleton retrieval and factory functions for application state,
+database services (Pure Neo4j & SQLite Telemetry; Strictly Zero MySQL),
+logging, rate limiters, and feature-level services.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, AsyncIterator
-from fastapi import Request, Depends
-from config import get_settings, Settings
+from typing import TYPE_CHECKING, AsyncIterator, Any
+
+from fastapi import Depends, Request
+
+from config import Settings, get_settings
 
 if TYPE_CHECKING:
-    from features.retrieval.service import RetrievalService
     from features.embedding.service import PaperEmbeddingService
-    from features.search.crawler_service import CrawlerService
     from features.ranking.service import RankingService
+    from features.retrieval.service import RetrievalService
+    from features.search.crawler_service import CrawlerService
     from features.search.graph_search_service import GraphSearchService
     from features.search.session_service import SearchSessionService
     from features.chat.service import ChatService
@@ -41,9 +24,9 @@ if TYPE_CHECKING:
 
 # ── Core infrastructure ──────────────────────────────────────────────
 from core.db.neo4j_service import Neo4jService
-from core.db.mysql_service import MySQLService
 from core.logging.log_service import LogService
 from core.logging.progress_service import ProgressService
+from core.logging.telemetry_service import TelemetryService
 from core.clients.openalex_client import OpenAlexService
 from core.clients.rate_limiter import AdaptiveRateLimiter
 
@@ -65,15 +48,12 @@ def get_neo4j_service(request: Request) -> Neo4jService:
     return service  # type: ignore[no-any-return]
 
 
-def get_mysql_service(request: Request) -> MySQLService:
-    """Retrieve the MySQL service singleton from application state."""
-    service = getattr(request.app.state, "mysql_service", None)
+def get_telemetry_service(request: Request) -> TelemetryService:
+    """Retrieve or construct TelemetryService from application state."""
+    service = getattr(request.app.state, "telemetry_service", None)
     if service is None:
-        from fastapi import HTTPException, status
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="MySQL service not initialized",
-        )
+        service = TelemetryService()
+        request.app.state.telemetry_service = service
     return service  # type: ignore[no-any-return]
 
 
@@ -88,9 +68,9 @@ def get_progress_service(request: Request) -> ProgressService:
 
 # ── Cross-cutting concerns ───────────────────────────────────────────
 
-def get_log_service(mysql: MySQLService = Depends(get_mysql_service)) -> LogService:
-    """Create a LogService backed by the MySQL connection."""
-    return LogService(mysql)
+def get_log_service(telemetry: TelemetryService = Depends(get_telemetry_service)) -> LogService:
+    """Create a LogService backed by standard logging and SQLite telemetry."""
+    return LogService(telemetry_service=telemetry)
 
 
 def get_rate_limiter(settings: Settings = Depends(get_settings)) -> AdaptiveRateLimiter:
@@ -121,11 +101,7 @@ def get_embedding_provider(
     settings: Settings = Depends(get_settings),
     log_service: LogService = Depends(get_log_service),
 ) -> EmbeddingProvider:
-    """Create the active embedding provider (currently Gemini).
-
-    To add a new provider (e.g. OpenAI), add an ``EMBEDDING_PROVIDER``
-    config field and branch here.
-    """
+    """Create the active embedding provider (currently Gemini)."""
     from features.embedding.providers.gemini_provider import GeminiEmbeddingProvider
     return GeminiEmbeddingProvider(
         api_key=settings.gemini_api_key,
@@ -175,11 +151,10 @@ def get_crawler_service(
 
 def get_ranking_service(
     neo4j: Neo4jService = Depends(get_neo4j_service),
-    mysql: MySQLService = Depends(get_mysql_service),
 ) -> RankingService:
     """Create the ranking service (semantic similarity + PageRank)."""
     from features.ranking.service import RankingService
-    return RankingService(neo4j, mysql)
+    return RankingService(neo4j)
 
 
 # ── Orchestrators / Facades ──────────────────────────────────────────
@@ -187,7 +162,7 @@ def get_ranking_service(
 def get_graph_search_service(
     neo4j: Neo4jService = Depends(get_neo4j_service),
     openalex: OpenAlexService = Depends(get_openalex_service),
-    gemini: EmbeddingProvider = Depends(get_embedding_provider),
+    gemini: Any = Depends(get_embedding_provider),
     crawler: CrawlerService = Depends(get_crawler_service),
     ranking: RankingService = Depends(get_ranking_service),
     rate_limiter: AdaptiveRateLimiter = Depends(get_rate_limiter),
@@ -208,24 +183,20 @@ def get_graph_search_service(
 
 def get_search_session_service(
     neo4j: Neo4jService = Depends(get_neo4j_service),
-    mysql: MySQLService = Depends(get_mysql_service),
     openalex: OpenAlexService = Depends(get_openalex_service),
 ) -> SearchSessionService:
     """Create the session lifecycle service (create → enqueue → stream)."""
     from features.search.session_service import SearchSessionService
-    return SearchSessionService(neo4j=neo4j, mysql=mysql, openalex=openalex)
+    return SearchSessionService(neo4j=neo4j, openalex=openalex)
 
 
 # ── Feature services: Chat ───────────────────────────────────────────
 
 def get_chat_service(
     request: Request,
-    mysql: MySQLService = Depends(get_mysql_service),
     neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> ChatService:
-    """Create the project-scoped ChatService wired to MySQL, Neo4j, and LLMService."""
+    """Create the project-scoped ChatService wired to Neo4j and LLMService."""
     from features.chat.service import ChatService
     llm_service = getattr(request.app.state, "llm_service", None)
-    return ChatService(mysql_service=mysql, neo4j_service=neo4j, llm_service=llm_service)
-
-
+    return ChatService(neo4j_service=neo4j, llm_service=llm_service)

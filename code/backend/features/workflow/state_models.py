@@ -6,10 +6,11 @@ Implements requirements R2 & R3 for the Agentic Literature Review System (ALRS v
 from __future__ import annotations
 
 import copy
+from datetime import datetime, timezone
 import re
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Generic, Literal, TypeVar
+from enum import Enum
+from typing import Any, Generic, Literal, TypeVar, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -100,6 +101,8 @@ class StageMeta(BaseModel):
     """Q1: Operational metadata for any workflow stage."""
     model_config = ConfigDict(extra="allow")
 
+    stage_index: int = Field(default=0, ge=0, le=5)
+    stage_name: str = Field(default="")
     status: StageStatus = Field(default="not_started", description="Current execution state")
     agent_name: str = Field(default="", description="Primary agent responsible for this stage")
     started_at: datetime | None = Field(default=None, description="Timestamp when stage commenced")
@@ -107,6 +110,9 @@ class StageMeta(BaseModel):
     updated_at: datetime = Field(default_factory=utc_now, description="Timestamp of latest mutation")
     progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Estimated completion percentage")
     iteration_count: int = Field(default=0, ge=0, description="Iteration or retry counter")
+    max_iterations: int = Field(default=5, ge=1, description="Maximum adversarial retry iterations")
+    is_quarantined: bool = Field(default=False, description="Quarantined to disk on repeated rejections")
+    quarantine_path: str | None = Field(default=None, description="Path to quarantined artifact directory")
     error_message: str | None = Field(default=None, description="Last error message if status is failed")
 
     @field_validator("status", mode="before")
@@ -129,11 +135,27 @@ class StageNote(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Note UUID")
+    note_id: str | None = Field(default=None)
     timestamp: datetime = Field(default_factory=utc_now, description="UTC creation timestamp")
-    author: str = Field(..., description="Agent or user who recorded the note")
+    created_at: datetime = Field(default_factory=utc_now)
+    author: str = Field(default="system", description="Agent or user who recorded the note")
+    author_agent: str | None = Field(default=None)
     category: str = Field(default="general", description="Category: e.g. trade_off, caveat, observation")
     content: str = Field(..., min_length=1, description="Textual markdown content of the note")
     tags: list[str] = Field(default_factory=list, description="Categorical tags")
+    stage_index: int = Field(default=0)
+
+    @model_validator(mode="after")
+    def _sync_aliases(self) -> StageNote:
+        if self.note_id is None:
+            self.note_id = self.id
+        elif not self.id:
+            self.id = self.note_id
+        if self.author_agent is None:
+            self.author_agent = self.author
+        elif not self.author or self.author == "system":
+            self.author = self.author_agent
+        return self
 
 
 MetaT = TypeVar("MetaT", bound=StageMeta)
@@ -483,10 +505,21 @@ class SectionDraft(BaseModel):
     section_id: str
     title: str
     markdown: str = ""
+    markdown_content: str = ""
+    latex_chunk: str = ""
+    is_compiled: bool = False
     word_count: int = 0
     cited_dois: list[str] = Field(default_factory=list)
     version: int = 1
     updated_at: datetime = Field(default_factory=utc_now)
+
+    @model_validator(mode="after")
+    def _sync_markdown_content(self) -> SectionDraft:
+        if self.markdown_content and not self.markdown:
+            self.markdown = self.markdown_content
+        elif self.markdown and not self.markdown_content:
+            self.markdown_content = self.markdown
+        return self
 
     @field_validator("cited_dois", mode="before")
     @classmethod
@@ -982,3 +1015,330 @@ class ProjectState(BaseModel):
             "message_board_total": len(self.message_board),
             "updated_at": self.updated_at.isoformat(),
         }
+
+
+# ===========================================================================
+# ALRS v2 6-Stage 4-Quadrant Typed Domain Models (ADR-001 / data-model.md §3)
+# ===========================================================================
+
+class DoiModel(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    doi: str = Field(..., description="Canonical lowercase DOI")
+
+    @field_validator("doi")
+    @classmethod
+    def validate_doi(cls, v: str) -> str:
+        clean = v.strip().lower()
+        for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+            if clean.startswith(prefix):
+                clean = clean[len(prefix):]
+        clean = clean.strip()
+        if not clean.startswith("10.") or "/" not in clean:
+            raise ValueError(f"Invalid DOI format: {v}")
+        return clean
+
+
+class BoundingBox(BaseModel):
+    y0: float = Field(..., ge=0.0, le=1.0)
+    x0: float = Field(..., ge=0.0, le=1.0)
+    y1: float = Field(..., ge=0.0, le=1.0)
+    x1: float = Field(..., ge=0.0, le=1.0)
+
+
+class CritiqueVectorModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    critique_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    campaign_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    stage_index: int = Field(..., ge=0, le=5)
+    critic_agent: str
+    dimension: str
+    measured_score: float = Field(..., ge=0.0, le=1.0)
+    target_threshold: float = Field(..., ge=0.0, le=1.0)
+    has_passed: bool
+    violations: list[str] = Field(default_factory=list)
+    actionable_directive: str
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+def compute_weighted_rubric_score(
+    critique_vectors: list[CritiqueVectorModel],
+    weights: dict[str, float],
+    hard_constraints: set[str] | None = None,
+    overall_threshold: float = 0.80,
+) -> tuple[float, bool]:
+    """Compute weighted composite score and verify hard constraints per A36."""
+    if not critique_vectors:
+        return 0.0, False
+    total_w = sum(weights.get(cv.dimension, 0.0) for cv in critique_vectors)
+    if total_w <= 0.0:
+        total_w = 1.0
+    composite = sum(
+        cv.measured_score * weights.get(cv.dimension, 0.0) for cv in critique_vectors
+    ) / total_w
+    hard = hard_constraints or set()
+    hard_passed = all(
+        cv.has_passed for cv in critique_vectors if cv.dimension in hard
+    )
+    is_passing = hard_passed and (composite >= overall_threshold)
+    return composite, is_passing
+
+
+class SteeringAction(str, Enum):
+    CONTINUE = "CONTINUE"
+    EDIT_DIRECTIVE = "EDIT_DIRECTIVE"
+    FORCE_APPROVE = "FORCE_APPROVE"
+    CONFIRM_ROLLBACK = "CONFIRM_ROLLBACK"
+
+
+class SteeringRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    action: Literal["CONTINUE", "EDIT_DIRECTIVE", "FORCE_APPROVE", "CONFIRM_ROLLBACK"]
+    stage_index: int = Field(..., ge=0, le=5)
+    directives: str | None = None
+    revised_questions: list[str] = Field(default_factory=list, max_length=6)
+    parameter_overrides: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = None
+
+
+class TurnEventModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    event_id: str = Field(default_factory=lambda: f"ev-{uuid.uuid4().hex[:12]}")
+    campaign_id: str
+    run_id: str = "default_run"
+    stage_index: int = Field(..., ge=0, le=5)
+    agent_name: str
+    agent_role: Literal["builder", "critic", "orchestrator"]
+    tool_name: str | None = None
+    turn_number: int = 1
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int = 0
+    prompt_hash: str | None = None
+    latency_ms: float = 0.0
+    cost_usd: float = 0.0
+    status: Literal["success", "retry", "rejected", "failed"] = "success"
+    model_name: str = "gemini-2.5-flash"
+    critique_dimension: str | None = None
+    critique_score: float | None = None
+    timestamp: datetime = Field(default_factory=utc_now)
+
+
+class PdfUploadResponseModel(BaseModel):
+    campaign_id: str
+    doi: str
+    file_path: str
+    file_size_bytes: int
+    is_multimodal: bool = True
+    message: str
+
+
+# ---------------------------------------------------------------------------
+# Stage 0: Guidance & Onboarding (Parent Research Advisor <-> Intent Critic)
+# ---------------------------------------------------------------------------
+class UserIntentProfile(BaseModel):
+    raw_topic: str
+    experience_level: Literal["beginner", "intermediate", "expert"] = "intermediate"
+    available_time_weeks: int = Field(default=4, ge=1)
+    recommended_track: Literal["quick_search", "literature_survey", "full_thesis"] = "literature_survey"
+    suggested_mode: Literal["exploration", "refinement", "targeted"] = "exploration"
+
+
+class GuidanceInputs(BaseModel):
+    user_prompt: str = ""
+    user_experience_level: Literal["beginner", "intermediate", "expert"] = "intermediate"
+    time_budget_weeks: int = 4
+
+
+class GuidanceArtifacts(BaseModel):
+    intent_profile: UserIntentProfile | None = None
+    is_onboarding_complete: bool = False
+
+
+class Stage0GuidanceState(BaseModel):
+    meta: StageMeta = Field(default_factory=lambda: StageMeta(stage_index=0, stage_name="guidance"))
+    inputs: GuidanceInputs = Field(default_factory=GuidanceInputs)
+    artifacts: GuidanceArtifacts = Field(default_factory=GuidanceArtifacts)
+    notes: list[StageNote] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Stage 1: Scoping & Gap Triage (Socratic Scoper <-> Scope Boundaries Critic)
+# ---------------------------------------------------------------------------
+class FinerResearchQuestion(BaseModel):
+    question_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    order_index: int = Field(..., ge=1, le=6)
+    text: str
+    falsifiable_margin: str = ""
+    is_finer_compliant: bool = True
+
+
+class ScopingInputs(BaseModel):
+    topic: str = ""
+    domain_keywords: list[str] = Field(default_factory=list)
+    seed_dois: list[str] = Field(default_factory=list)
+
+
+class ScopingArtifacts(BaseModel):
+    research_questions: list[FinerResearchQuestion] = Field(default_factory=list, max_length=6)
+    scoping_dossier_markdown: str = ""
+    has_novelty_collision: bool = False
+
+
+class Stage1ScopingState(BaseModel):
+    meta: StageMeta = Field(default_factory=lambda: StageMeta(stage_index=1, stage_name="scoping"))
+    inputs: ScopingInputs = Field(default_factory=ScopingInputs)
+    artifacts: ScopingArtifacts = Field(default_factory=ScopingArtifacts)
+    notes: list[StageNote] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Stage 2: Acquisition & Snowballing (Search Snowballer <-> Relevance Auditor)
+# ---------------------------------------------------------------------------
+class DiscoveredPaper(BaseModel):
+    doi: str
+    title: str
+    year: int | None = None
+    venue: str = ""
+    citation_count: int = 0
+    hybrid_score: float = 0.0
+    pagerank_score: float = 0.0
+    bridging_centrality: float = 0.0
+    archetype: Literal["foundational_prior_art", "contemporary_breakthrough", "topological_bridge", "unclassified"] = "unclassified"
+    is_multimodal: bool = False
+
+
+class AcquisitionInputs(BaseModel):
+    seed_dois: list[str] = Field(default_factory=list)
+    max_depth: int = Field(default=2, ge=1, le=3)
+    hybrid_alpha: float = Field(default=0.7, ge=0.0, le=1.0)
+
+
+class AcquisitionArtifacts(BaseModel):
+    discovered_papers: list[DiscoveredPaper] = Field(default_factory=list)
+    total_traversed: int = 0
+    bfs_edges: list[tuple[str, str]] = Field(default_factory=list)
+
+
+class Stage2AcquisitionState(BaseModel):
+    meta: StageMeta = Field(default_factory=lambda: StageMeta(stage_index=2, stage_name="acquisition"))
+    inputs: AcquisitionInputs = Field(default_factory=AcquisitionInputs)
+    artifacts: AcquisitionArtifacts = Field(default_factory=AcquisitionArtifacts)
+    notes: list[StageNote] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Stage 3: Extraction & Multimodal Vision (Vision Extractor <-> Evidence Auditor)
+# ---------------------------------------------------------------------------
+class ExtractedClaim(BaseModel):
+    claim_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    paper_doi: str
+    statement: str
+    page_number: int | None = Field(default=None, ge=1)
+    bounding_box: BoundingBox | None = None
+    crop_uri: str | None = None
+    confidence: float = Field(..., ge=0.0, le=1.0)
+
+
+class ExtractionInputs(BaseModel):
+    target_dois: list[str] = Field(default_factory=list)
+    pdf_paths: dict[str, str] = Field(default_factory=dict)
+
+
+class ExtractionArtifacts(BaseModel):
+    extracted_claims: list[ExtractedClaim] = Field(default_factory=list)
+    saved_crops: list[str] = Field(default_factory=list)
+
+
+class Stage3ExtractionState(BaseModel):
+    meta: StageMeta = Field(default_factory=lambda: StageMeta(stage_index=3, stage_name="extraction"))
+    inputs: ExtractionInputs = Field(default_factory=ExtractionInputs)
+    artifacts: ExtractionArtifacts = Field(default_factory=ExtractionArtifacts)
+    notes: list[StageNote] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Stage 4: Synthesis & Blueprinting (Method Architect <-> Novelty Challenger)
+# ---------------------------------------------------------------------------
+class ComparisonMatrixEntry(BaseModel):
+    method_name: str
+    paper_doi: str
+    loss_function: str = ""
+    dataset: str = ""
+    metric_score: float = 0.0
+    pros: list[str] = Field(default_factory=list)
+    cons: list[str] = Field(default_factory=list)
+
+
+class SynthesisInputs(BaseModel):
+    campaign_id: str = ""
+    target_rq_ids: list[str] = Field(default_factory=list)
+
+
+class SynthesisArtifacts(BaseModel):
+    matrix_entries: list[ComparisonMatrixEntry] = Field(default_factory=list)
+    identified_contradictions: int = 0
+    epistemic_entropy: float = 0.0
+
+
+class Stage4SynthesisState(BaseModel):
+    meta: StageMeta = Field(default_factory=lambda: StageMeta(stage_index=4, stage_name="synthesis"))
+    inputs: SynthesisInputs = Field(default_factory=SynthesisInputs)
+    artifacts: SynthesisArtifacts = Field(default_factory=SynthesisArtifacts)
+    notes: list[StageNote] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Stage 5: Drafting & Defense Simulation (Synthesis Writer <-> Academic RedTeamer)
+# ---------------------------------------------------------------------------
+class DraftingInputs(BaseModel):
+    template: Literal["ieee", "acm", "plain"] = "ieee"
+    target_level: Literal["master", "phd"] = "master"
+
+
+class DraftingArtifacts(BaseModel):
+    sections: list[SectionDraft] = Field(default_factory=list)
+    full_latex_document: str = ""
+    compilation_exit_code: int = 0
+    hallucination_rate: float = 0.0
+
+
+class Stage5DraftingState(BaseModel):
+    meta: StageMeta = Field(default_factory=lambda: StageMeta(stage_index=5, stage_name="drafting"))
+    inputs: DraftingInputs = Field(default_factory=DraftingInputs)
+    artifacts: DraftingArtifacts = Field(default_factory=DraftingArtifacts)
+    notes: list[StageNote] = Field(default_factory=list)
+
+
+StageSubstateUnion = Union[
+    Stage0GuidanceState,
+    Stage1ScopingState,
+    Stage2AcquisitionState,
+    Stage3ExtractionState,
+    Stage4SynthesisState,
+    Stage5DraftingState,
+]
+
+
+class ResearchCampaignModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    campaign_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str = ""
+    topic: str = ""
+    entry_mode: Literal["exploration", "refinement", "targeted"] = "exploration"
+    status: Literal["active", "paused", "completed", "awaiting_input", "failed"] = "active"
+    current_stage: int = Field(default=0, ge=0, le=5)
+    token_budget: int = 500_000
+    tokens_used: int = 0
+    total_turns: int = 0
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_cached_tokens: int = 0
+    total_latency_seconds: float = 0.0
+    total_cost_usd: float = 0.0
+    vts_ratio: float = 0.0
+    research_questions: list[str] = Field(default_factory=list, max_length=6)
+    seed_dois: list[str] = Field(default_factory=list)
+    substates: dict[int, StageSubstateUnion] = Field(default_factory=dict)
+

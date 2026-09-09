@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from core.dependencies import get_log_service
+from core.logging.log_service import LogService
 from main import app
 
 
@@ -33,11 +35,10 @@ def test_get_app_logs_success() -> None:
         }
     ]
 
-    mock_mysql = AsyncMock()
-    mock_mysql.fetch_all.return_value = mock_logs
+    mock_log_svc = AsyncMock(spec=LogService)
+    mock_log_svc.get_app_logs = AsyncMock(return_value=mock_logs)
 
-    from core.dependencies import get_mysql_service
-    app.dependency_overrides[get_mysql_service] = lambda: mock_mysql
+    app.dependency_overrides[get_log_service] = lambda: mock_log_svc
     client = TestClient(app)
     response = client.get(
         "/api/logs",
@@ -59,20 +60,7 @@ def test_get_app_logs_success() -> None:
     assert data[1]["id"] == 2
     assert data[1]["extra"] is None
 
-    # Verify that mysql_service was queried with the correct filters
-    mock_mysql.fetch_all.assert_called_once()
-    query = mock_mysql.fetch_all.call_args[0][0]
-    args = mock_mysql.fetch_all.call_args[0][1]
-    assert "UPPER(level) = %s" in query
-    assert "module = %s" in query
-    assert "session_id = %s" in query
-    assert "created_at >= %s" in query
-    assert "LIMIT %s" in query
-    assert "INFO" in args
-    assert "services.openalex_service" in args
-    assert "session-1" in args
-    assert "2026-05-30 17:00:00" in args
-    assert 10 in args
+    mock_log_svc.get_app_logs.assert_called_once()
     app.dependency_overrides.clear()
 
 
@@ -92,11 +80,10 @@ def test_get_api_logs_success() -> None:
         }
     ]
 
-    mock_mysql = AsyncMock()
-    mock_mysql.fetch_all.return_value = mock_api_logs
+    mock_log_svc = AsyncMock(spec=LogService)
+    mock_log_svc.get_api_logs = AsyncMock(return_value=mock_api_logs)
 
-    from core.dependencies import get_mysql_service
-    app.dependency_overrides[get_mysql_service] = lambda: mock_mysql
+    app.dependency_overrides[get_log_service] = lambda: mock_log_svc
     client = TestClient(app)
     response = client.get(
         "/api/logs/api-requests",
@@ -116,45 +103,8 @@ def test_get_api_logs_success() -> None:
     assert data[0]["status_code"] == 200
     assert data[0]["response_time_ms"] == 120
 
-    # Verify that mysql_service was queried with the correct filters
-    mock_mysql.fetch_all.assert_called_once()
-    query = mock_mysql.fetch_all.call_args[0][0]
-    args = mock_mysql.fetch_all.call_args[0][1]
-    assert "LOWER(service) = %s" in query
-    assert "session_id = %s" in query
-    assert "created_at >= %s" in query
-    assert "LIMIT %s" in query
-    assert "openalex" in args
-    assert "session-1" in args
-
-    assert "2026-05-30 17:00:00" in args
-    assert 5 in args
+    mock_log_svc.get_api_logs.assert_called_once()
     app.dependency_overrides.clear()
-
-
-def test_logs_endpoints_service_unavailable() -> None:
-    """Test endpoints return 503 if MySQL service is not initialized."""
-    old_mysql = getattr(app.state, "mysql_service", None)
-    if old_mysql is not None:
-        del app.state.mysql_service
-
-    try:
-        client = TestClient(app)
-        
-        response1 = client.get("/api/logs")
-        assert response1.status_code == 503
-        assert "MySQL service not initialized" in response1.json()["detail"]
-
-        response2 = client.get("/api/logs/api-requests")
-        assert response2.status_code == 503
-        assert "MySQL service not initialized" in response2.json()["detail"]
-
-        response3 = client.get("/api/logs/agent-traces", params={"project_id": "project-123"})
-        assert response3.status_code == 503
-        assert "MySQL service not initialized" in response3.json()["detail"]
-    finally:
-        if old_mysql is not None:
-            app.state.mysql_service = old_mysql
 
 
 def test_get_agent_traces_success() -> None:
@@ -171,11 +121,10 @@ def test_get_agent_traces_success() -> None:
         }
     ]
 
-    mock_mysql = AsyncMock()
-    mock_mysql.fetch_all.return_value = mock_traces
+    mock_log_svc = AsyncMock(spec=LogService)
+    mock_log_svc.get_agent_traces = AsyncMock(return_value=mock_traces)
 
-    from core.dependencies import get_mysql_service
-    app.dependency_overrides[get_mysql_service] = lambda: mock_mysql
+    app.dependency_overrides[get_log_service] = lambda: mock_log_svc
     client = TestClient(app)
     response = client.get(
         "/api/logs/agent-traces",
@@ -197,26 +146,12 @@ def test_get_agent_traces_success() -> None:
     assert data[0]["token_count"] == 2500
     assert data[0]["details"] == {"prompt": "design outline", "tokens": 2500}
 
-    # Verify that mysql_service was queried with the correct filters
-    mock_mysql.fetch_all.assert_called_once()
-    query = mock_mysql.fetch_all.call_args[0][0]
-    args = mock_mysql.fetch_all.call_args[0][1]
-    assert "project_id = %s" in query
-    assert "agent_name = %s" in query
-    assert "created_at >= %s" in query
-    assert "created_at <= %s" in query
-    assert "LIMIT %s" in query
-    assert "project-123" in args
-    assert "planner" in args
-    assert "2026-05-30 17:00:00" in args
-    assert "2026-05-30 19:00:00" in args
-    assert 50 in args
+    mock_log_svc.get_agent_traces.assert_called_once()
     app.dependency_overrides.clear()
 
 
 def test_get_project_progress_events() -> None:
     """Test retrieving in-memory progress events for a project."""
-    import pytest
     from core.logging.progress_service import ProgressEvent, ProgressService
 
     progress_svc = ProgressService()
@@ -330,7 +265,3 @@ async def test_progress_service_live_subscription_broadcast() -> None:
     assert received.message == "Reviewer score 5/5"
 
     svc.unsubscribe("live-proj-1", queue)
-
-
-
-

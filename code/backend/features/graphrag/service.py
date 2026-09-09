@@ -692,11 +692,11 @@ class EpistemicGraphService:
         has_dataset = dataset is not None
         has_source = source is not None
 
-        if has_method and not method_description:
+        if methodology is not None and not method_description:
             method_description = f"Employed methodology '{methodology.name}' during evaluation"
-        if has_dataset and not dataset_description:
+        if dataset is not None and not dataset_description:
             dataset_description = f"Evaluated on benchmark dataset '{dataset.name}'"
-        if has_source and not source_description:
+        if source is not None and not source_description:
             source_description = f"Extracted from literature source '{source.title}'"
 
         if method_description:

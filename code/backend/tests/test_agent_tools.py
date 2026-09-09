@@ -454,7 +454,7 @@ async def test_list_projects_success() -> None:
             assert len(result["projects"]) == 2
             assert result["projects"][0]["project_id"] == "proj-1"
             assert result["projects"][1]["name"] == "P2"
-            mock_get_all.assert_called_once_with(mock_mysql, neo4j=mock_neo4j, include_archived=False)
+            mock_get_all.assert_called_once_with(neo4j=mock_neo4j, include_archived=False)
     finally:
         if old_log is not None:
             ServiceRegistry._log_service = old_log
@@ -740,4 +740,84 @@ async def test_run_graphselect_traversal_no_seed_found_returns_error(
             if hasattr(ServiceRegistry, "_neo4j"):
                 delattr(ServiceRegistry, "_neo4j")
         ServiceRegistry._initialized = old_init
+
+
+def test_stage0_and_stage1_dialectical_agents() -> None:
+    """Verify Stage 0 and 1 Dialectical Agent pairs and workflows."""
+    from agents.stage0_guidance import (
+        ParentResearchAdvisor,
+        IntentAlignmentCritic,
+        stage0_guidance_workflow,
+    )
+    from agents.stage1_scoping import (
+        SocraticScopingAdvisor,
+        ScopeBoundariesCritic,
+        stage1_scoping_workflow,
+    )
+
+    p_adv = ParentResearchAdvisor()
+    assert p_adv.name == "ParentResearchAdvisor"
+    assert len(p_adv.tools) >= 2
+    i_crit = IntentAlignmentCritic()
+    assert i_crit.name == "IntentAlignmentCritic"
+    assert len(stage0_guidance_workflow.sub_agents) == 2
+
+    s_adv = SocraticScopingAdvisor()
+    assert s_adv.name == "SocraticScopingAdvisor"
+    s_crit = ScopeBoundariesCritic()
+    assert s_crit.name == "ScopeBoundariesCritic"
+    assert len(stage1_scoping_workflow.sub_agents) == 2
+
+
+def test_stage2_and_stage3_dialectical_agents() -> None:
+    """Verify Stage 2 and 3 Dialectical Agent pairs and workflows."""
+    from agents.stage2_acquisition import (
+        SearchSnowballAgent,
+        RelevanceQualityAuditor,
+        stage2_acquisition_workflow,
+    )
+    from agents.stage3_extraction import (
+        MultimodalVisionExtractor,
+        EvidenceProvenanceAuditor,
+        stage3_extraction_workflow,
+    )
+
+    s_agent = SearchSnowballAgent()
+    assert s_agent.name == "SearchSnowballAgent"
+    r_aud = RelevanceQualityAuditor()
+    assert r_aud.name == "RelevanceQualityAuditor"
+    assert len(stage2_acquisition_workflow.sub_agents) == 2
+
+    m_agent = MultimodalVisionExtractor()
+    assert m_agent.name == "MultimodalVisionExtractor"
+    e_aud = EvidenceProvenanceAuditor()
+    assert e_aud.name == "EvidenceProvenanceAuditor"
+    assert len(stage3_extraction_workflow.sub_agents) == 2
+
+
+def test_stage4_and_stage5_dialectical_agents() -> None:
+    """Verify Stage 4 and 5 Dialectical Agent pairs and workflows."""
+    from agents.stage4_synthesis import (
+        MethodologyArchitect,
+        NoveltyRigorChallenger,
+        stage4_synthesis_workflow,
+    )
+    from agents.stage5_drafting import (
+        GroundedSynthesisWriter,
+        AcademicRedTeamer,
+        stage5_drafting_workflow,
+    )
+
+    m_arch = MethodologyArchitect()
+    assert m_arch.name == "MethodologyArchitect"
+    n_chall = NoveltyRigorChallenger()
+    assert n_chall.name == "NoveltyRigorChallenger"
+    assert len(stage4_synthesis_workflow.sub_agents) == 2
+
+    g_writer = GroundedSynthesisWriter()
+    assert g_writer.name == "GroundedSynthesisWriter"
+    a_rt = AcademicRedTeamer()
+    assert a_rt.name == "AcademicRedTeamer"
+    assert len(stage5_drafting_workflow.sub_agents) == 2
+
 

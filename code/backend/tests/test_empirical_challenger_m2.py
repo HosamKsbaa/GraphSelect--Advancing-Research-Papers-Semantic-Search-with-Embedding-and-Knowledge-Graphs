@@ -311,3 +311,17 @@ async def test_debugger_agent_tool_pipeline_integration(tmp_path, monkeypatch):
     )
     assert invalid_patch_res["success"] is False
     assert invalid_patch_res["syntax_valid"] is False
+
+
+def test_pomdp_cumulative_reward_accounting():
+    """Verify POMDP cumulative reward computation R(s, a) per Constitution A48."""
+    from core.logging.telemetry_service import TelemetryService
+    svc = TelemetryService(":memory:")
+    c_id = "test-camp-pomdp"
+    svc.record_turn_event({
+        "campaign_id": c_id, "agent_role": "builder", "prompt_tokens": 100,
+        "completion_tokens": 100, "latency_ms": 500.0, "cost_usd": 0.20,
+    })
+    reward = svc.compute_pomdp_cumulative_reward(c_id)
+    assert reward == 3.36, f"Expected 3.36, got {reward}"
+

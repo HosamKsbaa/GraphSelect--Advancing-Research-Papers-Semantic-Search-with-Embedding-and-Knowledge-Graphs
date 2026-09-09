@@ -454,3 +454,25 @@ async def test_run_graphselect_traversal_tool_returns_appraisal_payload() -> Non
         if old_crawler is not None:
             ServiceRegistry._crawler_service = old_crawler
         ServiceRegistry._initialized = old_init
+
+
+def test_burts_structural_hole_bridging_centrality() -> None:
+    """Verify Burt's structural hole bridging centrality C_B(v) = B(v) * BC(v) per Constitution A52."""
+    from features.ranking.appraisal_service import (
+        compute_bridging_coefficient,
+        compute_bridging_centrality,
+        classify_structural_archetype,
+    )
+    b_coeff = compute_bridging_coefficient(degree=3, neighbor_degrees=[2, 4, 5])
+    assert b_coeff == pytest.approx(0.3166667, rel=1e-4)
+
+    cb = compute_bridging_centrality(b_coeff, betweenness_centrality=0.8)
+    assert cb == pytest.approx(0.2533333, rel=1e-4)
+
+    assert compute_bridging_coefficient(0, []) == 0.0
+    assert compute_bridging_centrality(0.5, 0.0) == 0.0
+
+    assert classify_structural_archetype({"foundational": 0.8, "contemporary": 0.5, "bridge": 0.2}) == "foundational_prior_art"
+    assert classify_structural_archetype({"foundational": 0.3, "contemporary": 0.9, "bridge": 0.2}) == "contemporary_breakthroughs"
+    assert classify_structural_archetype({"foundational": 0.3, "contemporary": 0.4, "bridge": 0.7}) == "topological_bridges"
+

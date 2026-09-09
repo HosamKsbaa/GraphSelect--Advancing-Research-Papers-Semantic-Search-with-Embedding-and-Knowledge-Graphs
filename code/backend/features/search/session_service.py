@@ -1,120 +1,74 @@
-"""Search session lifecycle service for ALRS v2.
-
-Encapsulates all business logic for creating, configuring, and streaming
-literature review search sessions. This keeps the search router thin —
-it only validates HTTP input and delegates to this service.
-
-Architecture:
-    Router (HTTP) → SearchSessionService (orchestration) → DB / API workers
-
-Responsibilities:
-    - create_session(): Validates the seed DOI via OpenAlex, persists the
-      session row in MySQL, and MERGEs the seed paper node in Neo4j.
-    - enqueue_papers(): Stores the researcher's DOI selections for the
-      next BFS cycle in the session's JSON state column.
-    - build_search_stream(): Constructs the full service dependency graph
-      and returns an async generator of SSE ProgressEvents.
-"""
+"""Search session lifecycle service for ALRS v2 backed by pure Neo4j epistemic graph."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
-import asyncio
-from typing import AsyncIterator, Any
+from typing import Any, AsyncIterator
 
+from core.clients.openalex_client import OpenAlexService
+from core.db.neo4j_service import Neo4jService
 from features.retrieval.models import PaperSummary
+from features.search.models import EventType, ProgressEvent
 from features.sessions.models import (
     SearchMode,
     SearchRequest,
     SearchResponse,
     SessionStatus,
 )
-from features.search.models import EventType, ProgressEvent
-
-from core.db.neo4j_service import Neo4jService
-from core.db.mysql_service import MySQLService
-from core.clients.openalex_client import OpenAlexService
 
 logger = logging.getLogger(__name__)
 
 
 class SearchSessionService:
-    """Manages the lifecycle of a search session (create → enqueue → stream).
-
-    This service owns all the business logic that was previously inlined
-    in the search router endpoints. Each public method maps 1-to-1 with
-    a router endpoint.
-
-    Attributes:
-        _neo4j: Neo4j graph database service for paper/session nodes.
-        _mysql: MySQL relational database service for session metadata.
-        _openalex: OpenAlex API client for paper metadata retrieval.
-    """
+    """Manages the lifecycle of a search session via pure Neo4j persistence."""
 
     def __init__(
         self,
         neo4j: Neo4jService,
-        mysql: MySQLService,
         openalex: OpenAlexService,
     ) -> None:
         self._neo4j = neo4j
-        self._mysql = mysql
         self._openalex = openalex
 
-    # ------------------------------------------------------------------
-    # Session creation
-    # ------------------------------------------------------------------
-
     async def create_session(self, request: SearchRequest) -> SearchResponse:
-        """Create a new search session from a validated SearchRequest.
-
-        Steps:
-            1. Generate a UUID session ID.
-            2. INSERT the session row into MySQL with status=CREATED.
-            3. Fetch the seed paper metadata from OpenAlex.
-            4. MERGE the seed Paper node into Neo4j and link it to the
-               Session node at depth 0.
-
-        Args:
-            request: Validated search request containing seed_doi,
-                     research_questions, thresholds, and mode.
-
-        Returns:
-            SearchResponse with the new session_id and confirmation.
-
-        Raises:
-            ValueError: If seed_doi is None.
-            LookupError: If the DOI is not found in OpenAlex.
-            RuntimeError: If OpenAlex call fails unexpectedly.
-        """
+        """Create a new search session node in Neo4j and link the seed paper."""
         seed_doi = request.seed_doi
         if seed_doi is None:
             raise ValueError(
                 "seed_doi is required. Use /resolve-title to search by title first."
             )
 
-        # Step 1: Generate session ID
         session_id = str(uuid.uuid4())
 
-        # Step 2: Persist session row in MySQL
-        await self._mysql.execute(
-            """INSERT INTO sessions
-               (session_id, seed_doi, research_questions, similarity_threshold,
-                max_depth, mode, status)
-               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
-            (
-                session_id,
-                seed_doi,
-                json.dumps(request.research_questions),
-                request.similarity_threshold,
-                request.max_depth,
-                request.mode.value,
-                SessionStatus.CREATED.value,
-            ),
+        # Persist session node in Neo4j
+        await self._neo4j.execute_write(
+            """MERGE (c:ResearchCampaign {campaign_id: $session_id})
+               SET c.session_id = $session_id,
+                   c.seed_doi = $seed_doi,
+                   c.research_questions = $research_questions,
+                   c.similarity_threshold = $similarity_threshold,
+                   c.max_depth = $max_depth,
+                   c.mode = $mode,
+                   c.status = $status,
+                   c.papers_discovered = 0,
+                   c.papers_relevant = 0,
+                   c.current_depth = 0,
+                   c.created_at = datetime(),
+                   c.updated_at = datetime()""",
+            {
+                "session_id": session_id,
+                "seed_doi": seed_doi,
+                "research_questions": request.research_questions,
+                "similarity_threshold": request.similarity_threshold,
+                "max_depth": request.max_depth,
+                "mode": request.mode.value,
+                "status": SessionStatus.CREATED.value,
+            },
         )
 
-        # Step 3: Fetch seed paper from OpenAlex
+        # Fetch seed paper from OpenAlex
         try:
             paper = await self._openalex.get_paper_by_doi(
                 seed_doi, session_id=session_id
@@ -129,7 +83,7 @@ class SearchSessionService:
             await self._mark_failed(session_id)
             raise RuntimeError(f"OpenAlex error: {exc}") from exc
 
-        # Step 4: MERGE seed paper into Neo4j graph
+        # MERGE seed paper into Neo4j graph and link to Campaign
         await self._neo4j.execute_write(
             """MERGE (p:Paper {doi: $doi})
                SET p.title = $title,
@@ -139,7 +93,10 @@ class SearchSessionService:
                    p.openalex_id = $openalex_id,
                    p.publication_date = $publication_date,
                    p.source = $source,
-                   p.is_seed = true""",
+                   p.is_seed = true
+               WITH p
+               MATCH (c:ResearchCampaign {campaign_id: $session_id})
+               MERGE (c)-[:CONTAINS {depth: 0}]->(p)""",
             {
                 "doi": paper.doi,
                 "title": paper.title,
@@ -149,16 +106,8 @@ class SearchSessionService:
                 "openalex_id": paper.openalex_id,
                 "publication_date": paper.publication_date,
                 "source": paper.source,
+                "session_id": session_id,
             },
-        )
-
-        # Link Session → Paper at depth 0
-        await self._neo4j.execute_write(
-            """MERGE (s:Session {session_id: $session_id})
-               WITH s
-               MATCH (p:Paper {doi: $doi})
-               MERGE (s)-[:CONTAINS {depth: 0}]->(p)""",
-            {"session_id": session_id, "doi": paper.doi},
         )
 
         return SearchResponse(
@@ -168,41 +117,35 @@ class SearchSessionService:
             message=f"Session created. Seed paper '{paper.title}' stored in graph.",
         )
 
-    # ------------------------------------------------------------------
-    # Paper enqueue (interactive mode)
-    # ------------------------------------------------------------------
+    async def get_session(self, session_id: str) -> dict[str, Any] | None:
+        """Fetch session attributes from Neo4j :ResearchCampaign node."""
+        records = await self._neo4j.execute_read(
+            "MATCH (c:ResearchCampaign) "
+            "WHERE c.campaign_id = $session_id OR c.session_id = $session_id "
+            "RETURN c LIMIT 1",
+            {"session_id": session_id},
+        )
+        if not records:
+            return None
+        node = records[0].get("c", {})
+        props = dict(node) if hasattr(node, "items") else dict(node)
+        return props
 
     async def enqueue_papers(
         self, session_id: str, dois: list[str]
     ) -> dict[str, object]:
-        """Store researcher-selected DOIs for the next BFS cycle.
-
-        Updates the session's ``full_state`` JSON column with an
-        ``enqueued_dois`` array and flips status back to ``running``.
-
-        Args:
-            session_id: Target session UUID.
-            dois: List of DOIs the researcher selected.
-
-        Returns:
-            Confirmation dict with count and DOI list.
-
-        Raises:
-            LookupError: If the session does not exist.
-        """
-        session = await self._mysql.get_session(session_id)
-        if session is None:
-            raise LookupError(f"Session not found: {session_id}")
-
-        await self._mysql.execute(
-            """UPDATE sessions
-               SET full_state = JSON_SET(
-                       COALESCE(full_state, '{}'), '$.enqueued_dois', %s
-                   ),
-                   status = 'running'
-               WHERE session_id = %s""",
-            (json.dumps(dois), session_id),
+        """Store researcher-selected DOIs for next BFS cycle in Neo4j."""
+        records = await self._neo4j.execute_write(
+            """MATCH (c:ResearchCampaign)
+               WHERE c.campaign_id = $session_id OR c.session_id = $session_id
+               SET c.enqueued_dois = $dois,
+                   c.status = 'running',
+                   c.updated_at = datetime()
+               RETURN c""",
+            {"session_id": session_id, "dois": dois},
         )
+        if not records:
+            raise LookupError(f"Session not found: {session_id}")
 
         return {
             "session_id": session_id,
@@ -211,46 +154,23 @@ class SearchSessionService:
             "message": f"Enqueued {len(dois)} papers for next cycle",
         }
 
-    # ------------------------------------------------------------------
-    # SSE stream factory
-    # ------------------------------------------------------------------
-
     async def build_search_stream(
         self,
         session_id: str,
         session_data: dict[str, Any],
         neo4j_service: Neo4jService,
-        mysql_service: MySQLService,
     ) -> AsyncIterator[dict[str, str]]:
-        """Build and return an async SSE event generator for a BFS search.
-
-        This method constructs the full service dependency graph
-        (OpenAlex → Gemini → Crawler → Ranking → GraphSearchService)
-        and yields SSE-formatted dicts as the BFS progresses.
-
-        Args:
-            session_id: The session to stream.
-            session_data: Raw session row from MySQL.
-            neo4j_service: Live Neo4j connection from app state.
-            mysql_service: Live MySQL connection from app state.
-
-        Yields:
-            Dicts with ``event`` and ``data`` keys suitable for
-            ``EventSourceResponse``.
-        """
-        # Lazy imports to avoid circular dependencies at module level
-        from features.embedding.providers.gemini_provider import GeminiService
-        from core.clients.rate_limiter import AdaptiveRateLimiter
-        from features.search.graph_search_service import GraphSearchService
-        from features.search.crawler_service import CrawlerService
-        from features.ranking.service import RankingService
-        from core.logging.log_service import LogService
+        """Build and return an async SSE event generator for a BFS search."""
         from config import get_settings
+        from core.clients.rate_limiter import AdaptiveRateLimiter
+        from core.logging.log_service import LogService
+        from features.embedding.providers.gemini_provider import GeminiService
+        from features.ranking.service import RankingService
+        from features.search.crawler_service import CrawlerService
+        from features.search.graph_search_service import GraphSearchService
 
         settings = get_settings()
-
-        # --- Build the service dependency graph ---
-        log_service = LogService(mysql_service)
+        log_service = LogService()
         openalex = OpenAlexService(
             api_key=settings.openalex_api_key,
             log_service=log_service,
@@ -265,7 +185,7 @@ class SearchSessionService:
             initial_rate=settings.openalex_rate_limit,
         )
         crawler = CrawlerService(neo4j_service, openalex, rate_limiter, log_service)
-        ranking = RankingService(neo4j_service, mysql_service)
+        ranking = RankingService(neo4j_service)
 
         bfs = GraphSearchService(
             neo4j=neo4j_service,
@@ -277,25 +197,17 @@ class SearchSessionService:
             log_service=log_service,
         )
 
-        # --- Parse session parameters ---
         seed_doi: str = session_data["seed_doi"]
+        raw_q = session_data.get("research_questions", [])
         research_questions: list[str] = (
-            json.loads(session_data["research_questions"])
-            if isinstance(session_data["research_questions"], str)
-            else session_data["research_questions"]
+            json.loads(raw_q) if isinstance(raw_q, str) else list(raw_q)
         )
-        similarity_threshold: float = float(session_data["similarity_threshold"])
-        max_depth: int = int(session_data["max_depth"])
-        mode: str = session_data["mode"]
+        similarity_threshold: float = float(session_data.get("similarity_threshold", 0.5))
+        max_depth: int = int(session_data.get("max_depth", 2))
+        mode: str = str(session_data.get("mode", "interactive"))
+        queued_dois = session_data.get("enqueued_dois", [seed_doi])
 
-        raw_state = session_data.get("full_state", "{}")
-        full_state = json.loads(raw_state) if raw_state else {}
-        queued_dois = full_state.get("enqueued_dois", [seed_doi])
-
-        # --- Run the BFS search and stream events ---
-        await mysql_service.update_session_status(
-            session_id, SessionStatus.RUNNING.value
-        )
+        await self._update_session_status(session_id, SessionStatus.RUNNING.value)
 
         try:
             async for evt in bfs.run_full_search(
@@ -311,41 +223,31 @@ class SearchSessionService:
                     "event": evt.event_type.value,
                     "data": evt.model_dump_json(),
                 }
-
-                # Persist progress milestones to MySQL
                 if (
                     evt.event_type == EventType.LEVEL_COMPLETE
                     and evt.data
                     and "papers_discovered" in evt.data
                 ):
-                    await mysql_service.update_session_progress(
+                    await self._update_session_progress(
                         session_id,
-                        papers_discovered=evt.data.get("papers_discovered", 0),
-                        current_depth=evt.data.get("level", 0),
+                        papers_discovered=int(str(evt.data.get("papers_discovered", 0))),
+                        current_depth=int(str(evt.data.get("level", 0))),
                     )
 
-            # Set final status based on mode
-            if mode == SearchMode.AUTOMATED.value:
-                await mysql_service.update_session_status(
-                    session_id, SessionStatus.COMPLETED.value
-                )
-            else:
-                await mysql_service.update_session_status(
-                    session_id, SessionStatus.PAUSED.value
-                )
+            final_status = (
+                SessionStatus.COMPLETED.value
+                if mode == SearchMode.AUTOMATED.value
+                else SessionStatus.PAUSED.value
+            )
+            await self._update_session_status(session_id, final_status)
 
         except asyncio.CancelledError:
             logger.info("Search stream cancelled for session %s", session_id)
-            await mysql_service.update_session_status(
-                session_id, SessionStatus.PAUSED.value
-            )
+            await self._update_session_status(session_id, SessionStatus.PAUSED.value)
             raise
-
         except Exception as exc:
             logger.exception("Search failed for session %s", session_id)
-            await mysql_service.update_session_status(
-                session_id, SessionStatus.FAILED.value
-            )
+            await self._update_session_status(session_id, SessionStatus.FAILED.value)
             fail_event = ProgressEvent(
                 event_type=EventType.SEARCH_FAILED,
                 session_id=session_id,
@@ -356,17 +258,35 @@ class SearchSessionService:
                 "event": fail_event.event_type.value,
                 "data": fail_event.model_dump_json(),
             }
-
         finally:
             await openalex.close()
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     async def _mark_failed(self, session_id: str) -> None:
-        """Set session status to FAILED in MySQL."""
-        await self._mysql.execute(
-            "UPDATE sessions SET status = %s WHERE session_id = %s",
-            (SessionStatus.FAILED.value, session_id),
+        """Set session status to FAILED in Neo4j."""
+        await self._update_session_status(session_id, SessionStatus.FAILED.value)
+
+    async def _update_session_status(self, session_id: str, status: str) -> None:
+        """Update campaign session status in Neo4j."""
+        await self._neo4j.execute_write(
+            "MATCH (c:ResearchCampaign) "
+            "WHERE c.campaign_id = $session_id OR c.session_id = $session_id "
+            "SET c.status = $status, c.updated_at = datetime()",
+            {"session_id": session_id, "status": status},
+        )
+
+    async def _update_session_progress(
+        self, session_id: str, papers_discovered: int, current_depth: int
+    ) -> None:
+        """Update discovered paper counts and depth in Neo4j."""
+        await self._neo4j.execute_write(
+            "MATCH (c:ResearchCampaign) "
+            "WHERE c.campaign_id = $session_id OR c.session_id = $session_id "
+            "SET c.papers_discovered = $papers_discovered, "
+            "    c.current_depth = $current_depth, "
+            "    c.updated_at = datetime()",
+            {
+                "session_id": session_id,
+                "papers_discovered": papers_discovered,
+                "current_depth": current_depth,
+            },
         )

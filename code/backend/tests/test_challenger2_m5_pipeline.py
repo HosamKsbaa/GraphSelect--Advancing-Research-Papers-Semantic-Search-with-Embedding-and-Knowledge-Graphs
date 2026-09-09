@@ -686,3 +686,103 @@ class TestEndToEndDataFidelity:
         s5_bib = final_state.stage_5_export.artifacts.bibtex_entries
         doi_in_bib = any(f"doi = {{{test_seed}}}" in entry for entry in s5_bib)
         assert doi_in_bib
+
+
+# ==============================================================================
+# 5. 5-RETRY HITL QUARANTINE SUSPENSION (Constitution A36 / Suggestion S2)
+# ==============================================================================
+
+class TestFiveRetryQuarantineSuspension:
+    """Verify 5-retry limit, HITL quarantine suspension, and Neo4j quarantine record."""
+
+    @pytest.mark.asyncio
+    async def test_five_retry_rejection_triggers_quarantine_suspension(self, tmp_path: Path) -> None:
+        """Simulate 5 consecutive rejections; verify awaiting_input, disk dump, and quarantine flag."""
+        from features.workflow.execution_pipeline import execute_campaign
+        from features.workflow.state_models import CritiqueVectorModel, ResearchCampaignModel
+
+        campaign = ResearchCampaignModel(
+            campaign_id="camp-quarantine-test",
+            topic="Fault Tolerance in GNNs",
+            entry_mode="refinement",
+        )
+
+        def mock_reject(st: int, it: int) -> CritiqueVectorModel:
+            return CritiqueVectorModel(
+                stage_index=st,
+                critic_agent="ScopeBoundariesCritic",
+                dimension="finer_compliance",
+                measured_score=0.45,
+                target_threshold=0.85,
+                has_passed=False,
+                violations=["RQ lacks non-inferiority margin."],
+                actionable_directive="Add explicit margin.",
+            )
+
+        suspended = await execute_campaign(
+            campaign, base_dir=tmp_path, simulate_critique=mock_reject
+        )
+        assert suspended.status == "awaiting_input"
+        sub1 = suspended.substates[1]
+        assert sub1.meta.is_quarantined is True
+        assert sub1.meta.iteration_count == 5
+        assert sub1.meta.quarantine_path is not None
+
+        q_dir = tmp_path / "camp-quarantine-test" / "stage_1_rejected"
+        assert q_dir.exists()
+        dumped_file = q_dir / "rejected_iteration_5.json"
+        assert dumped_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_neo4j_quarantine_node_update(self, tmp_path: Path) -> None:
+        """Verify Neo4j execute_write is called with StageSubstate quarantine cypher."""
+        from unittest.mock import AsyncMock, MagicMock
+        from features.workflow.execution_pipeline import apply_quarantine_suspension
+        from features.workflow.state_models import ResearchCampaignModel, Stage1ScopingState
+
+        campaign = ResearchCampaignModel(
+            campaign_id="camp-neo4j-q", topic="Neo4j Persistence Test"
+        )
+        campaign.substates[1] = Stage1ScopingState()
+        mock_neo4j = AsyncMock()
+        mock_persistence = MagicMock()
+        mock_persistence.neo4j = mock_neo4j
+
+        q_path = await apply_quarantine_suspension(
+            campaign, 1, {"mock_artifact": 123}, persistence=mock_persistence, base_dir=tmp_path
+        )
+        assert campaign.status == "awaiting_input"
+        assert campaign.substates[1].meta.is_quarantined is True
+        mock_neo4j.execute_write.assert_called_once()
+        call_cypher = mock_neo4j.execute_write.call_args[0][0]
+        assert "is_quarantined = true" in call_cypher
+
+    @pytest.mark.asyncio
+    async def test_successful_retry_within_limit_does_not_quarantine(self, tmp_path: Path) -> None:
+        """Rejection on iteration 1 and 2, but passing on iteration 3 avoids quarantine."""
+        from features.workflow.execution_pipeline import run_dialectical_stage
+        from features.workflow.state_models import CritiqueVectorModel, ResearchCampaignModel
+
+        campaign = ResearchCampaignModel(campaign_id="camp-recover", entry_mode="refinement")
+
+        def mock_recover(st: int, it: int) -> CritiqueVectorModel:
+            passed = it >= 3
+            return CritiqueVectorModel(
+                stage_index=st,
+                critic_agent="Critic",
+                dimension="quality",
+                measured_score=0.90 if passed else 0.50,
+                target_threshold=0.80,
+                has_passed=passed,
+                actionable_directive="Approved" if passed else "Retry",
+            )
+
+        success, cv = await run_dialectical_stage(
+            campaign, 1, base_dir=tmp_path, simulate_critique=mock_recover
+        )
+        assert success is True
+        assert cv is not None and cv.has_passed is True
+        sub = campaign.substates[1]
+        assert sub.meta.is_quarantined is False
+        assert sub.meta.status == "completed"
+

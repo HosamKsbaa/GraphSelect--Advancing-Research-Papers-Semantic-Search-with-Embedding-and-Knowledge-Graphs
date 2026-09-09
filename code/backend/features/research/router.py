@@ -86,12 +86,11 @@ async def add_research_question_endpoint(
     # Build embedding provider from settings
     from config import get_settings
     from core.logging.log_service import LogService
-    from core.db.mysql_service import MySQLService
     from features.embedding.providers.gemini_provider import GeminiEmbeddingProvider
 
     settings = get_settings()
-    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None  # type: ignore[arg-type]
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
     embedding_provider: EmbeddingProvider = GeminiEmbeddingProvider(
         api_key=settings.gemini_api_key,
         output_dimensionality=settings.embedding_dimensions,
@@ -130,12 +129,11 @@ async def decompose_query_endpoint(
     from features.embedding.providers.gemini_provider import GeminiEmbeddingProvider
     from config import get_settings
     from core.logging.log_service import LogService
-    from core.db.mysql_service import MySQLService
 
     settings = get_settings()
     neo4j: Neo4jService | None = getattr(request.app.state, "neo4j_service", None)
-    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     llm = LLMService(
         api_key=settings.gemini_api_key,
@@ -233,11 +231,10 @@ async def search_by_author_endpoint(
     from config import get_settings
     from core.clients.openalex_client import OpenAlexService
     from core.logging.log_service import LogService
-    from core.db.mysql_service import MySQLService
 
     settings = get_settings()
-    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None  # type: ignore[arg-type]
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
     openalex = OpenAlexService(api_key=settings.openalex_api_key, log_service=log_service)
 
     try:
@@ -263,11 +260,10 @@ async def search_by_venue_endpoint(
     from config import get_settings
     from core.clients.openalex_client import OpenAlexService
     from core.logging.log_service import LogService
-    from core.db.mysql_service import MySQLService
 
     settings = get_settings()
-    mysql: MySQLService | None = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None  # type: ignore[arg-type]
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
     openalex = OpenAlexService(api_key=settings.openalex_api_key, log_service=log_service)
 
     try:

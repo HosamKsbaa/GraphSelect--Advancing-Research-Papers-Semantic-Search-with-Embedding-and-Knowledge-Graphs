@@ -426,7 +426,6 @@ async def test_search_stream_cancellation_and_status_update() -> None:
 
     service = SearchSessionService(
         neo4j=mock_neo4j,
-        mysql=mock_mysql,
         openalex=mock_openalex,
     )
 
@@ -443,7 +442,6 @@ async def test_search_stream_cancellation_and_status_update() -> None:
             session_id="sess-cancel-001",
             session_data=session_data,
             neo4j_service=mock_neo4j,
-            mysql_service=mock_mysql,
         )
 
         # Consume 1 item and cancel
@@ -458,7 +456,8 @@ async def test_search_stream_cancellation_and_status_update() -> None:
 
         await stream_gen.aclose()
 
-        # Check that update_session_status was called with RUNNING then PAUSED
-        status_calls = [call.args for call in mock_mysql.update_session_status.call_args_list]
-        assert ("sess-cancel-001", SessionStatus.RUNNING.value) in status_calls
-        assert ("sess-cancel-001", SessionStatus.PAUSED.value) in status_calls
+        # Check that update_session_status in Neo4j was called with RUNNING then PAUSED
+        write_params = [call.args[1] for call in mock_neo4j.execute_write.call_args_list if len(call.args) > 1]
+        statuses = [p.get("status") for p in write_params if "status" in p]
+        assert SessionStatus.RUNNING.value in statuses
+        assert SessionStatus.PAUSED.value in statuses

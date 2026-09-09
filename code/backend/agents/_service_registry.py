@@ -156,7 +156,6 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
 
             from config import get_settings
             from core.db.neo4j_service import Neo4jService
-            from core.db.mysql_service import MySQLService
             from core.logging.log_service import LogService
             from core.clients.openalex_client import OpenAlexService
             from features.embedding.providers.gemini_provider import GeminiEmbeddingProvider
@@ -171,7 +170,6 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
                 user=settings.neo4j_user,
                 password=settings.neo4j_password,
             )
-            # Create the driver immediately
             from neo4j import AsyncGraphDatabase
             neo4j._driver = AsyncGraphDatabase.driver(
                 neo4j._uri,
@@ -179,37 +177,8 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
             )
             logger.info("ServiceRegistry: Neo4j driver created")
 
-            # 2. MySQL
-            mysql = MySQLService(
-                host=settings.mysql_host,
-                port=settings.mysql_port,
-                user=settings.mysql_user,
-                password=settings.mysql_password,
-                database=settings.mysql_database,
-            )
-            # Since create_pool is async, we schedule it or run it in current loop
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-            async def init_mysql_pool():
-                try:
-                    await mysql.connect()
-                    await mysql.initialize_schema()
-                except asyncio.CancelledError:
-                    pass
-                except Exception as e:
-                    logger.warning("ServiceRegistry: Failed to connect or init MySQL: %s", e)
-
-            if loop.is_running():
-                loop.create_task(init_mysql_pool())
-            else:
-                loop.run_until_complete(init_mysql_pool())
-
-            # 3. LogService
-            log_service = LogService(mysql)
+            # 2. LogService (Pure Zero-MySQL)
+            log_service = LogService()
 
             # 4. OpenAlexService
             openalex = OpenAlexService(
@@ -286,7 +255,7 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
                 rate_limiter=rate_limiter,
                 log_service=log_service,
             )
-            ranking = RankingService(neo4j=neo4j, mysql=mysql)
+            ranking = RankingService(neo4j=neo4j)
             cls._graph_search_service = GraphSearchService(
                 neo4j=neo4j,
                 openalex=openalex,

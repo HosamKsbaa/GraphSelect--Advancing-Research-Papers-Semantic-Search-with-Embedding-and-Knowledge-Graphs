@@ -2,6 +2,7 @@
 
 Implements candidate pool partitioning, mathematical scoring into 3 archetypes
 (Foundational Prior Art, Contemporary Breakthroughs, Topological Bridges),
+Burt's structural hole bridging centrality (C_B(v) = B(v) * BC(v) per Constitution A52),
 evidence-grounded academic rationales, and 4 structured follow-up steering actions.
 """
 from __future__ import annotations
@@ -20,12 +21,39 @@ from features.search.models import OneHopExpansionResult
 logger = logging.getLogger(__name__)
 
 
+def compute_bridging_coefficient(degree: int, neighbor_degrees: list[int]) -> float:
+    """Compute Burt's bridging coefficient B(v) = (1/d(v)) * sum(1/d(j))."""
+    if degree <= 0 or not neighbor_degrees:
+        return 0.0
+    reciprocal_sum = sum(1.0 / max(1, d) for d in neighbor_degrees)
+    return reciprocal_sum / float(degree)
+
+
+def compute_bridging_centrality(
+    bridging_coefficient: float,
+    betweenness_centrality: float,
+) -> float:
+    """Compute Burt's structural hole bridging centrality C_B(v) = B(v) * BC(v)."""
+    return float(bridging_coefficient * max(0.0, betweenness_centrality))
+
+
+def classify_structural_archetype(scores: dict[str, float]) -> str:
+    """Map highest archetype score to standardized partition name."""
+    mapping = {
+        "foundational": "foundational_prior_art",
+        "contemporary": "contemporary_breakthroughs",
+        "bridge": "topological_bridges",
+    }
+    best_key = max(scores, key=lambda k: scores.get(k, 0.0))
+    return mapping[best_key]
+
+
 def _extract_primary_rq(similarity_scores: list[dict[str, Any]]) -> str:
     """Extract the primary (highest-scoring) Research Question text or ID."""
     if not similarity_scores:
         return "General Topic Relevance"
     best = max(similarity_scores, key=lambda s: float(s.get("score", 0.0)))
-    return best.get("question") or best.get("question_id") or "Active Research Question"
+    return str(best.get("question") or best.get("question_id") or "Active Research Question")
 
 
 def _format_authors_summary(authors: list[str]) -> str:
@@ -39,54 +67,329 @@ def _format_authors_summary(authors: list[str]) -> str:
     return f"{authors[0]} et al."
 
 
-def _generate_candidate_rationale(
-    paper: CandidatePaperState,
-    archetype: str,
-    current_year: int = 2026,
-) -> str:
-    """Generate an evidence-grounded academic rationale for a candidate paper."""
-    authors_str = _format_authors_summary(paper.authors)
+def _foundational_rationale(paper: CandidatePaperState, year: str, venue: str, rq: str) -> str:
+    """Build rationale for foundational prior art."""
+    phrase = "direct backward reference cited by seed" if paper.direction == "backward_reference" else "high-authority prior work"
+    return (
+        f"Seminal foundational work ({year}{venue}) with {paper.citation_count:,} global citations "
+        f"and {phrase}. Provides theoretical foundations and baseline architecture "
+        f"relevant to '{rq}' (relevance score: {paper.max_similarity:.2f})."
+    )
+
+
+def _contemporary_rationale(paper: CandidatePaperState, year: str, venue: str, rq: str) -> str:
+    """Build rationale for contemporary breakthrough."""
+    phrase = "forward citation extending seed" if paper.direction == "forward_citation" else "recent publication"
+    return (
+        f"Recent breakthrough ({year}{venue}) with {phrase} and strong semantic alignment "
+        f"(cosine similarity: {paper.max_similarity:.2f}) with '{rq}'. Demonstrates novel empirical improvements "
+        f"and recent domain advances."
+    )
+
+
+def _bridge_rationale(paper: CandidatePaperState, year: str, venue: str, rq: str) -> str:
+    """Build rationale for topological bridge."""
+    rq_count = len(paper.similarity_scores)
+    rq_phrase = f"across {rq_count} project research questions" if rq_count > 1 else f"for '{rq}'"
+    return (
+        f"Topological bridge paper ({year}{venue}) with in-graph degree of {paper.in_graph_degree} "
+        f"and PageRank centrality of {paper.pagerank_score:.3f}. Connects distinct citation subclusters and exhibits "
+        f"balanced cross-cutting relevance {rq_phrase} (max similarity: {paper.max_similarity:.2f})."
+    )
+
+
+def _generate_candidate_rationale(paper: CandidatePaperState, archetype: str, current_year: int = 2026) -> str:
+    """Generate evidence-grounded academic rationale for a candidate paper."""
     year_str = str(paper.year) if paper.year is not None else "undated"
     venue_str = f" in {paper.venue}" if paper.venue else ""
     primary_rq = paper.primary_rq or _extract_primary_rq(paper.similarity_scores)
-    max_sim = paper.max_similarity
-
     if archetype == "foundational_prior_art":
-        direction_phrase = (
-            "direct backward reference cited by seed"
-            if paper.direction == "backward_reference"
-            else "high-authority prior work"
-        )
-        return (
-            f"Seminal foundational work ({year_str}{venue_str}) with {paper.citation_count:,} global citations "
-            f"and {direction_phrase}. Provides theoretical foundations and baseline architecture "
-            f"relevant to '{primary_rq}' (relevance score: {max_sim:.2f})."
-        )
-
+        return _foundational_rationale(paper, year_str, venue_str, primary_rq)
     if archetype == "contemporary_breakthroughs":
-        direction_phrase = (
-            "forward citation extending seed"
-            if paper.direction == "forward_citation"
-            else "recent publication"
-        )
-        return (
-            f"Recent breakthrough ({year_str}{venue_str}) with {direction_phrase} and strong semantic alignment "
-            f"(cosine similarity: {max_sim:.2f}) with '{primary_rq}'. Demonstrates novel empirical improvements "
-            f"and recent domain advances."
-        )
+        return _contemporary_rationale(paper, year_str, venue_str, primary_rq)
+    return _bridge_rationale(paper, year_str, venue_str, primary_rq)
 
-    # topological_bridges
-    rq_count = len(paper.similarity_scores)
-    rq_phrase = (
-        f"across {rq_count} project research questions"
-        if rq_count > 1
-        else f"for '{primary_rq}'"
+
+
+def _compute_normalization_denominators(
+    raw_candidates: list[CandidatePaperState],
+) -> tuple[float, int, float]:
+    """Compute normalization denominators across candidate pool."""
+    max_log_cites = max(
+        [math.log1p(max(0, c.citation_count)) for c in raw_candidates] + [1.0]
     )
-    return (
-        f"Topological bridge paper ({year_str}{venue_str}) with in-graph degree of {paper.in_graph_degree} "
-        f"and PageRank centrality of {paper.pagerank_score:.3f}. Connects distinct citation subclusters and exhibits "
-        f"balanced cross-cutting relevance {rq_phrase} (max similarity: {max_sim:.2f})."
+    if max_log_cites <= 0.0:
+        max_log_cites = 1.0
+    max_degree = max([max(1, c.in_graph_degree) for c in raw_candidates] + [1])
+    max_pagerank = max([max(0.0, c.pagerank_score) for c in raw_candidates] + [0.001])
+    if max_pagerank <= 0.0:
+        max_pagerank = 1.0
+    return max_log_cites, max_degree, max_pagerank
+
+
+def _score_foundational(
+    cand: CandidatePaperState,
+    log_cit_norm: float,
+    current_year: int,
+    weights: tuple[float, float, float, float],
+) -> float:
+    """Compute foundational prior art score."""
+    w1, w2, w3, w4 = weights
+    age = max(0, current_year - cand.year) if cand.year is not None else 3
+    bwd_term = 1.0 if cand.direction in ("backward_reference", "both") else 0.0
+    age_maturity = min(1.0, age / 5.0)
+    s_avg = cand.mean_similarity if cand.mean_similarity > 0 else cand.max_similarity
+    h = w1 * log_cit_norm + w2 * bwd_term + w3 * age_maturity + w4 * s_avg
+    if cand.year is not None and cand.year <= (current_year - 3):
+        h += 0.10
+    if cand.direction == "backward_reference":
+        h += 0.05
+    return h
+
+
+def _score_contemporary(
+    cand: CandidatePaperState,
+    log_cit_norm: float,
+    current_year: int,
+    weights: tuple[float, float, float],
+) -> float:
+    """Compute contemporary breakthrough score."""
+    mu1, mu2, mu3 = weights
+    age = max(0, current_year - cand.year) if cand.year is not None else 3
+    recency = max(0.0, 1.0 - (age / 3.0))
+    s_max = cand.max_similarity
+    h = mu1 * s_max + mu2 * recency + mu3 * log_cit_norm
+    if cand.year is not None and cand.year >= (current_year - 2) and s_max >= 0.60:
+        h += 0.15
+    elif cand.year is not None and cand.year >= (current_year - 2):
+        h += 0.05
+    return h
+
+
+def _compute_multi_rq_balance(sim_scores: list[dict[str, Any]]) -> float:
+    """Compute multi-research-question balance score."""
+    if len(sim_scores) < 2:
+        return 0.5
+    num_scores = [float(s.get("score", 0.0)) for s in sim_scores]
+    spread = max(num_scores) - min(num_scores)
+    balance = max(0.0, 1.0 - spread)
+    ratio = (min(num_scores) / max(num_scores)) if max(num_scores) > 0 else 1.0
+    return 0.6 * balance + 0.4 * ratio
+
+
+def _score_bridge(
+    cand: CandidatePaperState,
+    max_pagerank: float,
+    max_degree: int,
+    weights: tuple[float, float, float],
+) -> float:
+    """Compute topological bridge score."""
+    g1, g2, g3 = weights
+    pr_norm = min(1.0, cand.pagerank_score / max_pagerank) if max_pagerank > 0 else 0.5
+    deg_norm = min(1.0, cand.in_graph_degree / max_degree) if max_degree > 0 else 0.5
+    balance = _compute_multi_rq_balance(cand.similarity_scores or [])
+    h = g1 * pr_norm + g2 * deg_norm + g3 * balance
+    if cand.in_graph_degree > 1 or cand.pagerank_score > 0.0:
+        h += 0.05
+    return h
+
+
+def _build_evaluated_candidate(
+    cand: CandidatePaperState, scores_dict: dict[str, float], partition_name: str, current_year: int
+) -> CandidatePaperState:
+    """Build and decorate CandidatePaperState with scores and rationale."""
+    cand_dict = cand.model_dump()
+    cand_dict["archetype_scores"] = scores_dict
+    cand_dict["primary_rq"] = _extract_primary_rq(cand.similarity_scores or [])
+    cand_dict["partition"] = partition_name
+    evaluated = CandidatePaperState(**cand_dict)
+    evaluated.recommendation_rationale = _generate_candidate_rationale(
+        evaluated, partition_name, current_year=current_year
     )
+    return evaluated
+
+
+def _evaluate_single_candidate(
+    cand: CandidatePaperState,
+    max_log_cites: float,
+    max_degree: int,
+    max_pagerank: float,
+    current_year: int,
+    weights: tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]],
+) -> CandidatePaperState:
+    """Score a single candidate paper and decorate with partition and rationale."""
+    c_p = max(0, cand.citation_count)
+    log_cit_norm = math.log1p(c_p) / max_log_cites
+    h_found = _score_foundational(cand, log_cit_norm, current_year, weights[0])  # type: ignore[arg-type]
+    h_contemp = _score_contemporary(cand, log_cit_norm, current_year, weights[1])  # type: ignore[arg-type]
+    h_bridge = _score_bridge(cand, max_pagerank, max_degree, weights[2])  # type: ignore[arg-type]
+    scores_dict = {
+        "foundational": round(float(h_found), 4),
+        "contemporary": round(float(h_contemp), 4),
+        "bridge": round(float(h_bridge), 4),
+    }
+    partition_name = classify_structural_archetype(scores_dict)
+    return _build_evaluated_candidate(cand, scores_dict, partition_name, current_year)
+
+
+def _partition_and_sort(
+    evaluated: list[CandidatePaperState],
+) -> tuple[list[CandidatePaperState], list[CandidatePaperState], list[CandidatePaperState]]:
+    """Group evaluated candidates into partitions and sort by archetype criteria."""
+    f_list = [c for c in evaluated if c.partition == "foundational_prior_art"]
+    c_list = [c for c in evaluated if c.partition == "contemporary_breakthroughs"]
+    b_list = [c for c in evaluated if c.partition == "topological_bridges"]
+
+    f_list.sort(key=lambda c: (-c.archetype_scores.get("foundational", 0.0), -c.citation_count, -c.max_similarity))
+    c_list.sort(key=lambda c: (-c.archetype_scores.get("contemporary", 0.0), -c.max_similarity, -(c.year or 0)))
+    b_list.sort(key=lambda c: (-c.archetype_scores.get("bridge", 0.0), -c.in_graph_degree, -c.pagerank_score, -c.max_similarity))
+    return f_list, c_list, b_list
+
+
+def _resolve_top_candidates(
+    evaluated: list[CandidatePaperState],
+    f_list: list[CandidatePaperState],
+    c_list: list[CandidatePaperState],
+    b_list: list[CandidatePaperState],
+) -> tuple[CandidatePaperState, CandidatePaperState, CandidatePaperState]:
+    """Resolve top representative paper per archetype with fallbacks."""
+    all_by_found = sorted(evaluated, key=lambda c: (-c.archetype_scores.get("foundational", 0.0), -c.citation_count))
+    all_by_contemp = sorted(evaluated, key=lambda c: (-c.archetype_scores.get("contemporary", 0.0), -c.max_similarity))
+    all_by_bridge = sorted(evaluated, key=lambda c: (-c.archetype_scores.get("bridge", 0.0), -c.in_graph_degree))
+    top_f = f_list[0] if f_list else all_by_found[0]
+    top_c = c_list[0] if c_list else all_by_contemp[0]
+    top_b = b_list[0] if b_list else all_by_bridge[0]
+    return top_f, top_c, top_b
+
+
+def _create_single_steering_option(
+    opt_id: str, label_prefix: str, cand: CandidatePaperState, rationale: str
+) -> SteeringActionOption:
+    """Helper to create a single deep expansion steering option."""
+    return SteeringActionOption(
+        option_id=opt_id,
+        action_type="expand_deeper",
+        target_doi=cand.doi,
+        target_title=cand.title,
+        label=f"Expand 1 Hop on {label_prefix} ({cand.doi})",
+        rationale=rationale,
+    )
+
+
+def _create_steering_options(
+    top_f: CandidatePaperState,
+    top_c: CandidatePaperState,
+    top_b: CandidatePaperState,
+) -> list[SteeringActionOption]:
+    """Build the 4 structured SteeringActionOption items."""
+    configs = [
+        ("option_a_foundational", "Foundational Art", top_f, f"Deep dive into theoretical roots of '{top_f.title}' ({top_f.year or 'undated'})."),
+        ("option_b_contemporary", "Contemporary Breakthrough", top_c, f"Explore advances of '{top_c.title}' ({top_c.year or 'undated'})."),
+        ("option_c_bridge", "Topological Bridge", top_b, f"Traverse structural bridge '{top_b.title}' connecting multiple questions."),
+    ]
+    options = [_create_single_steering_option(i, l, c, r) for i, l, c, r in configs]
+    options.append(
+        SteeringActionOption(
+            option_id="option_d_adopt_finalize",
+            action_type="add_to_library",
+            label="Add Top Candidates to Project Library & Conclude Cycle",
+            rationale="Adopt top discovered papers into permanent project library and finalize cycle.",
+        )
+    )
+    return options
+
+
+def _format_archetype_sections(
+    f_list: list[CandidatePaperState],
+    c_list: list[CandidatePaperState],
+    b_list: list[CandidatePaperState],
+) -> list[str]:
+    """Format markdown section lines for discovered archetypes."""
+    lines: list[str] = []
+    sections = [
+        ("🏛️ Foundational Prior Art", f_list),
+        ("⚡ Contemporary Breakthroughs", c_list),
+        ("🌉 Topological Bridges", b_list),
+    ]
+    for header, plist in sections:
+        if plist:
+            lines.append(f"#### {header} ({len(plist)} papers)")
+            for p in plist[:2]:
+                lines.extend([f"- **[{p.doi}] {p.title}** ({p.year or 'N/A'})", f"  *Rationale*: {p.recommendation_rationale}"])
+            lines.append("")
+    return lines
+
+
+def _format_strategic_recommendation(
+    seed_doi: str,
+    total_discovered: int,
+    f_list: list[CandidatePaperState],
+    c_list: list[CandidatePaperState],
+    b_list: list[CandidatePaperState],
+    steering_options: list[SteeringActionOption],
+) -> str:
+    """Format markdown strategic recommendation summary."""
+    lines = [
+        f"### 🎯 Strategic Traversal Appraisal (Seed: `{seed_doi}`)",
+        f"Evaluated **{total_discovered} candidate papers** across 3 topological and semantic archetypes:\n",
+    ]
+    lines.extend(_format_archetype_sections(f_list, c_list, b_list))
+    lines.append("#### 🧭 Strategic Steering Choices:")
+    for opt in steering_options:
+        lines.append(f"- **{opt.label}**: {opt.rationale}")
+    return "\n".join(lines)
+
+
+def _handle_empty_candidates(one_hop: OneHopExpansionResult) -> TraversalAppraisalResult:
+    """Construct empty appraisal result with fallback steering option."""
+    fallback = SteeringActionOption(
+        option_id="option_d_adopt_finalize",
+        action_type="conclude",
+        label="Conclude Traversal Cycle",
+        rationale="No 1-hop candidates discovered. Conclude cycle or select an alternative seed.",
+    )
+    return TraversalAppraisalResult(
+        seed_doi=one_hop.seed_doi,
+        seed_title=one_hop.seed_title or f"Paper {one_hop.seed_doi}",
+        cycle_level=one_hop.cycle_level,
+        strategic_recommendation=f"No 1-hop candidate papers discovered for seed {one_hop.seed_doi}.",
+        steering_options=[fallback],
+    )
+
+
+def _build_appraisal_result(
+    one_hop_result: OneHopExpansionResult,
+    raw_count: int,
+    f_list: list[CandidatePaperState],
+    c_list: list[CandidatePaperState],
+    b_list: list[CandidatePaperState],
+    options: list[SteeringActionOption],
+    rec: str,
+) -> TraversalAppraisalResult:
+    """Package appraisal components into TraversalAppraisalResult."""
+    return TraversalAppraisalResult(
+        seed_doi=one_hop_result.seed_doi,
+        seed_title=one_hop_result.seed_title or f"Paper {one_hop_result.seed_doi}",
+        cycle_level=one_hop_result.cycle_level,
+        total_discovered=raw_count,
+        total_new=one_hop_result.total_new,
+        foundational_prior_art=f_list,
+        contemporary_breakthroughs=c_list,
+        topological_bridges=b_list,
+        strategic_recommendation=rec,
+        steering_options=options,
+    )
+
+
+def _evaluate_all_candidates(
+    raw: list[CandidatePaperState], current_year: int, weights: tuple[Any, ...]
+) -> list[CandidatePaperState]:
+    """Normalize and evaluate all candidates."""
+    max_cites, max_deg, max_pr = _compute_normalization_denominators(raw)
+    return [
+        _evaluate_single_candidate(c, max_cites, max_deg, max_pr, current_year, weights)  # type: ignore[arg-type]
+        for c in raw
+    ]
 
 
 def appraise_1hop_candidate_pool(
@@ -97,319 +400,14 @@ def appraise_1hop_candidate_pool(
     contemporary_weights: tuple[float, float, float] = (0.50, 0.35, 0.15),
     bridge_weights: tuple[float, float, float] = (0.40, 0.30, 0.30),
 ) -> TraversalAppraisalResult:
-    """Evaluate discovered candidate papers from 1-hop traversal into 3 archetypes with steering options.
-
-    Partitions the candidate pool into:
-      1. Foundational Prior Art (high backward references, global citations, mature age >= 3 years)
-      2. Contemporary Breakthroughs (high cosine similarity >= 0.60, recent publication year 2024–2026)
-      3. Topological Bridges (high graph PageRank / in-graph degree, multi-RQ balanced relevance)
-
-    Args:
-        one_hop_result: Result object from bounded 1-hop expansion.
-        research_questions: Optional list of active project research questions.
-        current_year: Reference year for maturity/recency calculations (default 2026).
-        foundational_weights: Weights (w1=cites, w2=backward_dir, w3=age_maturity, w4=avg_sim).
-        contemporary_weights: Weights (mu1=max_sim, mu2=recency, mu3=momentum).
-        bridge_weights: Weights (gamma1=pagerank, gamma2=in_degree, gamma3=multi_rq_balance).
-
-    Returns:
-        TraversalAppraisalResult containing partitioned candidate lists, rationales, and 4 steering options.
-    """
-    raw_candidates = one_hop_result.candidates or []
-    seed_doi = one_hop_result.seed_doi
-    seed_title = one_hop_result.seed_title or f"Paper {seed_doi}"
-    total_discovered = len(raw_candidates)
-
-    if not raw_candidates:
-        fallback_option = SteeringActionOption(
-            option_id="option_d_adopt_finalize",
-            action_type="conclude",
-            target_doi=None,
-            target_title=None,
-            label="Conclude Traversal Cycle",
-            rationale="No 1-hop candidates were discovered. Conclude cycle or select an alternative seed paper.",
-        )
-        return TraversalAppraisalResult(
-            seed_doi=seed_doi,
-            seed_title=seed_title,
-            cycle_level=one_hop_result.cycle_level,
-            total_discovered=0,
-            total_new=0,
-            foundational_prior_art=[],
-            contemporary_breakthroughs=[],
-            topological_bridges=[],
-            strategic_recommendation=f"No 1-hop candidate papers discovered for seed {seed_doi} ('{seed_title}').",
-            steering_options=[fallback_option],
-        )
-
-    # 1. Compute normalization denominators across the candidate pool
-    max_log_cites = max(
-        [math.log1p(max(0, c.citation_count)) for c in raw_candidates] + [1.0]
-    )
-    if max_log_cites <= 0.0:
-        max_log_cites = 1.0
-
-    max_degree = max([max(1, c.in_graph_degree) for c in raw_candidates] + [1])
-    max_pagerank = max([max(0.0, c.pagerank_score) for c in raw_candidates] + [0.001])
-    if max_pagerank <= 0.0:
-        max_pagerank = 1.0
-
-    # 2. Evaluate scores for each candidate paper
-    evaluated_candidates: list[CandidatePaperState] = []
-    w1, w2, w3, w4 = foundational_weights
-    mu1, mu2, mu3 = contemporary_weights
-    gamma1, gamma2, gamma3 = bridge_weights
-
-    for cand in raw_candidates:
-        c_p = max(0, cand.citation_count)
-        log_cit_norm = math.log1p(c_p) / max_log_cites
-
-        y_p = cand.year
-        age = max(0, current_year - y_p) if y_p is not None else 3
-
-        sim_scores = cand.similarity_scores or []
-        s_max = cand.max_similarity
-        s_avg = cand.mean_similarity if cand.mean_similarity > 0 else s_max
-        primary_rq = _extract_primary_rq(sim_scores)
-
-        # Archetype 1: Foundational Prior Art Score
-        bwd_term = 1.0 if cand.direction in ("backward_reference", "both") else 0.0
-        age_maturity = min(1.0, age / 5.0)
-        h_foundational = (
-            w1 * log_cit_norm
-            + w2 * bwd_term
-            + w3 * age_maturity
-            + w4 * s_avg
-        )
-        if y_p is not None and y_p <= (current_year - 3):
-            h_foundational += 0.10
-        if cand.direction == "backward_reference":
-            h_foundational += 0.05
-
-        # Archetype 2: Contemporary Breakthrough Score
-        recency = max(0.0, 1.0 - (age / 3.0))
-        h_contemporary = (
-            mu1 * s_max
-            + mu2 * recency
-            + mu3 * log_cit_norm
-        )
-        if y_p is not None and y_p >= (current_year - 2) and s_max >= 0.60:
-            h_contemporary += 0.15
-        elif y_p is not None and y_p >= (current_year - 2):
-            h_contemporary += 0.05
-
-        # Archetype 3: Topological Bridge Score
-        pr_norm = min(1.0, cand.pagerank_score / max_pagerank) if max_pagerank > 0 else 0.5
-        deg_norm = min(1.0, cand.in_graph_degree / max_degree) if max_degree > 0 else 0.5
-
-        if len(sim_scores) >= 2:
-            num_scores = [float(s.get("score", 0.0)) for s in sim_scores]
-            spread = max(num_scores) - min(num_scores)
-            balance = max(0.0, 1.0 - spread)
-            min_score = min(num_scores)
-            max_score = max(num_scores)
-            ratio = (min_score / max_score) if max_score > 0 else 1.0
-            multi_rq_balance = 0.6 * balance + 0.4 * ratio
-        else:
-            multi_rq_balance = 0.5
-
-        h_bridge = (
-            gamma1 * pr_norm
-            + gamma2 * deg_norm
-            + gamma3 * multi_rq_balance
-        )
-        if cand.in_graph_degree > 1 or cand.pagerank_score > 0.0:
-            h_bridge += 0.05
-
-        scores_dict = {
-            "foundational": round(float(h_foundational), 4),
-            "contemporary": round(float(h_contemporary), 4),
-            "bridge": round(float(h_bridge), 4),
-        }
-
-        # Candidate clone / copy with updated fields
-        cand_dict = cand.model_dump()
-        cand_dict["archetype_scores"] = scores_dict
-        cand_dict["primary_rq"] = primary_rq
-
-        # Determine partition from highest archetype score
-        best_archetype_key = max(scores_dict, key=scores_dict.get)  # type: ignore[arg-type]
-        partition_name_map = {
-            "foundational": "foundational_prior_art",
-            "contemporary": "contemporary_breakthroughs",
-            "bridge": "topological_bridges",
-        }
-        partition_name = partition_name_map[best_archetype_key]
-        cand_dict["partition"] = partition_name
-
-        evaluated_cand = CandidatePaperState(**cand_dict)
-        evaluated_cand.recommendation_rationale = _generate_candidate_rationale(
-            evaluated_cand, partition_name, current_year=current_year
-        )
-        evaluated_candidates.append(evaluated_cand)
-
-    # 3. Partition grouping
-    foundational_list = [
-        c for c in evaluated_candidates if c.partition == "foundational_prior_art"
-    ]
-    contemporary_list = [
-        c for c in evaluated_candidates if c.partition == "contemporary_breakthroughs"
-    ]
-    bridge_list = [
-        c for c in evaluated_candidates if c.partition == "topological_bridges"
-    ]
-
-    # 4. Partition sorting
-    foundational_list.sort(
-        key=lambda c: (
-            -c.archetype_scores.get("foundational", 0.0),
-            -c.citation_count,
-            -c.max_similarity,
-        )
-    )
-    contemporary_list.sort(
-        key=lambda c: (
-            -c.archetype_scores.get("contemporary", 0.0),
-            -c.max_similarity,
-            -(c.year if c.year is not None else 0),
-        )
-    )
-    bridge_list.sort(
-        key=lambda c: (
-            -c.archetype_scores.get("bridge", 0.0),
-            -c.in_graph_degree,
-            -c.pagerank_score,
-            -c.max_similarity,
-        )
-    )
-
-    # 5. Fallback balancing: If a partition is empty but candidate pool has papers,
-    # select the highest-scoring candidate for that archetype from the remaining candidates.
-    all_sorted_by_foundational = sorted(
-        evaluated_candidates,
-        key=lambda c: (-c.archetype_scores.get("foundational", 0.0), -c.citation_count),
-    )
-    all_sorted_by_contemporary = sorted(
-        evaluated_candidates,
-        key=lambda c: (-c.archetype_scores.get("contemporary", 0.0), -c.max_similarity),
-    )
-    all_sorted_by_bridge = sorted(
-        evaluated_candidates,
-        key=lambda c: (-c.archetype_scores.get("bridge", 0.0), -c.in_graph_degree),
-    )
-
-    top_foundational = foundational_list[0] if foundational_list else all_sorted_by_foundational[0]
-    top_contemporary = contemporary_list[0] if contemporary_list else all_sorted_by_contemporary[0]
-    top_bridge = bridge_list[0] if bridge_list else all_sorted_by_bridge[0]
-
-    # 6. Formulate 4 structured SteeringActionOption items
-    steering_options: list[SteeringActionOption] = []
-
-    # Option A (Foundational Deep-Dive)
-    opt_a_label = f"Expand 1 Hop on Foundational Art ({top_foundational.doi})"
-    opt_a_rationale = (
-        f"Deep dive into foundational theoretical roots and citation lineage "
-        f"of '{top_foundational.title}' ({top_foundational.year or 'undated'})."
-    )
-    steering_options.append(
-        SteeringActionOption(
-            option_id="option_a_foundational",
-            action_type="expand_deeper",
-            target_doi=top_foundational.doi,
-            target_title=top_foundational.title,
-            label=opt_a_label,
-            rationale=opt_a_rationale,
-        )
-    )
-
-    # Option B (Contemporary Deep-Dive)
-    opt_b_label = f"Expand 1 Hop on Contemporary Breakthrough ({top_contemporary.doi})"
-    opt_b_rationale = (
-        f"Explore cutting-edge empirical advances and benchmark extensions "
-        f"of '{top_contemporary.title}' ({top_contemporary.year or 'undated'})."
-    )
-    steering_options.append(
-        SteeringActionOption(
-            option_id="option_b_contemporary",
-            action_type="expand_deeper",
-            target_doi=top_contemporary.doi,
-            target_title=top_contemporary.title,
-            label=opt_b_label,
-            rationale=opt_b_rationale,
-        )
-    )
-
-    # Option C (Bridge Deep-Dive)
-    opt_c_label = f"Expand 1 Hop on Topological Bridge ({top_bridge.doi})"
-    opt_c_rationale = (
-        f"Traverse high-centrality structural bridge '{top_bridge.title}' "
-        f"to uncover cross-cutting papers connecting multiple research questions."
-    )
-    steering_options.append(
-        SteeringActionOption(
-            option_id="option_c_bridge",
-            action_type="expand_deeper",
-            target_doi=top_bridge.doi,
-            target_title=top_bridge.title,
-            label=opt_c_label,
-            rationale=opt_c_rationale,
-        )
-    )
-
-    # Option D (Adopt & Finalize)
-    steering_options.append(
-        SteeringActionOption(
-            option_id="option_d_adopt_finalize",
-            action_type="add_to_library",
-            target_doi=None,
-            target_title=None,
-            label="Add Top Candidates to Project Library & Conclude Cycle",
-            rationale=(
-                f"Adopt top discovered papers into permanent project library "
-                f"and finalize this 1-hop traversal cycle."
-            ),
-        )
-    )
-
-    # 7. Synthesize Strategic Recommendation text
-    rec_lines = [
-        f"### 🎯 Strategic Traversal Appraisal (Seed: `{seed_doi}`)",
-        f"Evaluated **{total_discovered} candidate papers** across 3 topological and semantic archetypes:\n",
-    ]
-
-    if foundational_list:
-        rec_lines.append(f"#### 🏛️ Foundational Prior Art ({len(foundational_list)} papers)")
-        for p in foundational_list[:2]:
-            rec_lines.append(f"- **[{p.doi}] {p.title}** ({p.year or 'N/A'})")
-            rec_lines.append(f"  *Rationale*: {p.recommendation_rationale}")
-
-    if contemporary_list:
-        rec_lines.append(f"\n#### ⚡ Contemporary Breakthroughs ({len(contemporary_list)} papers)")
-        for p in contemporary_list[:2]:
-            rec_lines.append(f"- **[{p.doi}] {p.title}** ({p.year or 'N/A'})")
-            rec_lines.append(f"  *Rationale*: {p.recommendation_rationale}")
-
-    if bridge_list:
-        rec_lines.append(f"\n#### 🌉 Topological Bridges ({len(bridge_list)} papers)")
-        for p in bridge_list[:2]:
-            rec_lines.append(f"- **[{p.doi}] {p.title}** ({p.year or 'N/A'})")
-            rec_lines.append(f"  *Rationale*: {p.recommendation_rationale}")
-
-    rec_lines.append("\n#### 🧭 Strategic Steering Choices:")
-    for opt in steering_options:
-        rec_lines.append(f"- **{opt.label}**: {opt.rationale}")
-
-    strategic_recommendation = "\n".join(rec_lines)
-
-    return TraversalAppraisalResult(
-        seed_doi=seed_doi,
-        seed_title=seed_title,
-        cycle_level=one_hop_result.cycle_level,
-        total_discovered=total_discovered,
-        total_new=one_hop_result.total_new,
-        foundational_prior_art=foundational_list,
-        contemporary_breakthroughs=contemporary_list,
-        topological_bridges=bridge_list,
-        strategic_recommendation=strategic_recommendation,
-        steering_options=steering_options,
-    )
+    """Evaluate discovered candidate papers from 1-hop traversal into 3 archetypes."""
+    raw = one_hop_result.candidates or []
+    if not raw:
+        return _handle_empty_candidates(one_hop_result)
+    weights = (foundational_weights, contemporary_weights, bridge_weights)
+    evaluated = _evaluate_all_candidates(raw, current_year, weights)
+    f_list, c_list, b_list = _partition_and_sort(evaluated)
+    top_f, top_c, top_b = _resolve_top_candidates(evaluated, f_list, c_list, b_list)
+    options = _create_steering_options(top_f, top_c, top_b)
+    rec = _format_strategic_recommendation(one_hop_result.seed_doi, len(raw), f_list, c_list, b_list, options)
+    return _build_appraisal_result(one_hop_result, len(raw), f_list, c_list, b_list, options, rec)

@@ -1,21 +1,18 @@
-"""Project management REST router for ALRS v2.
+"""Project management REST router for ALRS v2 (Pure Neo4j).
 
 Exposes CRUD endpoints for research projects under ``/api/projects``.
+Complies with Constitution C8 (Zero MySQL) and Sub-25 line functions (C1, C9).
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-import os
-import sys
-import subprocess
 from pathlib import Path
-from config import get_settings
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from core.db.mysql_service import MySQLService
+from config import get_settings
 from core.db.neo4j_service import Neo4jService
-from core.dependencies import get_mysql_service, get_neo4j_service
-from projects.models import ProjectCreate, ProjectResponse, ProjectUpdate
+from core.dependencies import get_neo4j_service
 from projects import service as project_service
+from projects.models import ProjectCreate, ProjectResponse, ProjectUpdate
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -28,11 +25,10 @@ router = APIRouter(prefix="/api/projects", tags=["projects"])
 )
 async def create_project(
     data: ProjectCreate,
-    mysql: MySQLService = Depends(get_mysql_service),
     neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> ProjectResponse:
-    """Create a new research project with the given parameters."""
-    return await project_service.create_project(data, mysql, neo4j)
+    """Create a new research project in Neo4j."""
+    return await project_service.create_project(data, neo4j)
 
 
 @router.get(
@@ -42,11 +38,10 @@ async def create_project(
 )
 async def list_projects(
     include_archived: bool = Query(default=False, description="Include archived projects"),
-    mysql: MySQLService = Depends(get_mysql_service),
     neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> list[ProjectResponse]:
     """List all research projects, optionally including archived ones."""
-    return await project_service.get_projects(mysql, neo4j, include_archived=include_archived)
+    return await project_service.get_projects(neo4j, include_archived=include_archived)
 
 
 @router.get(
@@ -56,10 +51,10 @@ async def list_projects(
 )
 async def get_project(
     project_id: str,
-    mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> ProjectResponse:
     """Fetch a single project by its UUID."""
-    result = await project_service.get_project(project_id, mysql)
+    result = await project_service.get_project(project_id, neo4j)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -76,11 +71,10 @@ async def get_project(
 async def update_project(
     project_id: str,
     data: ProjectUpdate,
-    mysql: MySQLService = Depends(get_mysql_service),
     neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> ProjectResponse:
     """Update fields of an existing project."""
-    result = await project_service.update_project(project_id, data, mysql, neo4j)
+    result = await project_service.update_project(project_id, data, neo4j)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -96,11 +90,10 @@ async def update_project(
 )
 async def archive_project(
     project_id: str,
-    mysql: MySQLService = Depends(get_mysql_service),
     neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> ProjectResponse:
     """Soft-delete a project by setting its status to 'archived'."""
-    result = await project_service.archive_project(project_id, mysql, neo4j)
+    result = await project_service.archive_project(project_id, neo4j)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -116,10 +109,10 @@ async def archive_project(
 )
 async def touch_project(
     project_id: str,
-    mysql: MySQLService = Depends(get_mysql_service),
+    neo4j: Neo4jService = Depends(get_neo4j_service),
 ) -> ProjectResponse:
     """Update the last_accessed_at timestamp to the current time."""
-    result = await project_service.touch_project(project_id, mysql)
+    result = await project_service.touch_project(project_id, neo4j)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -127,26 +120,25 @@ async def touch_project(
         )
     return result
 
+
 @router.post(
     "/{project_id}/open-folder",
     summary="Open the project directory in the OS file explorer",
 )
-async def open_project_folder(project_id: str):
+async def open_project_folder(project_id: str) -> dict[str, str]:
     """Open the project directory on the host OS."""
     settings = get_settings()
     project_dir = Path(settings.projects_dir) / project_id
-    
-    # Ensure directory exists before opening (safely handle permission limits)
     try:
         project_dir.mkdir(parents=True, exist_ok=True)
     except (PermissionError, OSError):
         pass
-    
+
     display_path = str(project_dir)
     if settings.host_projects_dir:
         display_path = str(Path(settings.host_projects_dir) / project_id)
-    
+
     return {
-        "message": "Project data is stored at: " + display_path,
-        "path": display_path
+        "message": f"Project data is stored at: {display_path}",
+        "path": display_path,
     }

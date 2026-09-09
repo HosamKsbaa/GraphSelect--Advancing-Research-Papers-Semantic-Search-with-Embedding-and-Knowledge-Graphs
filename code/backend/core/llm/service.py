@@ -60,6 +60,9 @@ class LLMService:
         self._log_service = log_service
         self._client: genai.Client | None = None
         self._init_error: str | None = None
+        self._project: str | None = None
+        self._location: str | None = None
+        self._api_key: str | None = None
 
         if self._use_vertex_ai:
             self._mode = "vertex"

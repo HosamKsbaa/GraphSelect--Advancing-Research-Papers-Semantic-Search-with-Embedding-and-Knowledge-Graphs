@@ -7,6 +7,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+if sys.version_info < (3, 11):
+    raise RuntimeError(f"Python 3.11+ is required for ALRS v2 backend. Detected: {sys.version}")
+
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -54,6 +57,18 @@ def find_env_file() -> Path:
     return backend_env
 
 
+def init_runtime_directories(base_dir: Path | None = None) -> None:
+    """Ensure required local persistence and provenance directories exist."""
+    root = base_dir or Path(__file__).resolve().parent
+    for relative_path in [
+        "data",
+        "data/campaigns",
+        "data/provenance/crops",
+        "data/telemetry",
+    ]:
+        (root / relative_path).mkdir(parents=True, exist_ok=True)
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables and .env file."""
 
@@ -85,24 +100,32 @@ class Settings(BaseSettings):
                 self.use_vertex_ai = True
             else:
                 self.use_vertex_ai = False
+
+        # Fallback openalex_mailto to openalex_email if not explicitly provided
+        if not self.openalex_mailto and self.openalex_email:
+            self.openalex_mailto = self.openalex_email
+        elif not self.openalex_email and self.openalex_mailto:
+            self.openalex_email = self.openalex_mailto
+
         return self
 
-
     # --- OpenAlex API ---
-    openalex_api_key: str = Field(..., description="OpenAlex API key (required)")
+    openalex_api_key: str = Field(default="", description="OpenAlex API key")
     openalex_email: str | None = Field(default=None, description="Email for OpenAlex polite pool")
+    openalex_mailto: str | None = Field(default=None, description="Mailto address for OpenAlex polite pool")
 
-    # --- Neo4j ---
-    neo4j_uri: str = Field(default="bolt://localhost:7687")
-    neo4j_user: str = Field(default="neo4j")
-    neo4j_password: str = Field(..., description="Neo4j password")
+    # --- Neo4j Epistemic SSOT (Pure Graph Persistence) ---
+    neo4j_uri: str = Field(default="bolt://localhost:7687", description="Neo4j connection URI")
+    neo4j_user: str = Field(default="neo4j", description="Neo4j username")
+    neo4j_password: str = Field(default="changeme", description="Neo4j password")
+    neo4j_database: str = Field(default="neo4j", description="Neo4j database name")
 
-    # --- MySQL ---
-    mysql_host: str = Field(default="localhost")
-    mysql_port: int = Field(default=3306, ge=1, le=65535)
-    mysql_user: str = Field(default="alrs")
-    mysql_password: str = Field(..., description="MySQL password")
-    mysql_database: str = Field(default="alrs")
+    # --- Persistence & Telemetry ---
+    sqlite_telemetry_path: str = Field(default="data/telemetry.sqlite", description="Path to embedded SQLite WAL telemetry database")
+    data_dir: str = Field(default="data", description="Root directory for local persistence and provenance")
+    campaigns_dir: str = Field(default="data/campaigns", description="Directory for campaign artifacts")
+    provenance_crops_dir: str = Field(default="data/provenance/crops", description="Directory for bounding box visual crops")
+    telemetry_dir: str = Field(default="data/telemetry", description="Directory for telemetry database")
 
     # --- Application ---
     log_retention_hours: int = Field(default=24, ge=1, le=720)
@@ -114,8 +137,8 @@ class Settings(BaseSettings):
 
     # --- ADK / Agent Configuration ---
     adk_model_name: str = Field(default="gemini-2.5-flash", description="Legacy default model for agents")
-    adk_tier1_model: str = Field(default="gemini-2.5-flash", description="Tier 1 model for Orchestration & Reasoning agents (ProjectAgent, Planner, Reviewer, Debugger)")
-    adk_tier2_model: str = Field(default="gemini-3.5-flash-lite", description="Tier 2 model for Specialized Worker agents (ALRSAgent, GapFinder, Synthesizer, Drafting)")
+    adk_tier1_model: str = Field(default="gemini-2.5-flash", description="Tier 1 model for Orchestration & Reasoning agents")
+    adk_tier2_model: str = Field(default="gemini-3.5-flash-lite", description="Tier 2 model for Specialized Worker agents")
     token_budget_default: int = Field(default=500000, ge=1000, description="Default token budget per pipeline run")
     token_budget_warn_threshold: float = Field(default=0.8, ge=0.0, le=1.0, description="Warn at this fraction of budget")
     max_research_questions: int = Field(default=6, ge=1, le=20, description="Max questions per project")
@@ -141,8 +164,9 @@ def get_settings() -> Settings:
     target_env = find_env_file()
     settings = Settings(_env_file=target_env)  # type: ignore[call-arg]
 
-    # Propagate to standard OS environment variables so google-genai and google-adk
-    # automatically pick up the correct platform and credentials.
+    init_runtime_directories()
+
+    # Propagate to standard OS environment variables
     if settings.use_vertex_ai:
         os.environ["USE_VERTEX_AI"] = "true"
         os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
@@ -155,7 +179,6 @@ def get_settings() -> Settings:
         if settings.vertex_location:
             os.environ["GOOGLE_CLOUD_LOCATION"] = settings.vertex_location.strip()
             os.environ["VERTEX_LOCATION"] = settings.vertex_location.strip()
-        # Clear API key to prevent SDK confusion
         os.environ.pop("GEMINI_API_KEY", None)
         os.environ.pop("GOOGLE_API_KEY", None)
     else:
@@ -171,5 +194,3 @@ def get_settings() -> Settings:
         os.environ.pop("VERTEX_PROJECT", None)
 
     return settings
-
-

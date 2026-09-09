@@ -32,7 +32,7 @@ class GroupedResults(BaseModel):
     pagerank_weight: float = 0.3
 
 
-from features.search.models import CandidatePaperState  # noqa: E402
+from features.search.models import CandidatePaperState as CandidatePaperState  # noqa: E402
 
 
 class SteeringActionOption(BaseModel):

@@ -447,3 +447,73 @@ class TestVulnerabilitiesAndEdgeCases:
         resolved = await raw_ret
         assert isinstance(resolved, ProjectState)
         assert resolved.name == "Type Inconsistency State"
+
+
+# ===========================================================================
+# 5. Clean Break Cutover Verification & Fast Compensating Rollbacks (T023)
+# ===========================================================================
+
+class TestCleanBreakCutoverAndRollback:
+    """Verifies clean break zero-MySQL cutover, SQLite WAL concurrency, and rollback <5s."""
+
+    def test_zero_mysql_in_core_db(self) -> None:
+        """Verify core.db exports only Neo4jService with zero MySQL references."""
+        import core.db
+        import sys
+
+        exported = getattr(core.db, "__all__", [])
+        assert "Neo4jService" in exported
+        assert "MySQLService" not in exported
+        assert "aiomysql" not in sys.modules
+        assert not hasattr(core.db, "MySQLService")
+
+    @pytest.mark.asyncio
+    async def test_sqlite_wal_concurrent_writes_without_locking(self, tmp_path: Path) -> None:
+        """Verify 30 concurrent SQLite WAL turn event writes complete with zero lock contention."""
+        from core.logging.telemetry_service import TelemetryService
+        import asyncio
+
+        db_path = tmp_path / "telemetry.sqlite"
+        service = TelemetryService(db_path)
+
+        async def _log_worker(idx: int) -> None:
+            await asyncio.to_thread(
+                service.record_turn_event,
+                {
+                    "campaign_id": "camp-cutover",
+                    "run_id": "run-cutover",
+                    "stage_index": idx % 6,
+                    "agent_name": f"Agent-{idx}",
+                    "agent_role": "builder",
+                    "tool_name": "test_tool",
+                    "turn_number": idx + 1,
+                    "prompt_tokens": 100 + idx,
+                    "completion_tokens": 50 + idx,
+                    "latency_ms": 10.0 + idx,
+                    "cost_usd": 0.001 * idx,
+                    "status": "success",
+                    "model_name": "gemini-2.5-flash",
+                },
+            )
+
+        await asyncio.gather(*[_log_worker(i) for i in range(30)])
+        rollup = service.get_campaign_rollup("camp-cutover")
+        assert rollup["total_turns"] == 30
+        assert rollup["total_prompt_tokens"] > 0
+
+    @pytest.mark.asyncio
+    async def test_neo4j_compensating_rollback_under_5_seconds(self) -> None:
+        """Verify compensating rollback executes in under 5.0 seconds."""
+        import time
+        from core.db.neo4j_service import Neo4jService
+
+        service = Neo4jService("bolt://localhost:7687", "neo4j", "password")
+        service.execute_write = AsyncMock(return_value=[{"cnt": 12}])  # type: ignore[method-assign]
+
+        t0 = time.perf_counter()
+        deleted = await service.rollback_stage_transaction("run-perf-test", stage=2)
+        elapsed = time.perf_counter() - t0
+
+        assert deleted == 12
+        assert elapsed < 5.0, f"Rollback took {elapsed:.3f}s, exceeding 5.0s threshold"
+

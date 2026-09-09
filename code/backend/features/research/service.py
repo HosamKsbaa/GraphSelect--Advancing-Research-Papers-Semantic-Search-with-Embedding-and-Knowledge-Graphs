@@ -294,7 +294,7 @@ async def search_by_author(
             "doi": doi_str,
             "title": str(work.get("title", "")),
             "year": work.get("publication_year"),
-            "cited_by_count": int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
+            "cited_by_count": int(str(work.get("cited_by_count") or 0)),
             "authors": author_names[:5],
         })
     return {"papers": papers, "total_returned": len(papers)}
@@ -338,7 +338,7 @@ async def search_by_venue(
             "doi": doi_str,
             "title": str(work.get("title", "")),
             "year": work.get("publication_year"),
-            "cited_by_count": int(work.get("cited_by_count") or 0),  # type: ignore[arg-type]
+            "cited_by_count": int(str(work.get("cited_by_count") or 0)),
             "authors": author_names[:5],
         })
     return {"papers": papers, "total_returned": len(papers)}

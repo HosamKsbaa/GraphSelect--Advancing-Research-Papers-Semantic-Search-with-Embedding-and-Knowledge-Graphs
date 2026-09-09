@@ -76,7 +76,7 @@ async def explore_paper(
                     p_res = await p_res
                 if isinstance(p_res, dict):
                     existing_paper = p_res
-                elif hasattr(p_res, "doi") and not isinstance(p_res, MagicMock):
+                elif hasattr(p_res, "doi") and type(p_res).__name__ != "MagicMock":
                     existing_paper = {
                         "doi": p_res.doi,
                         "title": getattr(p_res, "title", ""),
@@ -312,6 +312,8 @@ async def run_graphselect_traversal(
 
     try:
         crawler = getattr(ServiceRegistry, "crawler", None) or getattr(ServiceRegistry, "crawler_service", None)
+        if crawler is None:
+            return {"error": "Crawler service is not configured in ServiceRegistry."}
         embedding_provider = getattr(ServiceRegistry, "embedding_provider", None)
 
         result = await crawler.run_one_hop_expansion(

@@ -90,10 +90,6 @@ class TestDOINormalizationAdversarial:
 class TestCitationVerifierGroundingAdversarial:
     """Stress tests on citation verification, grounding, and hallucination rejection."""
 
-    @pytest.mark.xfail(
-        reason="Known bug in agents.writing.citation_verifier.verify_citation_grounding: attempts len(assigned_dois) when assigned_dois is None",
-        strict=True,
-    )
     def test_verify_citation_grounding_with_none_assigned_dois_bug(self) -> None:
         """Adversarially reproduce TypeError when assigned_dois is None and valid citation exists."""
         text = "Cited as (10.1000/ABC.DEF)."

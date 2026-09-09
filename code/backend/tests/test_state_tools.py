@@ -783,3 +783,116 @@ class TestStageLifecycleTools:
         assert res["status"] == "error"
         assert "No active project state found" in res["message"]
 
+
+class TestAdr001ToolsAndToolRepository:
+    """Validate ADR-001 centralized toolset registry and stage tools."""
+
+    def test_tool_repository_lookup(self) -> None:
+        """Verify ToolRepository lookups across stages 0 to 5."""
+        from features.workflow.state_tools import (
+            ToolRepository,
+            Stage0Toolset,
+            Stage1Toolset,
+            Stage5Toolset,
+        )
+
+        assert ToolRepository.get_toolset(0) is Stage0Toolset
+        assert ToolRepository.get_toolset("stage_1") is Stage1Toolset
+        assert ToolRepository.get_toolset(5) is Stage5Toolset
+        tools_1 = ToolRepository.get_tools(1)
+        assert len(tools_1) >= 4
+        with pytest.raises(KeyError):
+            ToolRepository.get_toolset(9)
+
+    def test_stage_0_and_1_tools(self) -> None:
+        """Verify Stage 0 intent profiling and Stage 1 RQ synthesis."""
+        from features.workflow.state_tools import (
+            formulate_intent_profile_tool,
+            audit_intent_alignment_tool,
+            synthesize_finer_rq_tool,
+            audit_scope_boundaries_tool,
+        )
+
+        p = formulate_intent_profile_tool("Graph neural networks for drug discovery", "intermediate", 6)
+        assert "intent_profile" in p
+        cv0 = audit_intent_alignment_tool(p["intent_profile"])
+        assert cv0["has_passed"] is True
+        rqs = synthesize_finer_rq_tool("GNN drug discovery", ["toxicity", "solubility"])
+        assert len(rqs["research_questions"]) == 2
+        cv1 = audit_scope_boundaries_tool(rqs["research_questions"])
+        assert cv1["has_passed"] is True
+
+    def test_stage_2_and_3_tools(self) -> None:
+        """Verify Stage 2 snowballing and Stage 3 multimodal extraction."""
+        from features.workflow.state_tools import (
+            run_alrs_snowballing_tool,
+            audit_literature_quality_tool,
+            parse_multimodal_pdf_pages_tool,
+            audit_provenance_bounding_boxes_tool,
+        )
+
+        snow = run_alrs_snowballing_tool(["10.1145/3292500.3330964"], max_depth=2)
+        assert snow["retrieved_count"] == 1
+        cv2 = audit_literature_quality_tool(snow["discovered_papers"])
+        assert cv2["has_passed"] is True
+        parsed = parse_multimodal_pdf_pages_tool("10.1145/3292500.3330964", "/tmp/sample.pdf")
+        assert len(parsed["claims_extracted"]) == 1
+        cv3 = audit_provenance_bounding_boxes_tool(parsed["claims_extracted"])
+        assert cv3["has_passed"] is True
+
+    def test_stage_4_and_5_tools(self) -> None:
+        """Verify Stage 4 matrix synthesis and Stage 5 LaTeX drafting."""
+        from features.workflow.state_tools import (
+            synthesize_comparison_matrix_tool,
+            audit_methodology_rigor_tool,
+            draft_grounded_latex_tool,
+            audit_thesis_citations_and_compiler_tool,
+        )
+
+        matrix = synthesize_comparison_matrix_tool("camp-123")
+        assert len(matrix["matrix_entries"]) == 1
+        cv4 = audit_methodology_rigor_tool(matrix)
+        assert cv4["has_passed"] is True
+        draft = draft_grounded_latex_tool("Methodology", "RQ1")
+        assert "\\cite{" in draft["latex_chunk"]
+        cv5 = audit_thesis_citations_and_compiler_tool(draft["latex_chunk"])
+        assert cv5["has_passed"] is True
+
+    @pytest.mark.asyncio
+    async def test_complete_stage_universal_control(self) -> None:
+        """Verify universal complete_stage tool transitions and validation."""
+        from features.workflow.state_tools import complete_stage
+        from features.workflow.state_models import GuidanceArtifacts, UserIntentProfile
+
+        project = ProjectState(name="Universal Control Test")
+        ctx = DummyToolContext(state={"project_state": project}, agent_name="Stage0Agent")
+        profile = UserIntentProfile(
+            raw_topic="Graph ML", experience_level="expert", available_time_weeks=8
+        )
+        art = GuidanceArtifacts(intent_profile=profile, is_onboarding_complete=True)
+
+        res = await complete_stage(
+            stage_index=0,
+            summary="Guidance stage completed successfully.",
+            artifacts=art,
+            tool_context=ctx,
+        )
+        assert res["status"] == "success"
+        assert res["stage_index"] == 0
+
+        # Boundary test: stage index out of bounds
+        res_bad = await complete_stage(stage_index=7, summary="Bad", tool_context=ctx)
+        assert res_bad["status"] == "error"
+        assert "out of range" in res_bad["message"]
+
+        # Verification that untyped invalid dictionary mutation is rejected
+        res_untyped = await complete_stage(
+            stage_index=1,
+            summary="Bad dict",
+            artifacts={"invalid_key_not_in_scoping": True, "research_questions": "not_a_list"},
+            tool_context=ctx,
+        )
+        assert res_untyped["status"] == "error"
+        assert "Untyped or invalid artifacts" in res_untyped["message"]
+
+

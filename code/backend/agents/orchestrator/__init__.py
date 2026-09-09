@@ -8,12 +8,19 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+try:
+    from google.adk.models import LlmResponse  # type: ignore[attr-defined]
+except ImportError:
+    LlmResponse = Any  # type: ignore[misc, assignment]
+
+try:
+    from google.adk.tools import BaseTool  # type: ignore[attr-defined]
+except ImportError:
+    BaseTool = Any  # type: ignore[misc, assignment]
+
 from google.genai import types
 
 if TYPE_CHECKING:
-    from google.adk.models import LlmResponse
-    from google.adk.tools import BaseTool
-
     from core.logging.log_service import LogService
 
 logger = logging.getLogger(__name__)
@@ -117,19 +124,12 @@ def create_tracing_callbacks(
                     _state["budget"],
                 )
                 # Return a content that tells agents to stop
-                return types.Content(
-                    parts=[
-                        types.Part.from_text(
-                            "⚠️ TOKEN BUDGET EXHAUSTED "
-                            f"({_state['total_tokens']:,} / "
-                            f"{_state['budget']:,} tokens used). "
-                            "PAUSE all agent activity immediately. "
-                            "Preserve all completed work and present "
-                            "a progress summary to the user. "
-                            "Offer to resume with an increased budget."
-                        )
-                    ]
+                stop_msg = (
+                    f"⚠️ TOKEN BUDGET EXHAUSTED ({_state['total_tokens']:,} / {_state['budget']:,} tokens used). "
+                    "PAUSE all agent activity immediately. Preserve all completed work and present "
+                    "a progress summary to the user. Offer to resume with an increased budget."
                 )
+                return types.Content(parts=[types.Part.from_text(text=stop_msg)])  # type: ignore[return-value]
             elif used_fraction >= warn_threshold and not _state["warned"]:
                 _state["warned"] = True
                 logger.info(

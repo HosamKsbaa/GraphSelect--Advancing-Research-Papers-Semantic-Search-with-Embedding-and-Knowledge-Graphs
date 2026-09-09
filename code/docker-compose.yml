@@ -29,8 +29,6 @@ services:
     depends_on:
       neo4j:
         condition: service_healthy
-      mysql:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
       interval: 30s
@@ -62,28 +60,6 @@ services:
       start_period: 90s
     restart: unless-stopped
 
-  # --- MySQL Relational Database ---
-  mysql:
-    image: mysql:8.0
-    container_name: alrs-mysql
-    ports:
-      - "3306:3306"
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_PASSWORD:-changeme}
-      - MYSQL_DATABASE=${MYSQL_DATABASE:-alrs}
-      - MYSQL_USER=${MYSQL_USER:-alrs}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-changeme}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_PASSWORD:-changeme}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    restart: unless-stopped
-
 volumes:
   neo4j_data:
   neo4j_logs:
-  mysql_data:

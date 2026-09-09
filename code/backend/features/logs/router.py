@@ -244,9 +244,9 @@ async def get_project_progress(
 
 @router.get("/agent-traces/stream")
 async def stream_agent_traces(
+    request: Request,
     project_id: str = Query(..., description="Project UUID to stream traces for"),
     max_events: Optional[int] = Query(default=None, description="Optional maximum number of events to stream"),
-    request: Request = None,
 ) -> EventSourceResponse:
     """Stream real-time SSE events for agent traces in a project."""
     progress_service = getattr(request.app.state, "progress_service", None)

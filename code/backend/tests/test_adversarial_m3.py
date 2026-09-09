@@ -954,11 +954,9 @@ class TestEmpiricalFindingsAndStress:
         project = build_seeded_project()
         ctx = MockToolContext(state={"project_state": project})
 
-        # Querying __class__ succeeds in resolution but yields non-JSON-serializable type
+        # Querying __class__ is blocked by dunder protection and returns error
         res_class = await get_project_state(path="__class__", tool_context=ctx)
-        assert res_class["status"] == "success"
-        with pytest.raises(TypeError, match="not JSON serializable"):
-            json.dumps(res_class)
+        assert res_class["status"] == "error"
 
         # Querying method touch succeeds in resolution but yields non-JSON-serializable method
         res_method = await get_project_state(path="touch", tool_context=ctx)

@@ -37,8 +37,8 @@ class WritingService:
 
     def __init__(
         self,
-        neo4j: Neo4jService,
-        llm: LLMService,
+        neo4j: Neo4jService | None = None,
+        llm: LLMService | None = None,
         log_service: LogService | None = None,
         projects_dir: str = "projects",
     ) -> None:
@@ -72,6 +72,8 @@ class WritingService:
             return {"papers": [], "message": "No DOIs provided."}
 
         neo4j = self._neo4j
+        if neo4j is None:
+            return {"papers": [], "message": "Neo4j service not available."}
         results: list[dict[str, Any]] = []
 
         for doi in dois:
@@ -141,11 +143,13 @@ class WritingService:
 
         neo4j = self._neo4j
         llm = self._llm
+        if llm is None:
+            raise RuntimeError("LLM service not configured.")
 
         # Fetch paper details for the prompt
         paper_blocks: list[str] = []
         for doi in paper_dois:
-            paper = await neo4j.get_paper_by_doi(doi)
+            paper = await neo4j.get_paper_by_doi(doi) if neo4j is not None else None
             if paper:
                 abstract_text = (paper.get("abstract") or "No abstract available.")[:600]
                 paper_blocks.append(
@@ -306,6 +310,8 @@ Description: {section_description}
         from agents.writing.citation_verifier import CitationVerifier
 
         llm = self._llm
+        if llm is None:
+            raise RuntimeError("LLM service not configured.")
 
         # Run deterministic citation verification against Neo4j
         verifier = CitationVerifier(self._neo4j)

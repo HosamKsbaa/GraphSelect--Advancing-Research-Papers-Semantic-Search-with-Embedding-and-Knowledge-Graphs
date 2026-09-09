@@ -23,7 +23,6 @@ from features.chat.models import (
 )
 
 if TYPE_CHECKING:
-    from core.db.mysql_service import MySQLService
     from core.db.neo4j_service import Neo4jService
     from core.llm.service import LLMService
 

@@ -203,8 +203,9 @@ def extract_tool_schema(tool: Any) -> AgentToolDefinition:
 class AgentService:
     """Service managing dynamic agent introspection, model tiers, hot-reloading, and settings persistence."""
 
-    def __init__(self, root_agent: Any, mysql_service: Any = None) -> None:
+    def __init__(self, root_agent: Any, neo4j_service: Any = None, mysql_service: Any = None) -> None:
         self.root_agent = root_agent
+        self.neo4j = neo4j_service
         self.mysql = mysql_service
         self._tiers: dict[str, ModelTier] = {}
         self._canonical_defaults: dict[str, dict[str, Any]] = {}
@@ -260,7 +261,7 @@ class AgentService:
         agents_list = []
         visited_ids = set()
 
-        def _traverse(current: Any):
+        def _traverse(current: Any) -> None:
             if current is None or id(current) in visited_ids:
                 return
             visited_ids.add(id(current))

@@ -49,8 +49,8 @@ async def get_paper_abstracts(
             detail="Neo4j service not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = WritingService(
@@ -81,8 +81,8 @@ async def draft_section(
             detail="Required services not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = WritingService(
@@ -120,8 +120,8 @@ async def review_section(
             detail="Required services not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = WritingService(
@@ -157,8 +157,8 @@ async def verify_citations(
             detail="Neo4j service not initialized",
         )
 
-    mysql = getattr(request.app.state, "mysql_service", None)
-    log_service = LogService(mysql) if mysql else None
+    telemetry = getattr(request.app.state, "telemetry_service", None)
+    log_service = LogService(telemetry_service=telemetry)
 
     settings = get_settings()
     service = WritingService(

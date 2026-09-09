@@ -38,13 +38,12 @@ _agent_service: Optional[AgentService] = None
 def get_agent_service(request: Request) -> AgentService:
     """Dependency / helper to retrieve or construct the AgentService singleton."""
     global _agent_service
-    mysql_service = getattr(request.app.state, "mysql_service", None)
+    neo4j_service = getattr(request.app.state, "neo4j_service", None)
     if _agent_service is None:
-        _agent_service = AgentService(root_agent=root_agent, mysql_service=mysql_service)
+        _agent_service = AgentService(root_agent=root_agent, neo4j_service=neo4j_service)
     else:
-        # Update mysql reference if it became available after startup
-        if _agent_service.mysql is None and mysql_service is not None:
-            _agent_service.mysql = mysql_service
+        if getattr(_agent_service, "neo4j", None) is None and neo4j_service is not None:
+            _agent_service.neo4j = neo4j_service
     return _agent_service
 
 
