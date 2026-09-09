@@ -6,8 +6,6 @@ embeddings for academic paper abstracts and research questions.
 from __future__ import annotations
 
 import asyncio
-import hashlib
-import math
 import os
 import time
 from typing import TYPE_CHECKING, Any, cast
@@ -110,9 +108,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     ) -> list[float]:
         """Embed a single paper abstract."""
         results = await self.batch_embed_documents([(text, title)], session_id=session_id)
-        if results:
-            return results[0]
-        return self._create_fallback_vector(text)
+        if not results:
+            raise RuntimeError("Gemini API failed to return an embedding for document.")
+        return results[0]
 
     embed_paper = embed_document
 
@@ -125,9 +123,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         """Embed a research question for vector similarity search."""
         formatted = self._format_query(query)
         results = await self._embed_batch([formatted], session_id=session_id)
-        if results:
-            return results[0]
-        return self._create_fallback_vector(query)
+        if not results:
+            raise RuntimeError("Gemini API failed to return an embedding for query.")
+        return results[0]
 
     embed_question = embed_query
 
@@ -148,8 +146,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         for start in range(0, len(documents), batch_size):
             chunk = documents[start : start + batch_size]
             formatted_chunk = [
-                self._format_document(abstract, title)
-                for abstract, title in chunk
+                self._format_document(text, title)
+                for text, title in chunk
             ]
             chunk_vectors = await self._embed_batch(formatted_chunk, session_id=session_id)
             all_embeddings.extend(chunk_vectors)
@@ -167,9 +165,11 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         if not formatted_texts:
             return []
 
-        # If no API credentials exist, use deterministic offline vector
+        # Fail loudly if API credentials are not configured
         if self._client is None:
-            return [self._create_fallback_vector(t) for t in formatted_texts]
+            raise RuntimeError(
+                "Gemini API client is not initialized. Please configure GEMINI_API_KEY or Google Cloud Vertex AI credentials."
+            )
 
         start_time_ms = int(time.monotonic() * 1000)
 
@@ -197,14 +197,14 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                 session_id=session_id,
                 error_message=str(error),
             )
-
-            # Do not crash the application: return deterministic offline vectors
-            return [self._create_fallback_vector(t) for t in formatted_texts]
+            raise error
 
     async def _call_gemini_with_retry(self, texts: list[str]) -> Any:
         """Execute the Google API call on a worker thread with auto-retry on 429."""
         if self._client is None:
-            raise RuntimeError("Gemini client is not initialized")
+            raise RuntimeError(
+                "Gemini API client is not initialized. Please configure GEMINI_API_KEY or Google Cloud Vertex AI credentials."
+            )
 
         max_attempts = 4  # Initial try + up to 3 retries
 
@@ -236,7 +236,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
     def _extract_vectors_from_response(
         self,
         response: Any,
-        fallback_texts: list[str],
+        texts: list[str],
     ) -> list[list[float]]:
         """Extract floating-point vectors from Google's response object."""
         raw_embeddings = getattr(response, "embeddings", None)
@@ -244,35 +244,24 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             single = getattr(response, "embedding", None)
             raw_embeddings = [single] if single else []
 
+        if len(raw_embeddings) < len(texts):
+            raise ValueError(
+                f"Gemini API returned {len(raw_embeddings)} embeddings for {len(texts)} inputs."
+            )
+
         vectors: list[list[float]] = []
 
-        for index, text in enumerate(fallback_texts):
-            if index < len(raw_embeddings):
-                emb_item = raw_embeddings[index]
-                values = getattr(emb_item, "values", emb_item)
-                if hasattr(values, "__iter__"):
-                    vectors.append([float(v) for v in values])
-                    continue
-
-            # If missing from response, use fallback vector
-            vectors.append(self._create_fallback_vector(text))
+        for index, emb_item in enumerate(raw_embeddings):
+            values = getattr(emb_item, "values", emb_item)
+            if not hasattr(values, "__iter__"):
+                raise ValueError(
+                    f"Gemini API response embedding at index {index} has no vector values."
+                )
+            vectors.append([float(v) for v in values])
 
         return vectors
 
-    # ── 4. Offline Fallback & Telemetry Logging ──────────────────────
-
-    def _create_fallback_vector(self, text: str) -> list[float]:
-        """Create a deterministic unit vector for testing without API keys."""
-        hash_bytes = hashlib.sha256(text.encode("utf-8")).digest()
-        raw_floats = [(b / 255.0) * 2 - 1 for b in hash_bytes]
-
-        # Tile repeats to reach desired dimension count (e.g., 768)
-        tiled = raw_floats * (self._output_dimensionality // len(raw_floats) + 1)
-        truncated = tiled[: self._output_dimensionality]
-
-        # Normalize to unit length
-        norm = math.sqrt(sum(x * x for x in truncated)) or 1.0
-        return [x / norm for x in truncated]
+    # ── 4. Telemetry Logging ─────────────────────────────────────────
 
     async def _log_telemetry(
         self,

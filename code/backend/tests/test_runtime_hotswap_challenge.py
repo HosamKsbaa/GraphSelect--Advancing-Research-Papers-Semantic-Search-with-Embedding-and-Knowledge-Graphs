@@ -233,8 +233,8 @@ async def test_unconfigured_vertex_mode_exception_contract() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gemini_embedding_provider_unconfigured_deterministic_fallback() -> None:
-    """Challenge: Unconfigured GeminiEmbeddingProvider generates deterministic fallback vector without crash."""
+async def test_gemini_embedding_provider_unconfigured_fails_loudly() -> None:
+    """Challenge: Unconfigured GeminiEmbeddingProvider fails loudly with RuntimeError instead of silent fake fallback."""
     with patch("config.get_settings") as mock_settings:
         mock_settings.return_value.use_vertex_ai = False
         mock_settings.return_value.gemini_api_key = ""
@@ -243,16 +243,8 @@ async def test_gemini_embedding_provider_unconfigured_deterministic_fallback() -
             provider = GeminiEmbeddingProvider(api_key="", output_dimensionality=768)
             assert provider._client is None
 
-            vec1 = await provider.embed_document("Sample paper abstract", title="Title 1")
-            assert len(vec1) == 768
-            assert all(isinstance(x, float) for x in vec1)
-
-            vec2 = await provider.embed_document("Sample paper abstract", title="Title 1")
-            assert vec1 == vec2  # Deterministic repeatability
-
-            # Different input produces different fallback vector
-            vec3 = await provider.embed_document("Completely different topic", title="Title 2")
-            assert vec1 != vec3
+            with pytest.raises(RuntimeError, match="Gemini API client is not initialized"):
+                await provider.embed_document("Sample paper abstract", title="Title 1")
 
 
 # ==============================================================================

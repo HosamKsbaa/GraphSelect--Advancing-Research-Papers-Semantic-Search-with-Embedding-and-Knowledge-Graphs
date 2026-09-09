@@ -207,3 +207,10 @@ async def export_pdf(
         "filename": pdf_path.name,
     }
 
+
+# Mount Feature 008 Presentation Router
+from features.export.presentation_router import router as presentation_router
+
+router.include_router(presentation_router)
+
+

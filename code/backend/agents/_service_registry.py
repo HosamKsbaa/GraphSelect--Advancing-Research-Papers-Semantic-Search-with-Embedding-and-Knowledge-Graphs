@@ -51,6 +51,8 @@ _ALIAS_MAP = {
     "crawler": "crawler_service",
     "ranking_service": "ranking_service",
     "ranking": "ranking_service",
+    "presentation_service": "presentation_service",
+    "presentation": "presentation_service",
 }
 
 
@@ -97,6 +99,7 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
     _writing_service: Any
     _export_service: Any
     _progress_service: Any
+    _presentation_service: Any
 
     _initialized: bool = False
     _initializing: bool = False
@@ -239,6 +242,12 @@ class ServiceRegistry(metaclass=ServiceRegistryMeta):
                 neo4j=neo4j,
                 log_service=log_service,
                 projects_dir=settings.projects_dir,
+            )
+            from features.export.presentation_service import PresentationService
+            cls._presentation_service = PresentationService(
+                neo4j=neo4j,
+                projects_dir=settings.projects_dir,
+                log_service=log_service,
             )
             from features.search.crawler_service import CrawlerService
             from features.ranking.service import RankingService

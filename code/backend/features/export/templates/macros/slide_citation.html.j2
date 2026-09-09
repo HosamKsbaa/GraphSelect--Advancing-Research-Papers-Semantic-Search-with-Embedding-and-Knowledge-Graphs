@@ -1,0 +1,34 @@
+<div style="flex: 1; display: flex; flex-direction: column; gap: 16px;">
+  <p style="font-size: 0.95rem; color: var(--text-secondary); max-width: 900px;">
+    Scientometric-Vector Progressive Ladder (SVPL) multi-hop citation pathways connecting seminal research hubs.
+  </p>
+  <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; overflow: hidden; padding: 24px;">
+    {% if enable_mermaid and svpl_pathways %}
+    <pre class="mermaid" style="background: transparent; border: none; font-size: 0.9rem;">
+graph LR
+    classDef source fill:#4f46e5,stroke:#818cf8,stroke-width:2px,color:#fff;
+    classDef bridge fill:#06b6d4,stroke:#67e8f9,stroke-width:2px,color:#fff;
+    classDef target fill:#10b981,stroke:#6ee7b7,stroke-width:2px,color:#fff;
+    {% for path in svpl_pathways[:3] %}
+    {% set b_label = (path.intermediate_dois[0][-12:] if path.intermediate_dois else "Bridge Node") | replace('"', '') %}
+    S{{ loop.index }}["{{ path.from_doi[-12:] | replace('"', '') }}"]:::source -->|{{ path.bridge_mechanism | replace('|', '') }}| B{{ loop.index }}["{{ b_label }}"]:::bridge
+    B{{ loop.index }} -->|hop: {{ path.hop_count }}| T{{ loop.index }}["{{ path.to_doi[-12:] | replace('"', '') }}"]:::target
+    {% endfor %}
+    </pre>
+    {% else %}
+    <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 600px;">
+      {% for path in svpl_pathways[:3] %}
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px;">
+        <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-cyan);">{{ path.from_doi }}</span>
+        <span style="font-size: 0.75rem; color: var(--accent-amber);">➔ [{{ path.bridge_mechanism }} / {{ path.hop_count }} hops{% if path.intermediate_dois %} via {{ path.intermediate_dois[0] }}{% endif %}] ➔</span>
+        <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-emerald);">{{ path.to_doi }}</span>
+      </div>
+      {% else %}
+      <div style="text-align: center; color: var(--text-muted); font-size: 0.9rem;">
+        No multi-hop citation pathways discovered yet. Ingestion pipeline builds paths during Stage 2 & 4.
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>

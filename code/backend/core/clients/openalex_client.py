@@ -732,3 +732,162 @@ class OpenAlexService:
             authors=authors,
             venue=venue,
         )
+
+    @staticmethod
+    def _normalize_filter_id(identifier: str) -> str:
+        """Normalize DOI or OpenAlex URI/ID for OpenAlex filter syntax."""
+        clean = identifier.strip().replace("https://openalex.org/", "").replace("http://openalex.org/", "")
+        clean = clean.replace("https://doi.org/", "").replace("http://doi.org/", "")
+        if clean.startswith("10."):
+            return f"doi:{clean}"
+        return clean
+
+    @staticmethod
+    def _parse_relational_work(work: dict[str, Any]) -> dict[str, Any]:
+        """Extract standardized summary dictionary from OpenAlex relational result."""
+        raw_id = work.get("id")
+        openalex_id = str(raw_id).replace("https://openalex.org/", "").strip() if raw_id else None
+        raw_doi = work.get("doi")
+        doi = str(raw_doi).replace("https://doi.org/", "").strip() if raw_doi else None
+        year = work.get("publication_year")
+        return {
+            "id": openalex_id,
+            "openalex_id": openalex_id,
+            "doi": doi,
+            "title": str(work.get("title") or "").strip(),
+            "publication_year": year,
+            "year": year,
+            "cited_by_count": int(work.get("cited_by_count") or 0),
+        }
+
+    async def _query_relational_filter(
+        self,
+        filter_str: str,
+        per_page: int = 25,
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Execute single-request server-side conjunctive relational filter on OpenAlex."""
+        try:
+            data = await self._request(
+                "GET",
+                "/works",
+                params={
+                    "filter": filter_str,
+                    "per_page": min(max(per_page, 1), 50),
+                    "select": "id,doi,title,publication_year,cited_by_count",
+                },
+                session_id=session_id,
+            )
+            results = data.get("results", [])
+            if not isinstance(results, list):
+                return []
+            return [self._parse_relational_work(w) for w in results if isinstance(w, dict)]
+        except Exception as exc:
+            logger.warning("Relational query failed for filter '%s': %s", filter_str, exc)
+            return []
+
+    async def find_2hop_directed(
+        self,
+        source_id: str,
+        target_id: str,
+        per_page: int = 25,
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """1-shot directed 2-hop derivation: A -> U -> C (cited_by:A, cites:C)."""
+        norm_a = self._normalize_filter_id(source_id)
+        norm_c = self._normalize_filter_id(target_id)
+        return await self._query_relational_filter(
+            f"cited_by:{norm_a},cites:{norm_c}", per_page=per_page, session_id=session_id
+        )
+
+    async def find_2hop_reverse(
+        self,
+        source_id: str,
+        target_id: str,
+        per_page: int = 25,
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """1-shot reverse directed 2-hop: C -> U -> A (cites:A, cited_by:C)."""
+        norm_a = self._normalize_filter_id(source_id)
+        norm_c = self._normalize_filter_id(target_id)
+        return await self._query_relational_filter(
+            f"cites:{norm_a},cited_by:{norm_c}", per_page=per_page, session_id=session_id
+        )
+
+    async def find_bibliographic_coupling(
+        self,
+        source_id: str,
+        target_id: str,
+        per_page: int = 25,
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """1-shot bibliographic coupling: A -> U <- C (cited_by:A, cited_by:C, Kessler 1963)."""
+        norm_a = self._normalize_filter_id(source_id)
+        norm_c = self._normalize_filter_id(target_id)
+        return await self._query_relational_filter(
+            f"cited_by:{norm_a},cited_by:{norm_c}", per_page=per_page, session_id=session_id
+        )
+
+    async def find_co_citation(
+        self,
+        source_id: str,
+        target_id: str,
+        per_page: int = 25,
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """1-shot co-citation convergence: A <- U -> C (cites:A, cites:C, Small 1973)."""
+        norm_a = self._normalize_filter_id(source_id)
+        norm_c = self._normalize_filter_id(target_id)
+        return await self._query_relational_filter(
+            f"cites:{norm_a},cites:{norm_c}", per_page=per_page, session_id=session_id
+        )
+
+    async def batch_pipe_disjunctive_3hop(
+        self,
+        ref_ids: list[str],
+        target_id: str,
+        per_page: int = 25,
+        session_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Layer 2 pipe-disjunctive 3-hop batching: cited_by:U1|...|Uk,cites:C (k <= 50)."""
+        if not ref_ids:
+            return []
+        norm_target = self._normalize_filter_id(target_id)
+        cleaned_refs = [self._normalize_filter_id(r) for r in ref_ids if r and r.strip()]
+        if not cleaned_refs:
+            return []
+
+        all_results: list[dict[str, Any]] = []
+        chunk_size = 50
+        for i in range(0, len(cleaned_refs), chunk_size):
+            chunk = cleaned_refs[i : i + chunk_size]
+            filter_str = f"cited_by:{'|'.join(chunk)},cites:{norm_target}"
+            chunk_res = await self._query_relational_filter(
+                filter_str, per_page=per_page, session_id=session_id
+            )
+            all_results.extend(chunk_res)
+        return all_results
+
+    async def fetch_work_references(
+        self,
+        work_id: str,
+        session_id: str | None = None,
+    ) -> list[str]:
+        """Fetch canonical list of referenced work identifiers for a given work."""
+        norm_id = self._normalize_filter_id(work_id)
+        path = f"/works/{norm_id}"
+        try:
+            data = await self._request(
+                "GET", path, params={"select": "id,referenced_works"}, session_id=session_id
+            )
+            raw_refs = data.get("referenced_works", [])
+            if not isinstance(raw_refs, list):
+                return []
+            return [
+                str(r).replace("https://openalex.org/", "").strip()
+                for r in raw_refs if r
+            ]
+        except Exception as exc:
+            logger.warning("Failed to fetch references for work '%s': %s", work_id, exc)
+            return []
+

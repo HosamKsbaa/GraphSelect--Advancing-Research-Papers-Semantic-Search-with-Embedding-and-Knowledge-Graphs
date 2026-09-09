@@ -1113,6 +1113,24 @@ class Neo4jService:
         recs = await self.execute_write(query, {"run_id": run_id, "stage": stage})
         return int(recs[0]["cnt"]) if recs and "cnt" in recs[0] else 0
 
+    async def flag_open_research_frontier(
+        self, rq_id: str, remediation_notes: str, run_id: str
+    ) -> dict[str, Any]:
+        """Flag research question as Open Research Frontier after gap exhaustion."""
+        query = (
+            "MATCH (rq:ResearchQuestion {question_id: $rq_id}) "
+            "SET rq.is_open_frontier = true, "
+            "    rq.remediation_notes = $remediation_notes, "
+            "    rq.remediation_run_id = $run_id, "
+            "    rq.updated_at = datetime() "
+            "RETURN rq.question_id AS rq_id, rq.is_open_frontier AS is_open_frontier"
+        )
+        params = {"rq_id": rq_id, "remediation_notes": remediation_notes, "run_id": run_id}
+        recs = await self.execute_write(query, params)
+        if recs:
+            return {"rq_id": recs[0].get("rq_id", rq_id), "is_open_frontier": bool(recs[0].get("is_open_frontier", True))}
+        return {"rq_id": rq_id, "is_open_frontier": True}
+
 
 def normalize_doi(doi: str) -> str:
     """Normalize DOI to canonical lowercase format stripped of URL prefixes."""

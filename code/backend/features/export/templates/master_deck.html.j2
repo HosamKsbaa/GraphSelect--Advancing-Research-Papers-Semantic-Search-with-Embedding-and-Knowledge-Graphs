@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" class="{{ theme }}-theme" data-theme="{{ theme }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ project_name }} — Presentation Deck</title>
+  <style>
+{{ inlined_css | safe }}
+  </style>
+  {% if enable_mermaid and inlined_mermaid %}
+  <script>
+{{ inlined_mermaid | safe }}
+  </script>
+  <script>
+    if (typeof mermaid !== 'undefined') {
+      mermaid.initialize({ startOnLoad: true, theme: '{{ "dark" if theme == "dark" else "default" }}' });
+    }
+  </script>
+  {% endif %}
+</head>
+<body class="{{ theme }}-theme" data-theme="{{ theme }}">
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <header>
+    <div class="header-brand">
+      <span class="brand-badge">ALRS v2</span>
+      <span id="header-slide-title" class="header-title">{{ project_name }}</span>
+    </div>
+    <div class="header-meta">
+      <div class="slide-counter">
+        <span id="slide-num-current">01</span> / <span id="slide-num-total">{{ slides|length }}</span>
+      </div>
+      <div class="controls-group">
+        <button id="btn-prev" class="btn" aria-label="Previous Slide">◀ Prev</button>
+        <button id="btn-next" class="btn" aria-label="Next Slide">Next ▶</button>
+        <button id="btn-notes-toggle" class="btn" aria-label="Speaker Notes" aria-expanded="false">📝 Notes (P)</button>
+        <button id="btn-overview-toggle" class="btn" aria-label="Overview Grid" aria-expanded="false">🗂 Overview (O)</button>
+        <button id="btn-theme-toggle" class="btn" aria-label="Toggle Theme">☀️ Light</button>
+        <button id="btn-fullscreen-toggle" class="btn" aria-label="Toggle Fullscreen">⛶ Fullscreen (F)</button>
+      </div>
+    </div>
+    <div class="progress-track">
+      <div id="progress-fill" class="progress-fill"></div>
+    </div>
+  </header>
+
+  <main id="deck-viewport" class="deck-container">
+    <div class="slide-aspect-box">
+      {% for slide in slides %}
+      <section id="slide-{{ slide.index }}" class="slide{% if loop.first %} active{% endif %}" data-slide-index="{{ slide.index }}" role="region" aria-label="Slide {{ slide.index }}: {{ slide.title }}">
+        <div class="slide-category">{{ slide.category }}</div>
+        <h1 class="slide-heading">{{ slide.title }}</h1>
+        <div class="slide-content-body">
+          {{ slide.content_html | safe }}
+        </div>
+        <div class="slide-notes-data" style="display: none;">
+          <h4>Speaker Guidance</h4>
+          <ul>
+            {% for pt in slide.presenter_notes.talking_points %}
+            <li>{{ pt }}</li>
+            {% endfor %}
+          </ul>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 8px;">
+            Estimated Duration: {{ slide.presenter_notes.estimated_duration_seconds }}s
+          </div>
+          {% if slide.presenter_notes.anticipated_questions %}
+          <h4>Anticipated Committee Q&A</h4>
+          {% for qa in slide.presenter_notes.anticipated_questions %}
+          <div style="margin-bottom: 8px;">
+            <p><strong>Q:</strong> {{ qa.question }}</p>
+            <p style="color: var(--text-secondary);"><strong>A:</strong> {{ qa.model_answer }}</p>
+          </div>
+          {% endfor %}
+          {% endif %}
+        </div>
+      </section>
+      {% endfor %}
+    </div>
+  </main>
+
+  <aside id="notes-drawer" role="region" aria-label="Presenter Notes Drawer">
+    <div class="drawer-header">
+      <h3 style="font-size: 1.1rem; color: var(--text-primary);">Speaker Notes</h3>
+      <button id="btn-notes-close" class="btn" onclick="togglePresenterNotes()">Close</button>
+    </div>
+    <div id="notes-content" class="drawer-body"></div>
+  </aside>
+
+  <div id="overview-modal" role="dialog" aria-modal="true" aria-labelledby="overview-modal-title">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <h2 id="overview-modal-title" style="font-size: 1.4rem; color: var(--text-primary);">Deck Slide Overview</h2>
+      <button id="btn-overview-close" class="btn" onclick="toggleOverview()">Close (Esc)</button>
+    </div>
+    <div id="overview-grid" class="overview-grid"></div>
+  </div>
+
+  <script>
+{{ inlined_js | safe }}
+  </script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+  <div class="grid-4">
+    <div class="stat-card">
+      <div class="stat-number">{{ scientometrics.total_papers }}</div>
+      <div class="stat-label">Indexed Papers</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">{{ scientometrics.total_citations }}</div>
+      <div class="stat-label">Total Citations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">{{ scientometrics.unique_authors }}</div>
+      <div class="stat-label">Unique Authors</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number">{{ scientometrics.top_venues|length }}</div>
+      <div class="stat-label">Top Venues</div>
+    </div>
+  </div>
+
+  <div class="grid-2" style="flex: 1;">
+    <div class="card" style="display: flex; flex-direction: column;">
+      <h3 style="font-size: 1rem; color: var(--accent-cyan); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.8px;">Publication Timeline</h3>
+      <div style="flex: 1; display: flex; align-items: flex-end; gap: 12px; padding: 12px 0;">
+        {% for yr, cnt in scientometrics.year_distribution.items() %}
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;">
+          <span style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--accent-cyan);">{{ cnt }}</span>
+          <div style="width: 100%; height: {{ [cnt * 10, 120]|min }}px; min-height: 4px; background: var(--gradient-primary); border-radius: 4px;"></div>
+          <span style="font-size: 0.75rem; font-family: var(--font-mono); color: var(--text-muted);">{{ yr }}</span>
+        </div>
+        {% else %}
+        <div style="color: var(--text-muted); font-size: 0.85rem;">No publication year records available in scoping phase.</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card" style="display: flex; flex-direction: column;">
+      <h3 style="font-size: 1rem; color: var(--accent-cyan); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.8px;">Leading Venues</h3>
+      <div style="display: flex; flex-direction: column; gap: 8px; overflow-y: auto;">
+        {% for v in scientometrics.top_venues[:5] %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: rgba(255,255,255,0.03); border-radius: 6px;">
+          <span style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500;">{{ v.venue }}</span>
+          <span class="brand-badge" style="font-size: 0.75rem; padding: 2px 8px;">{{ v.count }}</span>
+        </div>
+        {% else %}
+        <div style="color: var(--text-muted); font-size: 0.85rem;">No venues indexed.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>

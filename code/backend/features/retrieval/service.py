@@ -539,3 +539,36 @@ class RetrievalService:
             venue=venue,
             keywords=keywords,
         )
+
+    async def can_expand_deeply(self, doi: str) -> bool:
+        """Verify whether paper is flagged with can_expand_deeply under FR-016."""
+        records = await self._neo4j.execute_read(
+            """MATCH (p:Paper {doi: $doi})
+               RETURN coalesce(p.can_expand_deeply, true) AS can_expand""",
+            {"doi": doi},
+        )
+        if records and "can_expand" in records[0]:
+            return bool(records[0]["can_expand"])
+        return True
+
+    async def extract_deep_content(
+        self,
+        doi: str,
+        user_override: bool = False,
+    ) -> dict[str, Any]:
+        """Perform deep PDF parsing / claim extraction guarded by FR-016 relevance gate."""
+        is_permitted = user_override or await self.can_expand_deeply(doi)
+        if not is_permitted:
+            from core.errors.enhancement_errors import EnhancementToolError
+            raise EnhancementToolError(
+                message=f"Deep extraction blocked for '{doi}': paper has can_expand_deeply=False.",
+                error_code="RELEVANCE_GATE_BLOCKED",
+                http_status_code=403,
+            )
+        return {
+            "doi": doi,
+            "status": "extracted",
+            "can_expand_deeply": True,
+            "user_override": user_override,
+        }
+

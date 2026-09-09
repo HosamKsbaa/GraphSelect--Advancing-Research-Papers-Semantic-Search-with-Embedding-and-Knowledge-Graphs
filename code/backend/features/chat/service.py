@@ -66,12 +66,14 @@ class ChatService:
         neo4j_service: Optional[Neo4jService] = None,
         llm_service: Optional[LLMService] = None,
         llm_provider: Any = None,
+        ingestion_service: Optional[Any] = None,
     ) -> None:
         self.mysql = mysql_service
         self.mysql_service = mysql_service
         self.neo4j_service = neo4j_service
         self.llm_service = llm_service
         self.llm_provider = llm_provider
+        self.ingestion_service = ingestion_service
         self._session_service = InMemorySessionService()
 
     async def list_chats(self, project_id: str) -> List[ChatSessionSummary]:
@@ -415,6 +417,12 @@ class ChatService:
             if not tool_traces:
                 tool_traces = fallback_tools
 
+        scan_traces, scan_chips = await self._scan_and_auto_ingest(user_text, project_id)
+        if scan_traces:
+            tool_traces.extend(scan_traces)
+        if scan_chips:
+            options_payload.extend(scan_chips)
+
         # 4. Verify Citations against Neo4j Ground Truth
         citations = await self._verify_citations(
             assistant_text=assistant_text,
@@ -693,6 +701,44 @@ class ChatService:
 
         return tool_traces, content, [], None
 
+    async def _scan_and_auto_ingest(
+        self, user_text: str, project_id: str
+    ) -> tuple[list[ToolTrace], list[dict[str, Any]]]:
+        """Scan chat message for academic identifiers and dispatch auto-ingestion."""
+        from features.ingestion.identifier_extractor import extract_all_identifiers
+        traces: list[ToolTrace] = []
+        chips: list[dict[str, Any]] = []
+        identifiers = extract_all_identifiers(user_text)
+        for id_type, id_val in identifiers:
+            trace = await self._dispatch_identifier_ingestion(id_val, str(id_type), project_id)
+            if trace:
+                traces.append(trace)
+        return traces, chips
+
+    async def _dispatch_identifier_ingestion(
+        self, id_val: str, id_type: str, project_id: str
+    ) -> ToolTrace | None:
+        """Trigger background ingestion for a detected DOI or arXiv ID."""
+        if self.ingestion_service is None:
+            return None
+        from features.ingestion.models import IngestUserPaperInput
+        try:
+            in_data = IngestUserPaperInput(
+                identifier=id_val, project_id=project_id, run_id=str(uuid.uuid4()), stage_index=2
+            )
+            if hasattr(self.ingestion_service, "dispatch_background_ingestion"):
+                self.ingestion_service.dispatch_background_ingestion(in_data)
+            elif hasattr(self.ingestion_service, "ingest_paper"):
+                asyncio.create_task(self.ingestion_service.ingest_paper(in_data))
+            return ToolTrace(
+                tool_name="ContinuousIngestion",
+                input_args={"identifier": id_val, "type": id_type},
+                output_result=f"Triggered background ingestion for {id_val}",
+                status="success",
+            )
+        except Exception as exc:
+            logger.warning("Auto-ingestion dispatch failed for %s: %s", id_val, exc)
+            return None
 
     async def _verify_citations(
         self,

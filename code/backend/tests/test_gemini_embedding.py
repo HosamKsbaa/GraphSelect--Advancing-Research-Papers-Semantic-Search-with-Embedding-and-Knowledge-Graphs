@@ -312,8 +312,8 @@ async def test_gemini_provider_batch_embed_documents_chunking() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gemini_provider_batch_embed_deterministic_fallback() -> None:
-    """Test batch_embed_documents deterministic fallback when client is None."""
+async def test_gemini_provider_without_credentials_raises_runtime_error() -> None:
+    """Test that attempting to embed without credentials immediately raises RuntimeError."""
     with patch("config.get_settings") as mock_settings, patch.dict(
         "os.environ", {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": ""}
     ):
@@ -324,9 +324,11 @@ async def test_gemini_provider_batch_embed_deterministic_fallback() -> None:
         assert provider._client is None
 
         docs = [("Unauthenticated text 1", "T1"), ("Unauthenticated text 2", "T2")]
-        vectors = await provider.batch_embed_documents(docs)
+        with pytest.raises(RuntimeError, match="Gemini API client is not initialized"):
+            await provider.batch_embed_documents(docs)
 
-        assert len(vectors) == 2
-        assert len(vectors[0]) == 768
-        assert len(vectors[1]) == 768
-        assert vectors[0] != vectors[1]
+        with pytest.raises(RuntimeError, match="Gemini API client is not initialized"):
+            await provider.embed_document("Unauthenticated text", title="T")
+
+        with pytest.raises(RuntimeError, match="Gemini API client is not initialized"):
+            await provider.embed_query("Unauthenticated query")

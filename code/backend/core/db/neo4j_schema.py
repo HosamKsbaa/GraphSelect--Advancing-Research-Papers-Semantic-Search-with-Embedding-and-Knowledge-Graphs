@@ -28,9 +28,14 @@ UNIQUENESS_CONSTRAINTS: list[str] = [
     "CREATE CONSTRAINT method_id_unique IF NOT EXISTS FOR (m:Method) REQUIRE m.method_id IS UNIQUE",
     "CREATE CONSTRAINT dataset_id_unique IF NOT EXISTS FOR (d:Dataset) REQUIRE d.dataset_id IS UNIQUE",
     "CREATE CONSTRAINT metric_id_unique IF NOT EXISTS FOR (mr:MetricResult) REQUIRE mr.result_id IS UNIQUE",
-    # Backward compatibility constraints
+    # Feature 007 and Backward compatibility constraints
+    "CREATE CONSTRAINT matrix_section_unique IF NOT EXISTS FOR (m:SectionSynthesisMatrix) REQUIRE m.section_id IS UNIQUE",
+    "CREATE CONSTRAINT section_id_unique IF NOT EXISTS FOR (s:OutlineSection) REQUIRE s.id IS UNIQUE",
     "CREATE CONSTRAINT project_id_unique IF NOT EXISTS FOR (pr:Project) REQUIRE pr.project_id IS UNIQUE",
     "CREATE CONSTRAINT session_id_unique IF NOT EXISTS FOR (s:Session) REQUIRE s.session_id IS UNIQUE",
+    # Feature 008 Presentation constraints
+    "CREATE CONSTRAINT presentation_deck_id_unique IF NOT EXISTS FOR (d:PresentationDeck) REQUIRE d.deck_id IS UNIQUE",
+    "CREATE CONSTRAINT presentation_slide_id_unique IF NOT EXISTS FOR (s:PresentationSlide) REQUIRE s.slide_id IS UNIQUE",
 ]
 
 COMPOSITE_INDEXES: list[str] = [
@@ -46,6 +51,14 @@ COMPOSITE_INDEXES: list[str] = [
     "CREATE INDEX author_name_idx IF NOT EXISTS FOR (a:Author) ON (a.name)",
     "CREATE INDEX venue_name_idx IF NOT EXISTS FOR (v:Venue) ON (v.name)",
     "CREATE INDEX question_project_index IF NOT EXISTS FOR (q:ResearchQuestion) ON (q.project_id)",
+    # Feature 007 performance indexes
+    "CREATE INDEX paper_is_bridge_idx IF NOT EXISTS FOR (p:Paper) ON (p.is_bridge)",
+    "CREATE INDEX paper_is_stub_idx IF NOT EXISTS FOR (p:Paper) ON (p.is_stub)",
+    "CREATE INDEX paper_deep_expand_idx IF NOT EXISTS FOR (p:Paper) ON (p.can_expand_deeply)",
+    "CREATE INDEX paper_is_retracted_idx IF NOT EXISTS FOR (p:Paper) ON (p.is_retracted)",
+    # Feature 008 Presentation indexes
+    "CREATE INDEX presentation_deck_project_idx IF NOT EXISTS FOR (d:PresentationDeck) ON (d.project_id)",
+    "CREATE INDEX presentation_slide_deck_idx IF NOT EXISTS FOR (s:PresentationSlide) ON (s.deck_id)",
 ]
 
 VECTOR_INDEXES: list[tuple[str, str, str]] = [

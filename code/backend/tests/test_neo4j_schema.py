@@ -62,3 +62,17 @@ async def test_initialize_schema_execution() -> None:
     assert "claim_embeddings" in joined
     assert "768" in joined
     assert "cosine" in joined
+
+
+def test_presentation_schema() -> None:
+    """Verify Feature 008 presentation constraints and indexes exist in DDL definitions."""
+    constraints_text = " ".join(UNIQUENESS_CONSTRAINTS)
+    assert ":PresentationDeck" in constraints_text
+    assert "d.deck_id IS UNIQUE" in constraints_text
+    assert ":PresentationSlide" in constraints_text
+    assert "s.slide_id IS UNIQUE" in constraints_text
+
+    indexes_text = " ".join(COMPOSITE_INDEXES)
+    assert "presentation_deck_project_idx" in indexes_text
+    assert "presentation_slide_deck_idx" in indexes_text
+

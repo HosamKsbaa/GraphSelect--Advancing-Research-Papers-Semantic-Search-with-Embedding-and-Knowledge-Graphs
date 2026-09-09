@@ -82,6 +82,35 @@ class CrawlerService:
         )
         await callback(event)
 
+    async def can_expand_paper_deeply(self, doi: str) -> bool:
+        """Verify whether paper is permitted for recursive BFS or 1-hop expansion under FR-016."""
+        query = "MATCH (p:Paper {doi: $doi}) RETURN coalesce(p.can_expand_deeply, true) AS can_expand"
+        try:
+            records = await self._neo4j.execute_read(query, {"doi": doi})
+            if records and "can_expand" in records[0]:
+                return bool(records[0]["can_expand"])
+        except Exception as exc:
+            logger.warning("Error checking can_expand_deeply for %s: %s", doi, exc)
+        return True
+
+    def _build_aborted_expansion_result(self, seed_doi: str, reason: str) -> OneHopExpansionResult:
+        """Construct empty OneHopExpansionResult when recursive expansion is guarded."""
+        logger.warning("Expansion guarded for %s: %s", seed_doi, reason)
+        return OneHopExpansionResult(
+            seed_doi=seed_doi,
+            seed_title=f"Paper {seed_doi}",
+            cycle_level=1,
+            total_discovered=0,
+            total_new=0,
+            forward_count=0,
+            backward_count=0,
+            both_count=0,
+            candidates=[],
+            new_dois=[],
+            traversal_summary=[reason],
+            errors=[reason],
+        )
+
     async def run_bfs_cycle(
         self,
         session_id: str,
@@ -161,6 +190,9 @@ class CrawlerService:
 
         async def _fetch_edges(p: PaperCreate) -> tuple[str, list[str], list[str]]:
             try:
+                if not await self.can_expand_paper_deeply(p.doi):
+                    logger.info("Skipping recursive expansion for %s: can_expand_deeply is False", p.doi)
+                    return p.doi, [], []
                 if self._rate_limiter is not None:
                     await self._rate_limiter.acquire()
                 citing = await self._openalex.get_citations(
@@ -287,6 +319,11 @@ class CrawlerService:
                 new_dois=[],
                 traversal_summary=["No seed DOI provided."],
                 errors=["Seed DOI is empty."],
+            )
+
+        if not await self.can_expand_paper_deeply(clean_seed_doi):
+            return self._build_aborted_expansion_result(
+                clean_seed_doi, "Recursive expansion aborted: can_expand_deeply is False."
             )
 
         emb_provider = (

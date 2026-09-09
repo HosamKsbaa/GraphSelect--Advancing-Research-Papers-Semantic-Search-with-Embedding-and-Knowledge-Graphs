@@ -149,6 +149,7 @@ from features.chat.router import router as chat_router
 from features.agents.router import router as agents_router
 from projects.router import router as projects_router
 from features.workflow.router import router as workflow_router
+from features.ingestion.router import router as ingestion_router
 
 app.include_router(search_router)
 app.include_router(sessions_router)
@@ -165,6 +166,7 @@ app.include_router(export_router)
 app.include_router(chat_router)
 app.include_router(projects_router)
 app.include_router(workflow_router, prefix="/api")
+app.include_router(ingestion_router)
 
 
 # --- Configure logging ---

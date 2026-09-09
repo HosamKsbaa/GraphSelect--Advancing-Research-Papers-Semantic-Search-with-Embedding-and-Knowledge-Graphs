@@ -1,0 +1,56 @@
+<div style="flex: 1; display: flex; flex-direction: column; gap: 14px;">
+  <p style="font-size: 0.95rem; color: var(--text-secondary); max-width: 900px;">
+    Comparative taxonomy of literature evidence across approved synthesis dimensions.
+  </p>
+  {% if synthesis_matrices %}
+  {% set mat = synthesis_matrices[0] %}
+  <div class="card" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+      <h3 style="font-size: 1.1rem; color: var(--text-primary);">{{ mat.section_title }}</h3>
+      <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+        <span style="font-size: 0.75rem; color: var(--text-muted);">Dimensions:</span>
+        {% for dim in mat.dimensions %}
+        <span class="brand-badge" style="font-size: 0.7rem; padding: 2px 8px; background: rgba(99, 102, 241, 0.2); border: 1px solid var(--border-accent);">{{ dim }}</span>
+        {% endfor %}
+        <span class="brand-badge" style="font-size: 0.75rem;">{{ mat.paper_count }} Papers</span>
+      </div>
+    </div>
+    <div class="matrix-table-wrap" style="flex: 1;">
+      <table class="matrix-table">
+        <thead>
+          <tr>
+            <th style="min-width: 220px;">Paper Title</th>
+            <th>Venue</th>
+            <th>Year</th>
+            <th>Citations</th>
+            <th>Canonical DOI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if landmark_papers %}
+          {% for p in landmark_papers[:4] %}
+          <tr>
+            <td style="font-weight: 600; color: var(--text-primary);">{{ p.title|truncate(38, True, '...') }}</td>
+            <td>{{ p.venue }}</td>
+            <td>{{ p.year }}</td>
+            <td><span class="brand-badge" style="font-size: 0.7rem; padding: 2px 6px;">{{ p.external_citations }} cites</span></td>
+            <td><code style="font-size: 0.75rem; color: var(--accent-emerald);">{{ p.doi }}</code></td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">
+              Synthesis matrix initialized. Ingest literature to populate comparative dimensions.
+            </td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card" style="flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
+    No section synthesis matrices configured for this campaign stage.
+  </div>
+  {% endif %}
+</div>

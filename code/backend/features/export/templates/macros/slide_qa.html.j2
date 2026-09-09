@@ -1,0 +1,39 @@
+<div style="flex: 1; display: flex; flex-direction: column; gap: 16px;">
+  <p style="font-size: 0.95rem; color: var(--text-secondary); max-width: 900px;">
+    Anticipated committee defense inquiries and graph-grounded model answers/rebuttals.
+  </p>
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 14px; overflow-y: auto;">
+    {% if anticipated_questions %}
+    {% for qa in anticipated_questions %}
+    <div class="card" style="border-left: 4px solid {{ 'var(--accent-cyan)' if loop.index is odd else 'var(--accent-emerald)' }};">
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+        <span class="slide-category">Inquiry {{ loop.index }}</span>
+        <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">{{ qa.question }}</span>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
+        <strong>Grounded Model Rebuttal:</strong> {{ qa.model_answer }}
+      </p>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="card" style="border-left: 4px solid var(--accent-cyan);">
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+        <span class="slide-category">Technical Question</span>
+        <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">How does the dual-loop architecture prevent catastrophic hallucination?</span>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
+        <strong>Grounded Model Rebuttal:</strong> The fast loop directly traverses Neo4j index-free adjacency for verified DOIs. The slow loop employs SlideGroundingCritic enforcing a mathematical barrier (measured_chr == 0.0%). Any candidate claim citing an unverified DOI triggers immediate rejection and compensation rollback.
+      </p>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--accent-emerald);">
+      <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 6px;">
+        <span class="slide-category">Methodology Question</span>
+        <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary);">Why is Neo4j selected over relational or vector-only stores?</span>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5;">
+        <strong>Grounded Model Rebuttal:</strong> Multi-hop citation chains require O(1) pointer-chasing traversals rather than O(N) multi-table relational joins. Vector-only databases lack typed epistemological edge semantics like :BRIDGES, :AUTHORED, and :CITES.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
