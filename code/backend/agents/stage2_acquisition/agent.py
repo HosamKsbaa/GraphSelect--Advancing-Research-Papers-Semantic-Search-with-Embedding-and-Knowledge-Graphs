@@ -6,6 +6,12 @@ from google.adk import Workflow
 from google.adk.agents import LlmAgent, SequentialAgent
 
 from config import get_settings
+from agents.tools.autonomous_enhancement_tools import (
+    confirm_title_ingestion_tool,
+    ingest_user_paper_tool,
+    run_autonomous_gap_remediation_tool,
+    svpl_multi_hop_discovery_tool,
+)
 from features.workflow.state_tools import (
     audit_literature_quality_tool,
     complete_stage,
@@ -23,9 +29,19 @@ def create_search_snowball_agent() -> LlmAgent:
     return LlmAgent(
         name="SearchSnowballAgent",
         model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
-        description="Performs BFS citation graph expansion and computes hybrid topological ranking.",
-        instruction="You are SearchSnowballAgent. Perform citation graph snowballing traversal.",
-        tools=[run_alrs_snowballing_tool, get_project_state, post_to_message_board, read_message_board, complete_stage],
+        description="Performs BFS citation graph expansion, continuous ingestion, SVPL discovery, and gap remediation.",
+        instruction="You are SearchSnowballAgent. Perform citation graph snowballing traversal, paper ingestion, and gap remediation.",
+        tools=[
+            run_alrs_snowballing_tool,
+            ingest_user_paper_tool,
+            confirm_title_ingestion_tool,
+            svpl_multi_hop_discovery_tool,
+            run_autonomous_gap_remediation_tool,
+            get_project_state,
+            post_to_message_board,
+            read_message_board,
+            complete_stage,
+        ],
         output_key="snowball_result",
     )
 

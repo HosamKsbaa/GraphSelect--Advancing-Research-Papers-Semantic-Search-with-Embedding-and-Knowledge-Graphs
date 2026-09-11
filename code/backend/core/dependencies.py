@@ -20,6 +20,10 @@ if TYPE_CHECKING:
     from features.search.graph_search_service import GraphSearchService
     from features.search.session_service import SearchSessionService
     from features.chat.service import ChatService
+    from features.ingestion.ingestion_service import IngestionService
+    from features.ranking.svpl_service import SVPLService
+    from features.gap_analysis.remediation_service import RemediationService
+    from features.drafting.matrix_service import MatrixService
 
 
 # ── Core infrastructure ──────────────────────────────────────────────
@@ -200,3 +204,52 @@ def get_chat_service(
     from features.chat.service import ChatService
     llm_service = getattr(request.app.state, "llm_service", None)
     return ChatService(neo4j_service=neo4j, llm_service=llm_service)
+
+
+# ── Feature services: Autonomous Research Enhancements (Feature 007) ─
+
+def get_ingestion_service(
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+    openalex: OpenAlexService = Depends(get_openalex_service),
+    gemini: Any = Depends(get_embedding_provider),
+) -> IngestionService:
+    """Create the continuous literature ingestion service."""
+    from features.ingestion.ingestion_service import IngestionService
+    return IngestionService(
+        neo4j_service=neo4j,
+        openalex_service=openalex,
+        embedding_service=gemini,
+    )
+
+
+def get_svpl_service(
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+    openalex: OpenAlexService = Depends(get_openalex_service),
+    gemini: Any = None,  # Optional parameter for backwards compatibility with test callers
+) -> SVPLService:
+    """Create the SVPL multi-hop traversal service."""
+    from features.ranking.svpl_service import SVPLService
+    return SVPLService(
+        neo4j_service=neo4j,
+        openalex_service=openalex,
+    )
+
+
+def get_remediation_service(
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+    openalex: OpenAlexService = Depends(get_openalex_service),
+) -> RemediationService:
+    """Create the autonomous research question gap remediation service."""
+    from features.gap_analysis.remediation_service import RemediationService
+    return RemediationService(
+        neo4j=neo4j,
+        openalex=openalex,
+    )
+
+
+def get_matrix_service(
+    neo4j: Neo4jService = Depends(get_neo4j_service),
+) -> MatrixService:
+    """Create the section synthesis matrix service."""
+    from features.drafting.matrix_service import MatrixService
+    return MatrixService(neo4j=neo4j)

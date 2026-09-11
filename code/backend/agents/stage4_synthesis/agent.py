@@ -6,6 +6,7 @@ from google.adk import Workflow
 from google.adk.agents import LlmAgent, SequentialAgent
 
 from config import get_settings
+from agents.tools.autonomous_enhancement_tools import generate_section_synthesis_matrix_tool
 from features.workflow.state_tools import (
     audit_methodology_rigor_tool,
     complete_stage,
@@ -23,9 +24,16 @@ def create_methodology_architect_agent() -> LlmAgent:
     return LlmAgent(
         name="MethodologyArchitect",
         model=getattr(_settings, "adk_tier2_model", _settings.adk_model_name),
-        description="Constructs structured methodology comparative matrices and surfaces contradictions.",
-        instruction="You are MethodologyArchitect. Synthesize structured comparison matrices and identify polarity.",
-        tools=[synthesize_comparison_matrix_tool, get_project_state, post_to_message_board, read_message_board, complete_stage],
+        description="Constructs structured methodology comparative matrices, section synthesis matrices, and surfaces contradictions.",
+        instruction="You are MethodologyArchitect. Synthesize structured comparison matrices and section synthesis matrices.",
+        tools=[
+            synthesize_comparison_matrix_tool,
+            generate_section_synthesis_matrix_tool,
+            get_project_state,
+            post_to_message_board,
+            read_message_board,
+            complete_stage,
+        ],
         output_key="synthesis_result",
     )
 

@@ -47,8 +47,10 @@ Thumbs.db
 # Logs and Runtime Data
 logs/
 *.log
+*.sqlite*
 e2e/screenshots/
 code/backend/projects/*/
+code/backend/stage_04_artifacts/
 projects/
 .adk/
 

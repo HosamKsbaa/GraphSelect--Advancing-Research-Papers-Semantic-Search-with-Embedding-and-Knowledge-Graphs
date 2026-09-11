@@ -103,6 +103,10 @@ class PaperRead(BaseModel):
     venue: VenueRead | None = None
     keywords: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
+    is_stub: bool = False
+    is_bridge: bool = False
+    can_expand_deeply: bool = True
+    is_retracted: bool = False
 
 
 class PaperSummary(BaseModel):
