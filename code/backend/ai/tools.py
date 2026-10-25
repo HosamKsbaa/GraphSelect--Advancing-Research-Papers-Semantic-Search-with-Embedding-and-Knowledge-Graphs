@@ -13,6 +13,7 @@ from langchain_core.tools import BaseTool, StructuredTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from engines.alrs import AlrsDiscoverRequest, AlrsDiscoverResult, AlrsEngine
+from engines.budget import SpendingLedger
 from engines.citations import (
     AnalysisFinding,
     PaperSourceReference,
@@ -113,22 +114,36 @@ class WriteReviewOutput(BaseModel):
 
 
 class AgentToolRuntime:
-    """Holds injected engine dependencies for the 4 research agent tools."""
+    """Holds injected engine dependencies for the research agent tools."""
 
     def __init__(
         self,
         openalex: OpenAlexSearchProvider,
         alrs_engine: AlrsEngine,
         collection_store: InMemoryCollectionStore | None = None,
+        spending_ledger: SpendingLedger | None = None,
     ) -> None:
         self.openalex = openalex
         self.alrs_engine = alrs_engine
         self.collection_store = collection_store or InMemoryCollectionStore()
+        self.spending_ledger = spending_ledger
         self._discover_results: dict[UUID, AlrsDiscoverResult] = {}
 
     async def search_papers(self, query: str, limit: int = 5) -> SearchPapersOutput:
         """Search OpenAlex for candidate seed papers with DOIs."""
-        works = await self.openalex.search_works(query, per_page=max(1, min(limit, 10)))
+        receipt = (
+            self.spending_ledger.reserve("openalex")
+            if self.spending_ledger is not None
+            else None
+        )
+        try:
+            works = await self.openalex.search_works(query, per_page=max(1, min(limit, 10)))
+        except Exception:
+            if receipt is not None and self.spending_ledger is not None:
+                self.spending_ledger.fail(receipt.receipt_id, reason="search_papers_failed")
+            raise
+        if receipt is not None and self.spending_ledger is not None:
+            self.spending_ledger.complete(receipt.receipt_id)
         candidates: list[PaperCandidateSummary] = []
         for work in works:
             paper = to_paper_create(work)
@@ -159,7 +174,19 @@ class AgentToolRuntime:
             max_depth=max(1, min(max_depth, 3)),
             similarity_threshold=similarity_threshold,
         )
-        result = await self.alrs_engine.discover(request)
+        receipt = (
+            self.spending_ledger.reserve("gemini_embedding")
+            if self.spending_ledger is not None
+            else None
+        )
+        try:
+            result = await self.alrs_engine.discover(request)
+        except Exception:
+            if receipt is not None and self.spending_ledger is not None:
+                self.spending_ledger.fail(receipt.receipt_id, reason="discover_failed")
+            raise
+        if receipt is not None and self.spending_ledger is not None:
+            self.spending_ledger.complete(receipt.receipt_id)
         papers = [node.paper for node in result.nodes]
         collection: PaperCollection = build_paper_collection(
             title=f"GraphSelect Discovery: {result.seed_doi}",
@@ -266,6 +293,18 @@ class AgentToolRuntime:
             bibtex_entries=bibtex_list,
             verified_findings_count=len(verified),
         )
+
+    def verify_citations(
+        self,
+        collection_id: str,
+        review_output: WriteReviewOutput,
+    ) -> object:
+        """Verify inline `[DOI]` tags in `review_output` against the saved collection."""
+        from .verification import verify_review_citations
+
+        cid = UUID(collection_id)
+        collection = self.collection_store.get(cid)
+        return verify_review_citations(collection, review_output)
 
     def build_langchain_tools(self) -> list[BaseTool]:
         """Return the 4 research agent tools as LangChain StructuredTools."""
