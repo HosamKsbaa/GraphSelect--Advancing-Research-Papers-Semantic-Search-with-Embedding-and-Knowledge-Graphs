@@ -6,8 +6,13 @@ import time
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from ai import AgentToolRuntime, create_mcp_router
 from api.routers.search import router as search_router
 from config import get_settings
+from engines.alrs import AlrsEngine
+from engines.collections import InMemoryCollectionStore
+from engines.embeddings import GeminiEmbeddingClient
+from engines.openalex import OpenAlexClient
 
 # Configure logging
 logging.basicConfig(
@@ -28,6 +33,24 @@ app: FastAPI = FastAPI(
 )
 
 app.include_router(search_router)
+
+
+def get_agent_runtime() -> AgentToolRuntime:
+    runtime = getattr(app.state, "agent_runtime", None)
+    if isinstance(runtime, AgentToolRuntime):
+        return runtime
+    openalex = OpenAlexClient()
+    embeddings = GeminiEmbeddingClient(client=None)
+    default_runtime = AgentToolRuntime(
+        openalex=openalex,
+        alrs_engine=AlrsEngine(openalex=openalex, embeddings=embeddings),
+        collection_store=InMemoryCollectionStore(),
+    )
+    app.state.agent_runtime = default_runtime
+    return default_runtime
+
+
+app.include_router(create_mcp_router(get_agent_runtime))
 
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
     # PyInstaller bundles the frontend next to the executable's code (see build_exe.py).
