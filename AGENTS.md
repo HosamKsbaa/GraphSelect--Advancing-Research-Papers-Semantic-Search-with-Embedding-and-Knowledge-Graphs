@@ -42,5 +42,5 @@ Set up once: `cd newcode/code/backend && uv venv .venv --python 3.13 && uv pip i
 - Embeddings: `.agents/rules/gemini_embeddings.md`. OpenAlex: `.agents/rules/openalex_guide.md`.
 
 ## Do not
-- Edit the archive (`../../MasterProject2-backups/`); it is a read-only reference.
+- Edit the archive (`../archive/`); it is a read-only reference.
 - Attribute the thesis LitSearch results to new code unless they were re-run with it.
