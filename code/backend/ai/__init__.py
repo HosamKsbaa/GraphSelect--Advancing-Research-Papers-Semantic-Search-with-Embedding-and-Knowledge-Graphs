@@ -1,6 +1,13 @@
 """Public interface for the ALRS single research agent (`ai`)."""
 
 from .agent import AgentRunStatus, ResearchAgent, ResearchAgentState
+from .mcp_server import (
+    McpRpcRequest,
+    McpServerAdapter,
+    McpToolDefinition,
+    build_fastmcp_server,
+    create_mcp_router,
+)
 from .model_client import (
     GeminiModelClient,
     ModelClientSettings,
@@ -9,6 +16,7 @@ from .model_client import (
     ModelValidationDiagnostic,
     validate_model_result,
 )
+from .skills import LoadedSkill, SkillMetadata, list_available_skills, load_skill
 from .tools import (
     AgentToolRuntime,
     DiscoverLiteratureOutput,
@@ -24,6 +32,10 @@ __all__ = [
     "DiscoverLiteratureOutput",
     "GeminiModelClient",
     "GetCollectionOutput",
+    "LoadedSkill",
+    "McpRpcRequest",
+    "McpServerAdapter",
+    "McpToolDefinition",
     "ModelClientSettings",
     "ModelError",
     "ModelUsage",
@@ -31,8 +43,13 @@ __all__ = [
     "ResearchAgent",
     "ResearchAgentState",
     "SearchPapersOutput",
+    "SkillMetadata",
     "VerificationReport",
     "WriteReviewOutput",
+    "build_fastmcp_server",
+    "create_mcp_router",
+    "list_available_skills",
+    "load_skill",
     "validate_model_result",
     "verify_review_citations",
 ]

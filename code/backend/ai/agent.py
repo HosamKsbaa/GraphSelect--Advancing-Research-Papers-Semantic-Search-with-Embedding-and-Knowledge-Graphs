@@ -20,7 +20,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from config import get_settings
 from engines.alrs import AlrsEngine
@@ -40,6 +40,7 @@ class ResearchAgentState(TypedDict):
     collection_id: str | None
     review_output: WriteReviewOutput | None
     verification_report: VerificationReport | None
+    loaded_skills: list[str]
     messages: Annotated[list[BaseMessage], add_messages]
 
 
@@ -53,6 +54,7 @@ class AgentRunStatus(BaseModel):
     collection_id: str | None = None
     review_output: WriteReviewOutput | None = None
     verification_report: VerificationReport | None = None
+    loaded_skills: list[str] = Field(default_factory=list)
 
 
 class ResearchAgent:
@@ -83,11 +85,14 @@ class ResearchAgent:
         return builder
 
     async def _select_seed_node(self, state: ResearchAgentState) -> dict[str, object]:
+        skill = self.runtime.load_skill("search-literature")
+        skills = list(dict.fromkeys([*(state.get("loaded_skills") or []), skill.name]))
         if state.get("seed_doi"):
             return {
+                "loaded_skills": skills,
                 "messages": [
                     AIMessage(content=f"Using provided seed DOI: {state['seed_doi']}")
-                ]
+                ],
             }
         search_res = await self.runtime.search_papers(state["topic"], limit=5)
         if not search_res.candidates:
@@ -98,6 +103,7 @@ class ResearchAgent:
         )
         return {
             "seed_doi": chosen.doi,
+            "loaded_skills": skills,
             "messages": [
                 AIMessage(
                     content=f"Selected seed paper '{chosen.title}' (DOI: {chosen.doi})"
@@ -129,6 +135,8 @@ class ResearchAgent:
         }
 
     async def _synthesize_review_node(self, state: ResearchAgentState) -> dict[str, object]:
+        skill = self.runtime.load_skill("write-literature-review")
+        skills = list(dict.fromkeys([*(state.get("loaded_skills") or []), skill.name]))
         collection_id = state["collection_id"]
         assert collection_id is not None
         collection_ctx = self.runtime.get_collection(collection_id)
@@ -163,10 +171,13 @@ class ResearchAgent:
         review = self.runtime.write_review(collection_id=collection_id, findings=findings)
         return {
             "review_output": review,
+            "loaded_skills": skills,
             "messages": [AIMessage(content=review.markdown_review)],
         }
 
     async def _verify_citations_node(self, state: ResearchAgentState) -> dict[str, object]:
+        skill = self.runtime.load_skill("verify-citations")
+        skills = list(dict.fromkeys([*(state.get("loaded_skills") or []), skill.name]))
         collection_id = state["collection_id"]
         review = state["review_output"]
         assert collection_id is not None
@@ -182,6 +193,7 @@ class ResearchAgent:
         return {
             "review_output": cleaned_review,
             "verification_report": report,
+            "loaded_skills": skills,
             "messages": [
                 AIMessage(
                     content=(
@@ -213,6 +225,7 @@ class ResearchAgent:
             "collection_id": None,
             "review_output": None,
             "verification_report": None,
+            "loaded_skills": [],
             "messages": [HumanMessage(content=topic)],
         }
         config: RunnableConfig = {"configurable": {"thread_id": tid}}
@@ -224,6 +237,7 @@ class ResearchAgent:
                 status="awaiting_approval",
                 topic=topic,
                 seed_doi=result_state.get("seed_doi"),
+                loaded_skills=list(result_state.get("loaded_skills") or []),
             )
         return AgentRunStatus(
             thread_id=tid,
@@ -233,6 +247,7 @@ class ResearchAgent:
             collection_id=result_state.get("collection_id"),
             review_output=result_state.get("review_output"),
             verification_report=result_state.get("verification_report"),
+            loaded_skills=list(result_state.get("loaded_skills") or []),
         )
 
     async def resume_run(
@@ -247,6 +262,8 @@ class ResearchAgent:
         values = dict(snapshot.values)
         topic = str(values.get("topic", ""))
         seed_doi = override_seed_doi or values.get("seed_doi")
+        current_skills = values.get("loaded_skills")
+        skills_list = list(current_skills) if isinstance(current_skills, list) else []
         if not approved:
             self._cancelled_threads.add(thread_id)
             return AgentRunStatus(
@@ -254,6 +271,7 @@ class ResearchAgent:
                 status="cancelled",
                 topic=topic,
                 seed_doi=seed_doi if isinstance(seed_doi, str) else None,
+                loaded_skills=skills_list,
             )
         if override_seed_doi:
             await compiled.aupdate_state(config, {"seed_doi": override_seed_doi})
@@ -266,6 +284,7 @@ class ResearchAgent:
             collection_id=final_state.get("collection_id"),
             review_output=final_state.get("review_output"),
             verification_report=final_state.get("verification_report"),
+            loaded_skills=list(final_state.get("loaded_skills") or []),
         )
 
     async def run(

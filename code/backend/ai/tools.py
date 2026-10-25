@@ -30,6 +30,8 @@ from engines.collections import (
 )
 from engines.openalex import OpenAlexWork, to_paper_create
 
+from .skills import LoadedSkill, load_skill as load_capability_skill
+
 
 class OpenAlexSearchProvider(Protocol):
     async def search_works(
@@ -128,6 +130,14 @@ class AgentToolRuntime:
         self.collection_store = collection_store or InMemoryCollectionStore()
         self.spending_ledger = spending_ledger
         self._discover_results: dict[UUID, AlrsDiscoverResult] = {}
+        self.loaded_skills_history: list[str] = []
+
+    def load_skill(self, skill_name: str) -> LoadedSkill:
+        """Load a capability skill (`SKILL.md`) on demand and record it in the trace."""
+        skill = load_capability_skill(skill_name)
+        if skill.name not in self.loaded_skills_history:
+            self.loaded_skills_history.append(skill.name)
+        return skill
 
     async def search_papers(self, query: str, limit: int = 5) -> SearchPapersOutput:
         """Search OpenAlex for candidate seed papers with DOIs."""
