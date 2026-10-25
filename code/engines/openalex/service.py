@@ -11,7 +11,8 @@ from pydantic import ValidationError
 
 from engines.papers import Author, DatedCitationCount, Paper, RetractionStatus, Venue
 from .models import OpenAlexWork, OpenAlexWorkPage, normalize_doi, normalize_work_id
-from .budget import ProviderBudget, ProviderError
+from engines.errors import ProviderError
+from .budget import ProviderBudget
 from .rate_limiter import AsyncTokenBucketRateLimiter
 
 

@@ -5,18 +5,12 @@ from collections.abc import Awaitable, Callable
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+# ProviderError moved to engines.errors so every provider engine shares one error type.
+from engines.errors import ProviderError
+
 
 UsageCallback = Callable[[int, float], Awaitable[None]]
 RetryCallback = Callable[[int], Awaitable[None]]
-
-
-class ProviderError(RuntimeError):
-    """A sanitized provider failure suitable for saved research events."""
-
-    def __init__(self, code: str, message: str, *, retryable: bool = False) -> None:
-        super().__init__(message)
-        self.code = code
-        self.retryable = retryable
 
 
 class ProviderBudget(BaseModel):
