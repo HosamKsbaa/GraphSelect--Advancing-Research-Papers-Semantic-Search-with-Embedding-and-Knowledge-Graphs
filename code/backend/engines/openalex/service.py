@@ -75,6 +75,13 @@ def dated_citation_observations(work: OpenAlexWork) -> list[DatedCitationCount]:
     )]
 
 
+def to_paper_create(work: OpenAlexWork) -> Paper | None:
+    """Convert an `OpenAlexWork` into a `Paper`, or return `None` if it has no DOI."""
+    if work.doi is None:
+        return None
+    return OpenAlexClient().work_to_paper(work)
+
+
 class OpenAlexClient:
     def __init__(
         self,
@@ -106,10 +113,16 @@ class OpenAlexClient:
     def work_to_paper(self, work: OpenAlexWork) -> Paper:
         if work.doi is None:
             raise MissingDoiError("The OpenAlex work has no DOI and cannot be ingested as a paper.")
+        direct_abstract = getattr(work, "abstract", None)
+        abstract_text = (
+            direct_abstract
+            if isinstance(direct_abstract, str) and direct_abstract.strip()
+            else reconstruct_abstract(work.abstract_inverted_index)
+        )
         return Paper(
             doi=work.doi,
             title=work.title or work.display_name or "Untitled",
-            abstract=reconstruct_abstract(work.abstract_inverted_index),
+            abstract=abstract_text,
             year=work.publication_year,
             authors=parse_authors(work),
             venue=parse_venue(work),
@@ -121,6 +134,25 @@ class OpenAlexClient:
             topics=[topic.display_name for topic in work.topics if topic.display_name],
             openalex_id=work.id,
         )
+
+    async def get_work_by_doi(
+        self, doi: str, budget: ProviderBudget | None = None
+    ) -> OpenAlexWork | None:
+        try:
+            return await self.fetch_work(doi, budget or ProviderBudget())
+        except ProviderError as err:
+            if err.code == "provider_not_found":
+                return None
+            raise
+
+    async def get_works_batch(
+        self, openalex_ids: list[str], budget: ProviderBudget | None = None
+    ) -> tuple[list[OpenAlexWork], list[str], list[str]]:
+        if not openalex_ids:
+            return [], [], []
+        works = await self.fetch_works(openalex_ids[:50], budget or ProviderBudget())
+        omitted = [w.id or "" for w in works if w.doi is None]
+        return works, omitted, []
 
     async def fetch_work(self, doi: str, budget: ProviderBudget) -> OpenAlexWork:
         clean_doi = normalize_doi(doi)
@@ -184,16 +216,23 @@ class OpenAlexClient:
         return papers
 
     async def search_works(
-        self, query: str, budget: ProviderBudget, max_results: int = 10,
+        self,
+        query: str,
+        budget: ProviderBudget | None = None,
+        max_results: int = 10,
+        *,
+        per_page: int | None = None,
     ) -> list[OpenAlexWork]:
         """General research search; retain missing DOI records for search receipts."""
-        if not query.strip() or not 1 <= max_results <= 10:
+        limit = per_page if per_page is not None else max_results
+        if not query.strip() or not 1 <= limit <= 10:
             raise ValueError("Provide a query and a result limit from 1 to 10.")
+        active_budget = budget or ProviderBudget()
         data = await self._request_json("/works", {
-            "search": query.strip(), "per_page": str(max_results),
-        }, budget)
+            "search": query.strip(), "per_page": str(limit),
+        }, active_budget)
         works = self._parse_work_page(data)
-        if len(works) > max_results:
+        if len(works) > limit:
             raise ProviderError("invalid_response", "OpenAlex returned more search records than requested.")
         return works
 
