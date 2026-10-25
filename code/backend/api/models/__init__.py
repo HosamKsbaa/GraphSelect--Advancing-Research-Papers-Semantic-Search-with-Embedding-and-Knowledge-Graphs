@@ -1,7 +1,7 @@
 """Models package – re-exports all domain models."""
 
-from models.graph_node import GraphNode
-from models.openalex_models import (
+from api.models.graph_node import GraphNode
+from api.models.openalex_models import (
     Author,
     Authorship,
     OpenAccess,
@@ -10,8 +10,8 @@ from models.openalex_models import (
     WorksMeta,
     WorksResponse,
 )
-from models.progress import GraphSearchProgress, GraphSearchStatus
-from models.ranked_paper import RankedPaper
+from api.models.progress import GraphSearchProgress, GraphSearchStatus
+from api.models.ranked_paper import RankedPaper
 
 __all__: list[str] = [
     "Author",

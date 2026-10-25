@@ -1,10 +1,10 @@
 """Tests for the GraphSelect algorithm integration."""
 import pytest
-from models.openalex_models import Work
-from models.graph_node import GraphNode
-from models.ranked_paper import RankedPaper
-from services.graph_search_service import GraphSearchService
-from services.openalex_service import OpenAlexService
+from api.models.openalex_models import Work
+from api.models.graph_node import GraphNode
+from api.models.ranked_paper import RankedPaper
+from api.services.graph_search_service import GraphSearchService
+from api.services.openalex_service import OpenAlexService
 
 
 class TestAbstractReconstruction:

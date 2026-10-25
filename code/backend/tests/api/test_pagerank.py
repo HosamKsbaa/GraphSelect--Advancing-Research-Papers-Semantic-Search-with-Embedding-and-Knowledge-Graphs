@@ -1,8 +1,8 @@
 """Tests for PageRank calculation."""
 import pytest
-from models.openalex_models import Work
-from models.graph_node import GraphNode
-from services.graph_search_service import GraphSearchService
+from api.models.openalex_models import Work
+from api.models.graph_node import GraphNode
+from api.services.graph_search_service import GraphSearchService
 
 
 def _make_node(

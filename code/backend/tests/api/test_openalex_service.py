@@ -1,7 +1,7 @@
 """Tests for OpenAlex service utility methods."""
 import pytest
-from services.openalex_service import OpenAlexService
-from models.openalex_models import Work
+from api.services.openalex_service import OpenAlexService
+from api.models.openalex_models import Work
 
 
 class TestReconstructAbstract:

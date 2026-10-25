@@ -12,6 +12,16 @@ class TestHealthEndpoint:
         assert data['service'] == 'ALRS GraphSelect API'
 
 
+class TestFrontendPage:
+    def test_root_serves_the_frontend_page(self, client: TestClient) -> None:
+        response = client.get('/')
+        assert response.status_code == 200
+        assert response.headers['content-type'].startswith('text/html')
+        # Elements the frontend tests rely on must reach the browser unchanged.
+        assert 'id="seedDoi"' in response.text
+        assert "fetch('/api/search/stream'" in response.text
+
+
 class TestSearchEndpoint:
     def test_search_missing_api_key(self, client: TestClient) -> None:
         """Search should fail gracefully when API key is not set."""

@@ -24,8 +24,9 @@ def main():
         print("[-] Error: main.py not found in the current directory.")
         sys.exit(1)
         
-    if not os.path.exists("static"):
-        print("[-] Error: static/ directory not found in the current directory.")
+    frontend_dir = os.path.abspath(os.path.join(current_dir, "..", "frontend"))
+    if not os.path.exists(frontend_dir):
+        print("[-] Error: ../frontend/ directory not found.")
         sys.exit(1)
         
     # 3. Check for PyInstaller
@@ -64,7 +65,7 @@ def main():
         "PyInstaller",
         "--onefile",
         "--name", "GraphSelect",
-        "--add-data", "static;static",
+        "--add-data", f"{frontend_dir}{os.pathsep}frontend",
         "--collect-data", "rfc3987_syntax",
         "main.py"
     ]

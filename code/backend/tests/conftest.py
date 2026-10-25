@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 from main import app
-from models.openalex_models import Work
+from api.models.openalex_models import Work
 
 
 @pytest.fixture

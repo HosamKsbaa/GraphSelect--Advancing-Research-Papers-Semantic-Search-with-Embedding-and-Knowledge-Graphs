@@ -9,9 +9,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
-from models.progress import GraphSearchProgress
-from models.ranked_paper import RankedPaper
-from services.graph_search_service import GraphSearchService
+from api.models.progress import GraphSearchProgress
+from api.models.ranked_paper import RankedPaper
+from api.services.graph_search_service import GraphSearchService
 from config import get_settings
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,7 @@
 """Tests for cosine similarity calculation."""
 import math
 import pytest
-from services.graph_search_service import GraphSearchService
+from api.services.graph_search_service import GraphSearchService
 
 
 class TestCosineSimilarity:

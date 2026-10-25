@@ -4,12 +4,12 @@ import math
 import re
 from collections.abc import Callable
 
-from models.openalex_models import Work
-from models.graph_node import GraphNode
-from models.ranked_paper import RankedPaper
-from models.progress import GraphSearchProgress, GraphSearchStatus
-from services.gemini_service import GeminiService
-from services.openalex_service import OpenAlexService
+from api.models.openalex_models import Work
+from api.models.graph_node import GraphNode
+from api.models.ranked_paper import RankedPaper
+from api.models.progress import GraphSearchProgress, GraphSearchStatus
+from api.services.gemini_service import GeminiService
+from api.services.openalex_service import OpenAlexService
 
 logger = logging.getLogger(__name__)
 

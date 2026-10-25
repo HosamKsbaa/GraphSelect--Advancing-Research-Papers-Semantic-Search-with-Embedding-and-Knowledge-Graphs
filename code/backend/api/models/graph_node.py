@@ -7,7 +7,7 @@ import re
 
 from pydantic import BaseModel, computed_field
 
-from models.openalex_models import Work
+from api.models.openalex_models import Work
 
 
 class GraphNode(BaseModel):

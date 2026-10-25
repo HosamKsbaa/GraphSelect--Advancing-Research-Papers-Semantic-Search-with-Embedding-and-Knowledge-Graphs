@@ -8,14 +8,16 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 2: Runtime ─────────────────────────────────────
 FROM python:3.11-slim
 
+WORKDIR /app/backend
+
 # Copy VERSION file early for labeling
-COPY VERSION .
+COPY backend/VERSION .
 ARG APP_VERSION
 RUN APP_VERSION=$(cat VERSION) && echo "APP_VERSION=$APP_VERSION"
 
@@ -29,8 +31,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000
 
-WORKDIR /app
-
 # Install curl for health-check probe
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
@@ -43,7 +43,8 @@ COPY --from=builder /install /usr/local
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # Copy application code
-COPY . .
+COPY backend/ /app/backend/
+COPY frontend/ /app/frontend/
 
 # Disable browser-open inside the container (headless mode)
 ENV OPEN_BROWSER=false

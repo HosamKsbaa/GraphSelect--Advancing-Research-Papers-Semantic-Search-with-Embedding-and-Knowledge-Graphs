@@ -5,7 +5,7 @@ Ported from the Dart ``RankedPaper`` class in ``graph_search_service.dart``.
 
 from pydantic import BaseModel
 
-from models.openalex_models import Work
+from api.models.openalex_models import Work
 
 
 class RankedPaper(BaseModel):

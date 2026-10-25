@@ -5,9 +5,8 @@ import threading
 import time
 from pathlib import Path
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
-from routers.search import router as search_router
+from api.routers.search import router as search_router
 from config import get_settings
 
 # Configure logging
@@ -31,11 +30,11 @@ app: FastAPI = FastAPI(
 app.include_router(search_router)
 
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-    BASE_DIR = Path(sys._MEIPASS)
+    # PyInstaller bundles the frontend next to the executable's code (see build_exe.py).
+    FRONTEND_DIR: Path = Path(sys._MEIPASS) / 'frontend'
 else:
-    BASE_DIR = Path(__file__).parent
-
-STATIC_DIR: Path = BASE_DIR / 'static'
+    # Source and Docker layouts both keep frontend/ beside backend/.
+    FRONTEND_DIR = Path(__file__).resolve().parent.parent / 'frontend'
 
 
 def open_browser_tab(url: str, delay_seconds: float = 1.0) -> None:
@@ -56,8 +55,8 @@ def on_startup() -> None:
 
 @app.get('/', response_class=HTMLResponse, include_in_schema=False)
 async def serve_ui() -> HTMLResponse:
-    """Serve the test UI."""
-    return HTMLResponse((STATIC_DIR / 'index.html').read_text(encoding='utf-8'))
+    """Serve the frontend page."""
+    return HTMLResponse((FRONTEND_DIR / 'index.html').read_text(encoding='utf-8'))
 
 
 @app.get('/api/health')

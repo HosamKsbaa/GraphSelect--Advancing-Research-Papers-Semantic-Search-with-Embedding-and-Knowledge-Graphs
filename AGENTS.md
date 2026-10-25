@@ -4,27 +4,31 @@ Active code for the ALRS research agent (master's thesis). Python 3.13, FastAPI,
 The plan this code follows: `../brain/decisions/single-research-agent.md` (parent workspace).
 
 ## Layout (`code/`)
-- `api/`      HTTP routes and request/response models only
-- `engines/`  deterministic building blocks: `openalex`, `embeddings`, `alrs`, `jev`, plus `papers.py` and `errors.py`
-- `ai/`       the single research agent: `agent.py`, `capabilities/<name>/{SKILL.md,tools.py}`, `mcp_server.py`
-- `tests/`    mirrors the layout; external providers are always replaced with fixtures
-
-`main.py` creates clients once at startup and passes them in; `config.py` holds settings.
+- `backend/`
+  - `api/`      HTTP routes and request/response models only
+  - `engines/`  deterministic building blocks: `openalex`, `embeddings`, `alrs`, `jev`, plus `papers.py` and `errors.py`
+  - `ai/`       the single research agent: `agent.py`, `capabilities/<name>/{SKILL.md,tools.py}`, `mcp_server.py`
+  - `tests/`    backend tests mirroring the layout; external providers are always replaced with fixtures
+  - `main.py`   creates clients once at startup and passes them in; `config.py` holds settings
+- `frontend/`
+  - `index.html` single-page UI served by the backend at `/`
+  - `tests/`     automated frontend tests (`node --test`)
 
 > **In progress (2026-10-25):** `engines/openalex` and `engines/embeddings` are done; `engines/alrs` and
-> `engines/jev` are next. `api/` and `ai/` do not exist yet. The v2.4.0 `routers/`, `services/` and
-> `models/` still serve `/api/search` until engine step 6 replaces them; do not extend them.
+> `engines/jev` are next. `ai/` does not exist yet. Inside `api/`, the v2.4.0 `api/services/` still backs
+> `/api/search` until engine step 6 replaces it with `engines/alrs`; do not extend `api/services/`.
 
-## Dependency rules (to be enforced by `tests/engines/test_engine_boundaries.py`)
+## Dependency rules (to be enforced by `backend/tests/engines/test_engine_boundaries.py`)
 - `api → ai → engines`; `api → engines` is allowed. `engines` never import `ai` or `api`.
 - Code outside `engines/` imports only `engines.<name>`, never internal modules such as `engines.openalex.budget`.
 
 ## Commands
 ```bash
-cd newcode && code/.venv/bin/python -m pytest code/tests -q   # run from newcode/ so code/.env is not loaded
-cd newcode/code && .venv/bin/python -m mypy --strict engines
+cd newcode && PYTHONPATH=code/backend code/backend/.venv/bin/python -m pytest code/backend/tests -q   # run from newcode/ so code/backend/.env is not loaded
+cd newcode/code/backend && .venv/bin/python -m mypy --strict engines
+cd newcode && node --test code/frontend/tests/*.test.mjs
 ```
-Set up once: `cd newcode/code && uv venv .venv --python 3.13 && uv pip install --python .venv/bin/python -r requirements.txt mypy`
+Set up once: `cd newcode/code/backend && uv venv .venv --python 3.13 && uv pip install --python .venv/bin/python -r requirements.txt mypy`
 
 ## Rules
 - Apply `.agents/skills/alrs-readable-code/SKILL.md` to every code change.

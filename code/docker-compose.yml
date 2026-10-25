@@ -16,7 +16,7 @@ services:
     image: ghcr.io/hosamksbaa/graphselect:latest
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: backend/Dockerfile
     container_name: graphselect_app
     ports:
       - "8000:8000"

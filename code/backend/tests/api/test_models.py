@@ -2,10 +2,10 @@
 import pytest
 from pydantic import ValidationError
 
-from models.openalex_models import Work, WorksResponse, WorksMeta, Authorship, Author
-from models.graph_node import GraphNode
-from models.ranked_paper import RankedPaper
-from models.progress import GraphSearchProgress, GraphSearchStatus
+from api.models.openalex_models import Work, WorksResponse, WorksMeta, Authorship, Author
+from api.models.graph_node import GraphNode
+from api.models.ranked_paper import RankedPaper
+from api.models.progress import GraphSearchProgress, GraphSearchStatus
 
 
 class TestWorkModel:

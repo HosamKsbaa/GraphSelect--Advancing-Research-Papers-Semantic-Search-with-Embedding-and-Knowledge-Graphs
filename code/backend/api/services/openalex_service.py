@@ -3,7 +3,7 @@ import logging
 
 import httpx
 
-from models.openalex_models import Work, WorksResponse
+from api.models.openalex_models import Work, WorksResponse
 
 logger = logging.getLogger(__name__)
 
