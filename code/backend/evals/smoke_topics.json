@@ -1,0 +1,27 @@
+[
+  {
+    "id": "topic_transformers",
+    "topic": "How does self-attention replace recurrence in sequence transduction models?",
+    "seed_doi": "10.48550/arxiv.1706.03762"
+  },
+  {
+    "id": "topic_gnn_citation",
+    "topic": "How do graph neural networks and Personalized PageRank improve citation recommendation?",
+    "seed_doi": "10.48550/arxiv.1810.05997"
+  },
+  {
+    "id": "topic_rag_hallucination",
+    "topic": "How does retrieval-augmented generation reduce hallucinated citations in scientific QA?",
+    "seed_doi": "10.48550/arxiv.2005.11401"
+  },
+  {
+    "id": "topic_dense_passage",
+    "topic": "When does dense dual-encoder retrieval fail compared to hybrid lexical-graph retrieval?",
+    "seed_doi": "10.48550/arxiv.2004.04906"
+  },
+  {
+    "id": "topic_llm_calibration",
+    "topic": "How well calibrated are large language model probability distributions for relevance judging?",
+    "seed_doi": "10.48550/arxiv.2207.05221"
+  }
+]

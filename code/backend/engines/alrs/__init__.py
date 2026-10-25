@@ -39,6 +39,13 @@ from .ranking import (
     rank_paper,
     rank_paper_density_gated,
 )
+from .service import (
+    AlrsDiscoverRequest,
+    AlrsDiscoverResult,
+    AlrsEngine,
+    DiscoveredPaperNode,
+    cosine_similarity,
+)
 from .settings import (
     PROFILE_ALIASES,
     SEARCH_PROFILE_CATALOG,
@@ -65,8 +72,12 @@ from .traversal import (
 
 __all__ = [
     "ALRSSearchSettings",
+    "AlrsDiscoverRequest",
+    "AlrsDiscoverResult",
+    "AlrsEngine",
     "DAMPING_FACTOR",
     "DEFAULT_DENSITY_STEEPNESS",
+    "DiscoveredPaperNode",
     "DiscoveryFrontierState",
     "DiscoveryStartingPaper",
     "EMBEDDING_VERSION",
@@ -101,6 +112,7 @@ __all__ = [
     "classify_epistemic_diagnostic",
     "compute_density_gated_weights",
     "compute_epistemic_hybrid_score",
+    "cosine_similarity",
     "effective_steering",
     "expansion_tasks",
     "extend_multi_frontier",
