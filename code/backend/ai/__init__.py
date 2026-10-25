@@ -1,6 +1,6 @@
 """Public interface for the ALRS single research agent (`ai`)."""
 
-from .agent import ResearchAgent, ResearchAgentState
+from .agent import AgentRunStatus, ResearchAgent, ResearchAgentState
 from .model_client import (
     GeminiModelClient,
     ModelClientSettings,
@@ -16,8 +16,10 @@ from .tools import (
     SearchPapersOutput,
     WriteReviewOutput,
 )
+from .verification import VerificationReport, verify_review_citations
 
 __all__ = [
+    "AgentRunStatus",
     "AgentToolRuntime",
     "DiscoverLiteratureOutput",
     "GeminiModelClient",
@@ -29,6 +31,8 @@ __all__ = [
     "ResearchAgent",
     "ResearchAgentState",
     "SearchPapersOutput",
+    "VerificationReport",
     "WriteReviewOutput",
     "validate_model_result",
+    "verify_review_citations",
 ]

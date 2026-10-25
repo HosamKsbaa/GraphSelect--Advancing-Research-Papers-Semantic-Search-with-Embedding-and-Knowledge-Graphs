@@ -1,7 +1,8 @@
 """Single LangGraph Research Agent + terminal CLI (`python -m ai.agent "topic"`).
 
-Orchestrates the 4 research tools (`search_papers`, `discover_literature`,
-`get_collection`, `write_review`) in a deterministic LangGraph StateGraph.
+Orchestrates the research tools (`search_papers`, `discover_literature`,
+`get_collection`, `write_review`, `verify_citations`) in a deterministic
+LangGraph StateGraph with `MemorySaver` checkpointing and approval pause/resume (M2).
 """
 
 from __future__ import annotations
@@ -9,12 +10,17 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from typing import Annotated, TypedDict
+from typing import Annotated, Literal, TypedDict
+from uuid import UUID, uuid4
 
 import httpx
+from google.genai import Client as GenAIClient
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from pydantic import BaseModel, ConfigDict
 
 from config import get_settings
 from engines.alrs import AlrsEngine
@@ -22,9 +28,9 @@ from engines.citations import AnalysisFinding
 from engines.collections import InMemoryCollectionStore
 from engines.embeddings import GeminiEmbeddingClient
 from engines.openalex import AsyncTokenBucketRateLimiter, OpenAlexClient
-from google.genai import Client as GenAIClient
 
 from .tools import AgentToolRuntime, WriteReviewOutput
+from .verification import VerificationReport, verify_review_citations
 
 
 class ResearchAgentState(TypedDict):
@@ -33,26 +39,47 @@ class ResearchAgentState(TypedDict):
     seed_doi: str | None
     collection_id: str | None
     review_output: WriteReviewOutput | None
+    verification_report: VerificationReport | None
     messages: Annotated[list[BaseMessage], add_messages]
 
 
-class ResearchAgent:
-    """LangGraph research agent backed by `AgentToolRuntime`."""
+class AgentRunStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    def __init__(self, runtime: AgentToolRuntime) -> None:
+    thread_id: str
+    status: Literal["awaiting_approval", "completed", "cancelled"]
+    topic: str
+    seed_doi: str | None = None
+    collection_id: str | None = None
+    review_output: WriteReviewOutput | None = None
+    verification_report: VerificationReport | None = None
+
+
+class ResearchAgent:
+    """LangGraph research agent backed by `AgentToolRuntime` and `MemorySaver`."""
+
+    def __init__(
+        self,
+        runtime: AgentToolRuntime,
+        checkpointer: MemorySaver | None = None,
+    ) -> None:
         self.runtime = runtime
+        self.checkpointer = checkpointer or MemorySaver()
         self.graph = self._build_graph()
+        self._cancelled_threads: set[str] = set()
 
     def _build_graph(self) -> StateGraph:  # type: ignore[type-arg]
         builder: StateGraph = StateGraph(ResearchAgentState)  # type: ignore[type-arg]
         builder.add_node("select_seed", self._select_seed_node)
         builder.add_node("discover", self._discover_node)
         builder.add_node("synthesize_review", self._synthesize_review_node)
+        builder.add_node("verify_citations", self._verify_citations_node)
 
         builder.add_edge(START, "select_seed")
         builder.add_edge("select_seed", "discover")
         builder.add_edge("discover", "synthesize_review")
-        builder.add_edge("synthesize_review", END)
+        builder.add_edge("synthesize_review", "verify_citations")
+        builder.add_edge("verify_citations", END)
         return builder
 
     async def _select_seed_node(self, state: ResearchAgentState) -> dict[str, object]:
@@ -139,25 +166,122 @@ class ResearchAgent:
             "messages": [AIMessage(content=review.markdown_review)],
         }
 
-    async def run(
+    async def _verify_citations_node(self, state: ResearchAgentState) -> dict[str, object]:
+        collection_id = state["collection_id"]
+        review = state["review_output"]
+        assert collection_id is not None
+        assert review is not None
+        collection = self.runtime.collection_store.get(UUID(collection_id))
+        report = verify_review_citations(collection, review)
+        cleaned_review = review.model_copy(
+            update={
+                "markdown_review": report.cleaned_markdown,
+                "cited_dois": report.verified_dois,
+            }
+        )
+        return {
+            "review_output": cleaned_review,
+            "verification_report": report,
+            "messages": [
+                AIMessage(
+                    content=(
+                        f"Verified {len(report.verified_dois)} DOI citations "
+                        f"({len(report.unsupported_dois)} unsupported removed)."
+                    )
+                )
+            ],
+        }
+
+    async def start_run(
         self,
         topic: str,
         seed_doi: str | None = None,
         research_questions: list[str] | None = None,
-    ) -> WriteReviewOutput:
-        compiled = self.graph.compile()
+        require_approval: bool = False,
+        thread_id: str | None = None,
+    ) -> AgentRunStatus:
+        tid = thread_id or str(uuid4())
+        interrupts = ["discover"] if require_approval else []
+        compiled = self.graph.compile(
+            checkpointer=self.checkpointer,
+            interrupt_before=interrupts,
+        )
         initial_state: ResearchAgentState = {
             "topic": topic,
             "research_questions": research_questions or [topic],
             "seed_doi": seed_doi,
             "collection_id": None,
             "review_output": None,
+            "verification_report": None,
             "messages": [HumanMessage(content=topic)],
         }
-        final_state = await compiled.ainvoke(initial_state)
-        review_output = final_state["review_output"]
-        assert isinstance(review_output, WriteReviewOutput)
-        return review_output
+        config: RunnableConfig = {"configurable": {"thread_id": tid}}
+        result_state = await compiled.ainvoke(initial_state, config=config)
+        snapshot = await compiled.aget_state(config)
+        if snapshot.next:
+            return AgentRunStatus(
+                thread_id=tid,
+                status="awaiting_approval",
+                topic=topic,
+                seed_doi=result_state.get("seed_doi"),
+            )
+        return AgentRunStatus(
+            thread_id=tid,
+            status="completed",
+            topic=topic,
+            seed_doi=result_state.get("seed_doi"),
+            collection_id=result_state.get("collection_id"),
+            review_output=result_state.get("review_output"),
+            verification_report=result_state.get("verification_report"),
+        )
+
+    async def resume_run(
+        self,
+        thread_id: str,
+        approved: bool = True,
+        override_seed_doi: str | None = None,
+    ) -> AgentRunStatus:
+        compiled = self.graph.compile(checkpointer=self.checkpointer)
+        config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+        snapshot = await compiled.aget_state(config)
+        values = dict(snapshot.values)
+        topic = str(values.get("topic", ""))
+        seed_doi = override_seed_doi or values.get("seed_doi")
+        if not approved:
+            self._cancelled_threads.add(thread_id)
+            return AgentRunStatus(
+                thread_id=thread_id,
+                status="cancelled",
+                topic=topic,
+                seed_doi=seed_doi if isinstance(seed_doi, str) else None,
+            )
+        if override_seed_doi:
+            await compiled.aupdate_state(config, {"seed_doi": override_seed_doi})
+        final_state = await compiled.ainvoke(None, config=config)
+        return AgentRunStatus(
+            thread_id=thread_id,
+            status="completed",
+            topic=topic,
+            seed_doi=final_state.get("seed_doi"),
+            collection_id=final_state.get("collection_id"),
+            review_output=final_state.get("review_output"),
+            verification_report=final_state.get("verification_report"),
+        )
+
+    async def run(
+        self,
+        topic: str,
+        seed_doi: str | None = None,
+        research_questions: list[str] | None = None,
+    ) -> WriteReviewOutput:
+        status = await self.start_run(
+            topic=topic,
+            seed_doi=seed_doi,
+            research_questions=research_questions,
+            require_approval=False,
+        )
+        assert status.review_output is not None
+        return status.review_output
 
 
 async def run_cli(topic: str, seed_doi: str | None = None) -> int:
